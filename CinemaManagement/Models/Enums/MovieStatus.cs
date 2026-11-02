@@ -1,6 +1,8 @@
 ﻿namespace CinemaManagement.Models.Enums;
 
-public enum MovieStatus
+public enum MovieStatus // Trạng thái phim
 {
-    
+    Showing,
+    ComingSoon,
+    Ended
 }
