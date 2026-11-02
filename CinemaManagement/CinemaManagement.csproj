@@ -1,0 +1,96 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <UseWindowsForms>true</UseWindowsForms>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Dapper" Version="2.1.89" />
+      <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0-rc.3.26522.148" />
+      <PackageReference Include="QRCoder" Version="1.8.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Resources\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Update="Forms\LoginForm.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\DashboardUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\MovieManagementUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\RoomManagementUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\ShowtimeManagementUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\PricingUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\FoodManagementUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\PromotionUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Admin\UserManagementUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Common\SeatMatrixUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Common\MovieCardUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\HomeUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\MovieDetailUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\ShowtimeUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\SeatSelectionUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\FoodSelectionUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\CheckoutUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\TicketUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\ProfileUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Customer\MembershipUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Staff\POSUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="UserControls\Staff\TicketScannerUC.cs">
+        <SubType>UserControl</SubType>
+      </Compile>
+      <Compile Update="Forms\Dialogs\ConfirmBookingDialog.cs">
+        <SubType>Form</SubType>
+      </Compile>
+      <Compile Update="Forms\Dialogs\MovieEditDialog.cs">
+        <SubType>Form</SubType>
+      </Compile>
+    </ItemGroup>
+
+</Project>
