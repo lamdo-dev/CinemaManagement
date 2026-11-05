@@ -58,9 +58,9 @@ public partial class MainForm : Form
         SelectMenu(btnDashboard);
     }
 
-    // ==========================================
+   
     // 1. XÂY DỰNG GIAO DIỆN CHÍNH
-    // ==========================================
+  
 
     private void BuildInterface()
     {
@@ -136,9 +136,9 @@ public partial class MainForm : Form
         Controls.Add(sidebar);
     }
 
-    // ==========================================
+    
     // 2. XÂY DỰNG SIDEBAR
-    // ==========================================
+   
 
     private void BuildSidebar()
     {
@@ -239,13 +239,13 @@ public partial class MainForm : Form
         btnRooms.Click += (s, e) =>
         {
             SelectMenu(btnRooms);
-            ShowPlaceholder("Quản lý phòng chiếu");
+            ShowRoomManagement();
         };
 
         btnShowtimes.Click += (s, e) =>
         {
             SelectMenu(btnShowtimes);
-            ShowPlaceholder("Quản lý suất chiếu");
+            ShowShowtimeManagement();
         };
 
         btnPricing.Click += (s, e) =>
@@ -267,9 +267,38 @@ public partial class MainForm : Form
         };
     }
 
-    // ==========================================
+   
+    private void ShowShowtimeManagement()
+    {
+        lblPageTitle.Text = "Quản lý suất chiếu";
+
+        pageHost.Controls.Clear();
+
+        ShowtimeManagementUC showtimeUC = new ShowtimeManagementUC
+        {
+            Dock = DockStyle.Fill
+        };
+
+        pageHost.Controls.Add(showtimeUC);
+    }
+
+
+    private void ShowRoomManagement()
+    {
+        lblPageTitle.Text = "Quản lý phòng chiếu";
+
+        pageHost.Controls.Clear();
+
+        RoomManagementUC roomUC = new RoomManagementUC
+        {
+            Dock = DockStyle.Fill
+        };
+
+        pageHost.Controls.Add(roomUC);
+    }
+
+    
     // 3. TẠO NÚT MENU
-    // ==========================================
 
     private Button CreateMenuButton(string icon, string text)
     {
@@ -294,9 +323,9 @@ public partial class MainForm : Form
         return button;
     }
 
-    // ==========================================
+ 
     // 4. CHỌN MENU
-    // ==========================================
+ 
 
     private void SelectMenu(Button selectedButton)
     {
@@ -319,9 +348,9 @@ public partial class MainForm : Form
         selectedButton.ForeColor = Color.White;
     }
 
-    // ==========================================
+  
     // 5. DASHBOARD
-    // ==========================================
+
 
     private void ShowDashboard()
     {
@@ -484,9 +513,9 @@ public partial class MainForm : Form
         pageHost.Controls.Add(layout);
     }
 
-    // ==========================================
+   
     // 6. TẠO THẺ THỐNG KÊ
-    // ==========================================
+
 
     private Panel CreateStatisticCard(
         string title,
@@ -558,9 +587,9 @@ public partial class MainForm : Form
         return card;
     }
 
-    // ==========================================
+  
     // 7. MỞ QUẢN LÝ PHIM
-    // ==========================================
+  
 
     private void ShowMovieManagement()
     {
@@ -576,9 +605,9 @@ public partial class MainForm : Form
         pageHost.Controls.Add(movieUC);
     }
 
-    // ==========================================
+ 
     // 8. CÁC TRANG CHƯA HOÀN THIỆN
-    // ==========================================
+ 
 
     private void ShowPlaceholder(string pageName)
     {
