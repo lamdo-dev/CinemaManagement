@@ -1,19 +1,22 @@
-using CinemaManagement.Data;
+using System;
+using System.Windows.Forms;
+using CinemaManagement.Forms;
 
-namespace CinemaManagement;
-
-static class Program
+namespace CinemaManagement
 {
-    /// <summary>
-    ///  The main entry point for the application.
-    /// </summary>
-    [STAThread]
-    static void Main()
+    static class Program
     {
-        DatabaseInitializer.Initialize();
-        // To customize application configuration such as set high DPI settings or default font,
-        // see https://aka.ms/applicationconfiguration.
-        ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        /// <summary>
+        /// The main entry point for the application.
+        /// </summary>
+        [STAThread]
+        static void Main()
+        {
+            // Cấu hình DPI và giao diện hệ thống cho WinForms .NET 10
+            ApplicationConfiguration.Initialize();
+
+            // Khởi chạy trực tiếp LoginForm theo mẫu UI đã code
+            Application.Run(new LoginForm());
+        }
     }
 }
