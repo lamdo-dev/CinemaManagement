@@ -251,23 +251,68 @@ public partial class MainForm : Form
         btnPricing.Click += (s, e) =>
         {
             SelectMenu(btnPricing);
-            ShowPlaceholder("Quản lý giá vé");
+            ShowPricingManagement();
         };
 
         btnFood.Click += (s, e) =>
         {
             SelectMenu(btnFood);
-            ShowPlaceholder("Quản lý đồ ăn và thức uống");
+            ShowFoodManagement();
         };
 
         btnPromotion.Click += (s, e) =>
         {
             SelectMenu(btnPromotion);
-            ShowPlaceholder("Quản lý khuyến mãi");
+            ShowPromotionManagement();
         };
     }
 
-   
+    private void ShowPromotionManagement()
+    {
+        lblPageTitle.Text = "Quản lý khuyến mãi";
+
+        pageHost.Controls.Clear();
+
+        PromotionUC promotionUC = new PromotionUC
+        {
+            Dock = DockStyle.Fill
+        };
+
+        pageHost.Controls.Add(promotionUC);
+    }
+
+
+    private void ShowFoodManagement()
+    {
+        lblPageTitle.Text = "Quản lý đồ ăn";
+
+        pageHost.Controls.Clear();
+
+        FoodManagementUC foodUC = new FoodManagementUC
+        {
+            Dock = DockStyle.Fill
+        };
+
+        pageHost.Controls.Add(foodUC);
+    }
+
+
+    private void ShowPricingManagement()
+    {
+        lblPageTitle.Text = "Quản lý giá vé";
+
+        pageHost.Controls.Clear();
+
+        PricingUC pricingUC = new PricingUC
+        {
+            Dock = DockStyle.Fill
+        };
+
+        pageHost.Controls.Add(pricingUC);
+    }
+
+
+
     private void ShowShowtimeManagement()
     {
         lblPageTitle.Text = "Quản lý suất chiếu";
