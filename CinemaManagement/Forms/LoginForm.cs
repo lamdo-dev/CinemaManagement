@@ -2,147 +2,153 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using CinemaManagement.Models.Enums;
 
-namespace CinemaManagement.Forms
+namespace CinemaManagement;
+
+public partial class LoginForm : Form
 {
-    public partial class LoginForm : Form
+    private bool isPasswordHidden = true;
+
+    public LoginForm()
     {
-        private Panel pnlLeft;
-        private Panel pnlCard;
-        private TextBox txtUsername;
-        private TextBox txtPassword;
-        private Button btnLogin;
-        private Label lblForgot;
+        InitializeComponent();
+        ApplyCustomStyling();
+        EnableFormDrag();
 
-        public LoginForm()
+        // Nhấn Enter để đăng nhập nhanh
+        txtUsername.KeyDown += OnEnterSubmit;
+        txtPassword.KeyDown += OnEnterSubmit;
+    }
+
+    private void OnEnterSubmit(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Enter)
         {
-            InitializeComponentManual();
+            btnLogin.PerformClick();
+            e.SuppressKeyPress = true;
+        }
+    }
+
+    private void ApplyCustomStyling()
+    {
+        // Bo góc các input textbox và button Login
+        pnlUsernameBox.Paint += (s, e) => DrawRoundedBorder(e.Graphics, pnlUsernameBox.ClientRectangle, 16);
+        pnlPasswordBox.Paint += (s, e) => DrawRoundedBorder(e.Graphics, pnlPasswordBox.ClientRectangle, 16);
+        
+        // Bo tròn nút Login
+        btnLogin.Paint += (s, e) => {
+            using var path = GetRoundedPath(btnLogin.ClientRectangle, 18);
+            btnLogin.Region = new Region(path);
+        };
+    }
+
+    private GraphicsPath GetRoundedPath(Rectangle rect, int radius)
+    {
+        var path = new GraphicsPath();
+        float d = radius * 2F;
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    private void DrawRoundedBorder(Graphics g, Rectangle rect, int radius)
+    {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var path = GetRoundedPath(new Rectangle(rect.X, rect.Y, rect.Width - 1, rect.Height - 1), radius);
+        using var brush = new SolidBrush(Color.White);
+        g.FillPath(brush, path);
+    }
+
+    // Cho phép nhấp giữ chuột để kéo di chuyển cửa sổ
+    private void EnableFormDrag()
+    {
+        bool dragging = false;
+        Point dragCursorPoint = Point.Empty;
+        Point dragFormPoint = Point.Empty;
+
+        Action<Control> attachEvents = (ctrl) => {
+            ctrl.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left)
+                {
+                    dragging = true;
+                    dragCursorPoint = Cursor.Position;
+                    dragFormPoint = this.Location;
+                }
+            };
+            ctrl.MouseMove += (s, e) => {
+                if (dragging)
+                {
+                    Point diff = Point.Subtract(Cursor.Position, new Size(dragCursorPoint));
+                    this.Location = Point.Add(dragFormPoint, new Size(diff));
+                }
+            };
+            ctrl.MouseUp += (s, e) => dragging = false;
+        };
+
+        attachEvents(pnlLeft);
+        attachEvents(pnlRightCard);
+    }
+
+    // Ẩn / hiện mật khẩu
+    private void lblToggleEye_Click(object? sender, EventArgs e)
+    {
+        isPasswordHidden = !isPasswordHidden;
+        txtPassword.PasswordChar = isPasswordHidden ? '●' : '\0';
+        lblToggleEye.Text = isPasswordHidden ? "👁" : "🙈";
+    }
+
+    // Nút đăng nhập
+    private void btnLogin_Click(object? sender, EventArgs e)
+    {
+        string username = txtUsername.Text.Trim();
+        string password = txtPassword.Text.Trim();
+
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            MessageBox.Show("Please enter both username and password!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
         }
 
-        private void InitializeComponentManual()
+        // Tự động phân quyền test
+        UserRole userRole = username.ToLower() switch
         {
-            this.Size = new Size(1000, 650);
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.None;
-            this.BackColor = Color.FromArgb(17, 24, 22);
+            "admin" => UserRole.Admin,
+            "staff" => UserRole.Staff,
+            _ => UserRole.Customer
+        };
 
-            // Left Poster / Brand area
-            pnlLeft = new Panel
-            {
-                Dock = DockStyle.Left,
-                Width = 480,
-                BackColor = Color.FromArgb(20, 32, 28)
-            };
+        MessageBox.Show($"Đăng nhập thành công! Quyền: {userRole}", "Cineworld Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-            Label lblBrand = new Label
-            {
-                Text = "Cineworld",
-                ForeColor = Color.FromArgb(212, 175, 55),
-                Font = new Font("Segoe UI", 24, FontStyle.Bold),
-                Dock = DockStyle.Bottom,
-                Height = 100,
-                TextAlign = ContentAlignment.TopCenter
-            };
-            pnlLeft.Controls.Add(lblBrand);
+        this.Hide();
+        var mainForm = new MainForm(userRole);
+        mainForm.FormClosed += (s, args) => this.Close();
+        mainForm.Show();
+    }
 
-            // Right Login Card area
-            pnlCard = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.FromArgb(19, 44, 38),
-                Padding = new Padding(60, 80, 60, 60)
-            };
+    // Quên mật khẩu
+    private void lnkForgotPassword_LinkClicked(object? sender, LinkLabelLinkClickedEventArgs e)
+    {
+        string username = txtUsername.Text.Trim();
+        string prompt = string.IsNullOrEmpty(username) ? "tài khoản của bạn" : $"tài khoản '{username}'";
+        
+        MessageBox.Show($"Hệ thống khôi phục mật khẩu:\n\nLink đặt lại mật khẩu đã được gửi đến Email đăng ký của {prompt}.\nVui lòng kiểm tra hộp thư!", 
+            "Khôi phục mật khẩu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 
-            Label lblTitle = new Label
-            {
-                Text = "Login Form",
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 22, FontStyle.Bold),
-                Top = 70,
-                Left = 60,
-                AutoSize = true
-            };
+    // Tạo tài khoản (Sign Up)
+    private void lnkRegister_LinkClicked(object? sender, LinkLabelLinkClickedEventArgs e)
+    {
+        MessageBox.Show("Mở màn hình Đăng ký tài khoản thành viên Cineworld mới.\n(Điền Họ tên, Số điện thoại, Email và Mật khẩu)", 
+            "Đăng ký tài khoản", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 
-            Label lblSubtitle = new Label
-            {
-                Text = "Please enter your details",
-                ForeColor = Color.FromArgb(160, 185, 175),
-                Font = new Font("Segoe UI", 10),
-                Top = 115,
-                Left = 62,
-                AutoSize = true
-            };
-
-            Label lblUser = new Label
-            {
-                Text = "Username",
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10, FontStyle.Bold),
-                Top = 170,
-                Left = 60,
-                AutoSize = true
-            };
-
-            txtUsername = new TextBox
-            {
-                Top = 200,
-                Left = 60,
-                Width = 360,
-                Font = new Font("Segoe UI", 12),
-                BackColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-
-            Label lblPass = new Label
-            {
-                Text = "Password",
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10, FontStyle.Bold),
-                Top = 250,
-                Left = 60,
-                AutoSize = true
-            };
-
-            txtPassword = new TextBox
-            {
-                Top = 280,
-                Left = 60,
-                Width = 360,
-                Font = new Font("Segoe UI", 12),
-                UseSystemPasswordChar = true,
-                BackColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-
-            lblForgot = new Label
-            {
-                Text = "Forgot Password?",
-                ForeColor = Color.FromArgb(180, 200, 195),
-                Font = new Font("Segoe UI", 9),
-                Top = 320,
-                Left = 310,
-                AutoSize = true,
-                Cursor = Cursors.Hand
-            };
-
-            btnLogin = new Button
-            {
-                Text = "Login",
-                Top = 380,
-                Left = 60,
-                Width = 360,
-                Height = 45,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(170, 138, 77),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                Cursor = Cursors.Hand
-            };
-            btnLogin.FlatAppearance.BorderSize = 0;
-
-            pnlCard.Controls.AddRange(new Control[] { lblTitle, lblSubtitle, lblUser, txtUsername, lblPass, txtPassword, lblForgot, btnLogin });
-            this.Controls.Add(pnlCard);
-            this.Controls.Add(pnlLeft);
-        }
+    // Nút tắt Form
+    private void lblClose_Click(object? sender, EventArgs e)
+    {
+        Application.Exit();
     }
 }

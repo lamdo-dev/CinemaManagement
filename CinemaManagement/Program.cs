@@ -1,22 +1,18 @@
 using System;
 using System.Windows.Forms;
-using CinemaManagement.Forms;
+using CinemaManagement.Data;
 
-namespace CinemaManagement
+namespace CinemaManagement;
+
+static class Program
 {
-    static class Program
+    [STAThread]
+    static void Main()
     {
-        /// <summary>
-        /// The main entry point for the application.
-        /// </summary>
-        [STAThread]
-        static void Main()
-        {
-            // Cấu hình DPI và giao diện hệ thống cho WinForms .NET 10
-            ApplicationConfiguration.Initialize();
+        DatabaseInitializer.Initialize();
+        ApplicationConfiguration.Initialize();
 
-            // Khởi chạy trực tiếp LoginForm theo mẫu UI đã code
-            Application.Run(new LoginForm());
-        }
+        // Khởi động vào Form Đăng nhập trước
+        Application.Run(new LoginForm());
     }
 }
