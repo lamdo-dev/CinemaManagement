@@ -5,19 +5,18 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
 
 public partial class ConfirmBookingDialog : Form
 {
-    // Bảng màu Modern Dark Cinema
     private readonly Color ColorBg = Color.FromArgb(20, 21, 32);
     private readonly Color ColorCard = Color.FromArgb(28, 29, 44);
     private readonly Color ColorGold = Color.FromArgb(245, 197, 24);
     private readonly Color ColorTextMuted = Color.FromArgb(160, 160, 180);
 
-    // Dynamic Data Pass-in
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Movie? MovieData { get; set; }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -36,7 +35,6 @@ public partial class ConfirmBookingDialog : Form
     public decimal DiscountAmount { get; set; }
     public decimal FinalTotal => (TicketSubTotal + FoodSubTotal) - DiscountAmount;
 
-    // Controls
     private PictureBox picPoster;
     private Label lblMovieTitle;
     private Label lblShowtime;
@@ -52,7 +50,7 @@ public partial class ConfirmBookingDialog : Form
 
     public ConfirmBookingDialog()
     {
-        InitializeComponents();
+        InitializeComponent();
     }
 
     public ConfirmBookingDialog(Movie movie, Showtime showtime, List<string> seats, decimal ticketTotal,
@@ -69,17 +67,14 @@ public partial class ConfirmBookingDialog : Form
         PopulateData();
     }
 
-    private void InitializeComponents()
+    private void InitializeComponent()
     {
         this.Size = new Size(520, 620);
         this.FormBorderStyle = FormBorderStyle.None;
         this.StartPosition = FormStartPosition.CenterParent;
         this.BackColor = ColorBg;
-        this.Padding = new Padding(2); // Border viền ngoài
+        this.Padding = new Padding(2);
 
-        // -------------------------------------------------------------
-        // 1. TIÊU ĐỀ POPUP (HEADER BAR)
-        // -------------------------------------------------------------
         Panel pnlHeader = new Panel { Dock = DockStyle.Top, Height = 55, BackColor = Color.FromArgb(14, 15, 23) };
         Label lblHeaderTitle = new Label
         {
@@ -107,76 +102,16 @@ public partial class ConfirmBookingDialog : Form
         pnlHeader.Controls.Add(lblHeaderTitle);
         pnlHeader.Controls.Add(btnCloseIcon);
 
-        // -------------------------------------------------------------
-        // 2. KHỐI THÔNG TIN PHIM & SUẤT CHIẾU
-        // -------------------------------------------------------------
-        Panel pnlMovieBox = new Panel
-        {
-            Location = new Point(20, 75),
-            Size = new Size(480, 130),
-            BackColor = ColorCard
-        };
-
-        picPoster = new PictureBox
-        {
-            Location = new Point(12, 12),
-            Size = new Size(75, 106),
-            SizeMode = PictureBoxSizeMode.StretchImage,
-            BackColor = Color.FromArgb(40, 42, 60)
-        };
-
-        lblMovieTitle = new Label
-        {
-            Text = "TÊN PHIM",
-            Font = new Font("Segoe UI", 12, FontStyle.Bold),
-            ForeColor = Color.White,
-            Location = new Point(100, 15),
-            Size = new Size(365, 25),
-            AutoEllipsis = true
-        };
-
-        lblShowtime = new Label
-        {
-            Text = "⏰ Suất: --:-- | --/--/----",
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = ColorTextMuted,
-            Location = new Point(100, 45),
-            Size = new Size(365, 22)
-        };
-
-        lblSeats = new Label
-        {
-            Text = "🪑 Ghế đã chọn: --",
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = ColorGold,
-            Location = new Point(100, 72),
-            Size = new Size(365, 25),
-            AutoEllipsis = true
-        };
-
+        Panel pnlMovieBox = new Panel { Location = new Point(20, 75), Size = new Size(480, 130), BackColor = ColorCard };
+        picPoster = new PictureBox { Location = new Point(12, 12), Size = new Size(75, 106), SizeMode = PictureBoxSizeMode.StretchImage, BackColor = Color.FromArgb(40, 42, 60) };
+        lblMovieTitle = new Label { Text = "TÊN PHIM", Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = Color.White, Location = new Point(100, 15), Size = new Size(365, 25), AutoEllipsis = true };
+        lblShowtime = new Label { Text = "⏰ Suất: --:-- | --/--/----", Font = new Font("Segoe UI", 9.5f), ForeColor = ColorTextMuted, Location = new Point(100, 45), Size = new Size(365, 22) };
+        lblSeats = new Label { Text = "🪑 Ghế đã chọn: --", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = ColorGold, Location = new Point(100, 72), Size = new Size(365, 25), AutoEllipsis = true };
         pnlMovieBox.Controls.AddRange(new Control[] { picPoster, lblMovieTitle, lblShowtime, lblSeats });
 
-        // -------------------------------------------------------------
-        // 3. KHỐI CHI TIẾT BẮP NƯỚC & TÍNH TIỀN
-        // -------------------------------------------------------------
-        Panel pnlDetailBox = new Panel
-        {
-            Location = new Point(20, 220),
-            Size = new Size(480, 290),
-            BackColor = ColorCard,
-            Padding = new Padding(15)
-        };
-
+        Panel pnlDetailBox = new Panel { Location = new Point(20, 220), Size = new Size(480, 290), BackColor = ColorCard, Padding = new Padding(15) };
         Label lblFoodHeader = new Label { Text = "🍿 Bắp nước đã chọn:", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Color.White, Location = new Point(15, 12), AutoSize = true };
-        lblFoodSummary = new Label
-        {
-            Text = "Khônng chọn bắp nước",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = ColorTextMuted,
-            Location = new Point(15, 35),
-            Size = new Size(450, 45)
-        };
-
+        lblFoodSummary = new Label { Text = "Không chọn bắp nước", Font = new Font("Segoe UI", 9), ForeColor = ColorTextMuted, Location = new Point(15, 35), Size = new Size(450, 45) };
         Panel divider = new Panel { Location = new Point(15, 88), Size = new Size(450, 1), BackColor = Color.FromArgb(50, 52, 72) };
 
         int yPos = 102;
@@ -185,57 +120,22 @@ public partial class ConfirmBookingDialog : Form
         lblDiscountPrice = AddDetailRow(pnlDetailBox, "Mã giảm giá (Voucher):", "-0 đ", ref yPos, Color.OrangeRed);
 
         Panel divider2 = new Panel { Location = new Point(15, yPos + 5), Size = new Size(450, 1), BackColor = Color.FromArgb(60, 62, 82) };
-
         Label lblTotalHeader = new Label { Text = "TỔNG THÀNH TIỀN:", Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.White, Location = new Point(15, yPos + 18), AutoSize = true };
-        lblFinalTotal = new Label
-        {
-            Text = "0 đ",
-            Font = new Font("Segoe UI", 16, FontStyle.Bold),
-            ForeColor = ColorGold,
-            Location = new Point(230, yPos + 12),
-            Size = new Size(235, 35),
-            TextAlign = ContentAlignment.MiddleRight
-        };
-
+        lblFinalTotal = new Label { Text = "0 đ", Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = ColorGold, Location = new Point(230, yPos + 12), Size = new Size(235, 35), TextAlign = ContentAlignment.MiddleRight };
         pnlDetailBox.Controls.AddRange(new Control[] { lblFoodHeader, lblFoodSummary, divider, divider2, lblTotalHeader, lblFinalTotal });
 
-        // -------------------------------------------------------------
-        // 4. THANH NÚT BẤM (FOOTER BUTTONS)
-        // -------------------------------------------------------------
         Panel pnlFooter = new Panel { Dock = DockStyle.Bottom, Height = 75, BackColor = Color.FromArgb(16, 17, 25) };
-
-        btnCancel = new Button
-        {
-            Text = "HỦY / CHỌN LẠI",
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = Color.White,
-            BackColor = Color.FromArgb(45, 47, 65),
-            FlatStyle = FlatStyle.Flat,
-            Size = new Size(160, 45),
-            Location = new Point(20, 15),
-            Cursor = Cursors.Hand
-        };
+        btnCancel = new Button { Text = "HỦY / CHỌN LẠI", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.White, BackColor = Color.FromArgb(45, 47, 65), FlatStyle = FlatStyle.Flat, Size = new Size(160, 45), Location = new Point(20, 15), Cursor = Cursors.Hand };
         btnCancel.FlatAppearance.BorderSize = 0;
         btnCancel.Click += (s, e) => { this.DialogResult = DialogResult.Cancel; this.Close(); };
 
-        btnConfirm = new Button
-        {
-            Text = "✓ XÁC NHẬN THANH TOÁN",
-            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
-            ForeColor = Color.Black,
-            BackColor = ColorGold,
-            FlatStyle = FlatStyle.Flat,
-            Size = new Size(290, 45),
-            Location = new Point(210, 15),
-            Cursor = Cursors.Hand
-        };
+        btnConfirm = new Button { Text = "✓ XÁC NHẬN THANH TOÁN", Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = Color.Black, BackColor = ColorGold, FlatStyle = FlatStyle.Flat, Size = new Size(290, 45), Location = new Point(210, 15), Cursor = Cursors.Hand };
         btnConfirm.FlatAppearance.BorderSize = 0;
         btnConfirm.Click += (s, e) => { this.DialogResult = DialogResult.OK; this.Close(); };
 
         pnlFooter.Controls.Add(btnCancel);
         pnlFooter.Controls.Add(btnConfirm);
 
-        // Viền ngoài Dialog
         this.Controls.Add(pnlDetailBox);
         this.Controls.Add(pnlMovieBox);
         this.Controls.Add(pnlFooter);
@@ -258,7 +158,7 @@ public partial class ConfirmBookingDialog : Form
         if (MovieData != null)
         {
             lblMovieTitle.Text = MovieData.Title;
-            if (!string.IsNullOrEmpty(MovieData.PosterUrl) && System.IO.File.Exists(MovieData.PosterUrl))
+            if (!string.IsNullOrEmpty(MovieData.PosterUrl) && File.Exists(MovieData.PosterUrl))
             {
                 try { picPoster.Image = Image.FromFile(MovieData.PosterUrl); } catch { }
             }
@@ -287,7 +187,6 @@ public partial class ConfirmBookingDialog : Form
         lblFinalTotal.Text = $"{FinalTotal.ToString("N0", new CultureInfo("vi-VN"))} đ";
     }
 
-    // Cho phép kéo thả di chuyển Form borderless
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);

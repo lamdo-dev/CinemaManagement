@@ -22,13 +22,13 @@ public partial class FoodSelectionUC : UserControl
     private Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> cartItems 
         = new Dictionary<int, (string, decimal, int, string)>();
 
-    private Panel pnlHeader;
-    private Button btnBack;
-    private FlowLayoutPanel flpFoodCatalog;
-    private Panel pnlCartSummary;
-    private FlowLayoutPanel flpCartItemList;
-    private Label lblTotalFoodPrice;
-    private Button btnContinue;
+    private Panel pnlHeader = null!;
+    private Button btnBack = null!;
+    private FlowLayoutPanel flpFoodCatalog = null!;
+    private Panel pnlCartSummary = null!;
+    private FlowLayoutPanel flpCartItemList = null!;
+    private Label lblTotalFoodPrice = null!;
+    private Button btnContinue = null!;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     [Browsable(false)]
@@ -38,6 +38,12 @@ public partial class FoodSelectionUC : UserControl
     public event EventHandler<(Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> foodCart, decimal totalFoodAmount)>? OnContinueToCheckout;
     public event EventHandler? OnBackClicked;
 
+    // Constructor 1: Khởi tạo mặc định không tham số (giúp gọi new FoodSelectionUC() không bị lỗi)
+    public FoodSelectionUC() : this(0m)
+    {
+    }
+
+    // Constructor 2: Khởi tạo có tham số tổng tiền vé
     public FoodSelectionUC(decimal ticketTotalAmount)
     {
         TicketTotalAmount = ticketTotalAmount;

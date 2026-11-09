@@ -1,692 +1,266 @@
-
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using CinemaManagement.Forms.Dialogs;
+using CinemaManagement.Models.Enums;
 using CinemaManagement.UserControls.Admin;
+using CinemaManagement.UserControls.Customer;
+using CinemaManagement.UserControls.Staff;
 
 namespace CinemaManagement;
 
 public partial class MainForm : Form
 {
-    // Các khu vực giao diện
-    private Panel sidebar = null!;
-    private Panel mainContent = null!;
-    private Panel header = null!;
-    private Panel pageHost = null!;
+    private Panel panelSidebar = null!;
+    private Panel panelContent = null!;
+    private Label lblHeaderTitle = null!;
+    private UserRole currentRole;
 
-    private Label lblPageTitle = null!;
-    private Label lblUser = null!;
+    // Constructor 1: Khởi tạo mặc định (Quyền Admin)
+    public MainForm() : this(UserRole.Admin) { }
 
-    // Các nút menu
-    private Button btnDashboard = null!;
-    private Button btnMovies = null!;
-    private Button btnRooms = null!;
-    private Button btnShowtimes = null!;
-    private Button btnPricing = null!;
-    private Button btnFood = null!;
-    private Button btnPromotion = null!;
-
-    // Màu giao diện
-    private readonly Color backgroundColor =
-        Color.FromArgb(15, 23, 42);
-
-    private readonly Color sidebarColor =
-        Color.FromArgb(17, 24, 39);
-
-    private readonly Color panelColor =
-        Color.FromArgb(30, 41, 59);
-
-    private readonly Color accentColor =
-        Color.FromArgb(37, 99, 235);
-
-    private readonly Color textColor =
-        Color.FromArgb(226, 232, 240);
-
-    public MainForm()
+    // Constructor 2: Khởi tạo bằng Enum UserRole
+    public MainForm(UserRole role)
     {
         InitializeComponent();
-
-        Text = "Cinema Management";
-        StartPosition = FormStartPosition.CenterScreen;
-        WindowState = FormWindowState.Maximized;
-        MinimumSize = new Size(1100, 650);
-        BackColor = backgroundColor;
-        Font = new Font("Segoe UI", 10);
-
-        BuildInterface();
-        ShowDashboard();
-        SelectMenu(btnDashboard);
+        currentRole = role;
+        SetupFullUILayout();
     }
 
-   
-    // 1. XÂY DỰNG GIAO DIỆN CHÍNH
-  
-
-    private void BuildInterface()
+    // Constructor 3: Khởi tạo bằng chuỗi String (Tương thích khi gọi từ LoginForm)
+    public MainForm(string roleName) 
+        : this(Enum.TryParse<UserRole>(roleName, true, out var parsedRole) ? parsedRole : UserRole.Admin)
     {
+    }
+
+    private void SetupFullUILayout()
+    {
+        this.Text = $"HỆ THỐNG QUẢN LÝ RẠP CHIẾU PHIM - [{currentRole.ToString().ToUpper()}]";
+        this.Size = new Size(1280, 760);
+        this.StartPosition = FormStartPosition.CenterScreen;
+        this.BackColor = Color.FromArgb(245, 246, 250);
+
         // Sidebar
-        sidebar = new Panel
+        panelSidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 235,
-            BackColor = sidebarColor
+            Width = 240,
+            BackColor = Color.FromArgb(30, 39, 46),
+            AutoScroll = true
         };
 
-        // Khu vực chính
-        mainContent = new Panel
+        var lblBrand = new Label
         {
-            Dock = DockStyle.Fill,
-            BackColor = backgroundColor
+            Text = "🎬 CINEMA APP",
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+            Dock = DockStyle.Top,
+            Height = 60,
+            TextAlign = ContentAlignment.MiddleCenter
         };
+        panelSidebar.Controls.Add(lblBrand);
 
         // Header
-        header = new Panel
+        var panelHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 75,
-            BackColor = panelColor
+            Height = 60,
+            BackColor = Color.White
         };
-
-        lblPageTitle = new Label
+        lblHeaderTitle = new Label
         {
-            Text = "Dashboard",
-            Font = new Font("Segoe UI", 19, FontStyle.Bold),
-            ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(25, 20)
-        };
-
-        lblUser = new Label
-        {
-            Text = "Administrator",
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = textColor,
-            AutoSize = true,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
-        };
-
-        header.Controls.Add(lblPageTitle);
-        header.Controls.Add(lblUser);
-
-        // Tự căn chỉnh thông tin tài khoản bên phải
-        header.Resize += (s, e) =>
-        {
-            lblUser.Location = new Point(
-                header.ClientSize.Width - lblUser.Width - 25,
-                28
-            );
-        };
-
-        // Vùng hiển thị các trang
-        pageHost = new Panel
-        {
+            Text = "Trang làm việc",
+            Font = new Font("Segoe UI", 13F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(47, 53, 66),
             Dock = DockStyle.Fill,
-            BackColor = backgroundColor,
-            Padding = new Padding(25)
-        };
-
-        mainContent.Controls.Add(pageHost);
-        mainContent.Controls.Add(header);
-
-        // Xây dựng Sidebar
-        BuildSidebar();
-
-        // Ghép vào Form
-        Controls.Add(mainContent);
-        Controls.Add(sidebar);
-    }
-
-    
-    // 2. XÂY DỰNG SIDEBAR
-   
-
-    private void BuildSidebar()
-    {
-        // Logo
-        Panel logoPanel = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 115,
-            BackColor = sidebarColor
-        };
-
-        Label lblLogo = new Label
-        {
-            Text = "CINEMA",
-            Font = new Font("Segoe UI", 24, FontStyle.Bold),
-            ForeColor = Color.White,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Dock = DockStyle.Top,
-            Height = 55
-        };
-
-        Label lblLogoSub = new Label
-        {
-            Text = "MANAGEMENT SYSTEM",
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            TextAlign = ContentAlignment.MiddleCenter,
-            Dock = DockStyle.Top,
-            Height = 30
-        };
-
-        logoPanel.Controls.Add(lblLogoSub);
-        logoPanel.Controls.Add(lblLogo);
-
-        // Menu
-        FlowLayoutPanel menuPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true,
-            Padding = new Padding(10, 15, 10, 10),
-            BackColor = sidebarColor
-        };
-
-        btnDashboard = CreateMenuButton("▦", "Dashboard");
-        btnMovies = CreateMenuButton("▣", "Quản lý phim");
-        btnRooms = CreateMenuButton("▤", "Quản lý phòng chiếu");
-        btnShowtimes = CreateMenuButton("◷", "Quản lý suất chiếu");
-        btnPricing = CreateMenuButton("＄", "Quản lý giá vé");
-        btnFood = CreateMenuButton("♧", "Quản lý đồ ăn");
-        btnPromotion = CreateMenuButton("☆", "Quản lý khuyến mãi");
-
-        menuPanel.Controls.Add(btnDashboard);
-        menuPanel.Controls.Add(btnMovies);
-        menuPanel.Controls.Add(btnRooms);
-        menuPanel.Controls.Add(btnShowtimes);
-        menuPanel.Controls.Add(btnPricing);
-        menuPanel.Controls.Add(btnFood);
-        menuPanel.Controls.Add(btnPromotion);
-
-        // Thông tin cuối Sidebar
-        Panel bottomPanel = new Panel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 65,
-            BackColor = sidebarColor
-        };
-
-        Label lblVersion = new Label
-        {
-            Text = "Cinema Management v1.0",
-            Font = new Font("Segoe UI", 8),
-            ForeColor = Color.FromArgb(100, 116, 139),
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-
-        bottomPanel.Controls.Add(lblVersion);
-
-        sidebar.Controls.Add(menuPanel);
-        sidebar.Controls.Add(bottomPanel);
-        sidebar.Controls.Add(logoPanel);
-
-        // Sự kiện menu
-        btnDashboard.Click += (s, e) =>
-        {
-            SelectMenu(btnDashboard);
-            ShowDashboard();
-        };
-
-        btnMovies.Click += (s, e) =>
-        {
-            SelectMenu(btnMovies);
-            ShowMovieManagement();
-        };
-
-        btnRooms.Click += (s, e) =>
-        {
-            SelectMenu(btnRooms);
-            ShowRoomManagement();
-        };
-
-        btnShowtimes.Click += (s, e) =>
-        {
-            SelectMenu(btnShowtimes);
-            ShowShowtimeManagement();
-        };
-
-        btnPricing.Click += (s, e) =>
-        {
-            SelectMenu(btnPricing);
-            ShowPricingManagement();
-        };
-
-        btnFood.Click += (s, e) =>
-        {
-            SelectMenu(btnFood);
-            ShowFoodManagement();
-        };
-
-        btnPromotion.Click += (s, e) =>
-        {
-            SelectMenu(btnPromotion);
-            ShowPromotionManagement();
-        };
-    }
-
-    private void ShowPromotionManagement()
-    {
-        lblPageTitle.Text = "Quản lý khuyến mãi";
-
-        pageHost.Controls.Clear();
-
-        PromotionUC promotionUC = new PromotionUC
-        {
-            Dock = DockStyle.Fill
-        };
-
-        pageHost.Controls.Add(promotionUC);
-    }
-
-
-    private void ShowFoodManagement()
-    {
-        lblPageTitle.Text = "Quản lý đồ ăn";
-
-        pageHost.Controls.Clear();
-
-        FoodManagementUC foodUC = new FoodManagementUC
-        {
-            Dock = DockStyle.Fill
-        };
-
-        pageHost.Controls.Add(foodUC);
-    }
-
-
-    private void ShowPricingManagement()
-    {
-        lblPageTitle.Text = "Quản lý giá vé";
-
-        pageHost.Controls.Clear();
-
-        PricingUC pricingUC = new PricingUC
-        {
-            Dock = DockStyle.Fill
-        };
-
-        pageHost.Controls.Add(pricingUC);
-    }
-
-
-
-    private void ShowShowtimeManagement()
-    {
-        lblPageTitle.Text = "Quản lý suất chiếu";
-
-        pageHost.Controls.Clear();
-
-        ShowtimeManagementUC showtimeUC = new ShowtimeManagementUC
-        {
-            Dock = DockStyle.Fill
-        };
-
-        pageHost.Controls.Add(showtimeUC);
-    }
-
-
-    private void ShowRoomManagement()
-    {
-        lblPageTitle.Text = "Quản lý phòng chiếu";
-
-        pageHost.Controls.Clear();
-
-        RoomManagementUC roomUC = new RoomManagementUC
-        {
-            Dock = DockStyle.Fill
-        };
-
-        pageHost.Controls.Add(roomUC);
-    }
-
-    
-    // 3. TẠO NÚT MENU
-
-    private Button CreateMenuButton(string icon, string text)
-    {
-        Button button = new Button
-        {
-            Text = "   " + icon + "     " + text,
-            Width = 205,
-            Height = 47,
-            Margin = new Padding(0, 4, 0, 4),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = sidebarColor,
-            ForeColor = textColor,
-            Font = new Font("Segoe UI", 9.5f),
             TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(20, 0, 0, 0)
+        };
+        panelHeader.Controls.Add(lblHeaderTitle);
+
+        // Content Area
+        panelContent = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(241, 242, 246)
+        };
+
+        // =========================================================
+        // PHÂN QUYỀN MENU SIDEBAR ACCORDING TO USER ROLE
+        // =========================================================
+
+        // 1. NHÂN VIÊN & ADMIN: BÁN HÀNG VÀ SOÁT VÉ
+        if (currentRole == UserRole.Admin || currentRole == UserRole.Staff)
+        {
+            AddNavGroup("--- BÁN HÀNG & SOÁT VÉ ---");
+            AddNavButton("🛒 Bán vé tại quầy (POS)", () => SwitchView("🛒 Bán vé tại quầy (POS)", new POSUC()));
+            AddNavButton("📷 Quét mã QR soát vé", () => SwitchView("📷 Soát vé QR Code", new TicketScannerUC()));
+        }
+
+        // 2. QUẢN TRỊ VIÊN: DÀNH CHO ADMIN
+        if (currentRole == UserRole.Admin)
+        {
+            AddNavGroup("--- QUẢN TRỊ VIÊN (ADMIN) ---");
+            AddNavButton("📊 Dashboard Thống kê", () => SwitchView("📊 Dashboard Doanh thu & Suất chiếu", new DashboardUC()));
+            AddNavButton("🎬 Quản lý Phim", () => SwitchView("🎬 Danh sách phim", new MovieManagementUC()));
+            AddNavButton("🚪 Quản lý Phòng chiếu", () => SwitchView("🚪 Quản lý phòng chiếu", new RoomManagementUC()));
+            AddNavButton("⏰ Quản lý Suất chiếu", () => SwitchView("⏰ Lịch chiếu rạp", new ShowtimeManagementUC()));
+            AddNavButton("🍿 Quản lý Bắp nước", () => SwitchView("🍿 Menu sản phẩm", new FoodManagementUC()));
+            AddNavButton("👥 Quản lý Người dùng", () => SwitchView("👥 Tài khoản người dùng", new UserManagementUC()));
+        }
+
+        // 3. KHÁCH HÀNG & ADMIN: LUỒNG ĐẶT VÉ TRỰC TUYẾN
+        if (currentRole == UserRole.Admin || currentRole == UserRole.Customer)
+        {
+            AddNavGroup("--- KHÁCH HÀNG (CUSTOMER) ---");
+            AddNavButton("🏠 Trang chủ Phim", () => SwitchView("🏠 Trang chủ", new HomeUC()));
+            AddNavButton("📅 Lịch chiếu", () => SwitchView("📅 Lịch chiếu phim", new ShowtimeUC()));
+            AddNavButton("🎟️ Đặt vé liên hoàn (Flow)", () => StartBookingFlow());
+            AddNavButton("💺 Chọn ghế đặt vé", () => SwitchView("💺 Sơ đồ chọn ghế", new SeatSelectionUC()));
+            AddNavButton("🍿 Chọn bắp nước", () => OpenFoodSelectionView());
+            AddNavButton("💳 Thanh toán", () => SwitchView("💳 Thanh toán hóa đơn", new CheckoutUC()));
+            AddNavButton("🎟️ Vé của tôi", () => SwitchView("🎟️ Quản lý vé đã mua", new TicketUC()));
+        }
+
+        // 4. NÚT ĐĂNG XUẤT HỆ THỐNG
+        AddNavGroup("--- HỆ THỐNG ---");
+        AddNavButton("🚪 Đăng xuất", () => {
+            this.Hide();
+            new LoginForm().Show();
+        });
+
+        this.Controls.Add(panelContent);
+        this.Controls.Add(panelHeader);
+        this.Controls.Add(panelSidebar);
+
+        // Mở màn hình mặc định theo vai trò khi vừa đăng nhập thành công
+        if (currentRole == UserRole.Customer)
+            SwitchView("🏠 Trang chủ", new HomeUC());
+        else if (currentRole == UserRole.Staff)
+            SwitchView("🛒 Bán vé tại quầy (POS)", new POSUC());
+        else
+            SwitchView("📊 Dashboard Doanh thu & Suất chiếu", new DashboardUC());
+    }
+
+    private void AddNavGroup(string text)
+    {
+        var lblGroup = new Label
+        {
+            Text = text,
+            ForeColor = Color.FromArgb(149, 175, 192),
+            Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+            Dock = DockStyle.Top,
+            Height = 35,
+            TextAlign = ContentAlignment.BottomLeft,
+            Padding = new Padding(15, 0, 0, 5)
+        };
+        panelSidebar.Controls.Add(lblGroup);
+        lblGroup.BringToFront();
+    }
+
+    private void AddNavButton(string text, Action onClick)
+    {
+        var btn = new Button
+        {
+            Text = text,
+            Dock = DockStyle.Top,
+            Height = 40,
+            FlatStyle = FlatStyle.Flat,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9.5F),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(20, 0, 0, 0),
             Cursor = Cursors.Hand
         };
+        btn.FlatAppearance.BorderSize = 0;
+        btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(87, 101, 116);
+        btn.Click += (s, e) => onClick();
 
-        button.FlatAppearance.BorderSize = 0;
-        button.FlatAppearance.MouseOverBackColor =
-            Color.FromArgb(30, 41, 59);
-
-        return button;
+        panelSidebar.Controls.Add(btn);
+        btn.BringToFront();
     }
 
- 
-    // 4. CHỌN MENU
- 
-
-    private void SelectMenu(Button selectedButton)
+    // =========================================================
+    // ĐIỀU HƯỚNG MÀN HÌNH CHÍNH (SWITCH VIEW)
+    // =========================================================
+    public void SwitchView(string title, UserControl control)
     {
-        foreach (Control control in sidebar.Controls)
+        lblHeaderTitle.Text = title;
+        
+        // Giải phóng tài nguyên điều khiển cũ trước khi xóa
+        foreach (Control c in panelContent.Controls)
         {
-            if (control is FlowLayoutPanel menu)
+            c.Dispose();
+        }
+        panelContent.Controls.Clear();
+
+        control.Dock = DockStyle.Fill;
+        panelContent.Controls.Add(control);
+        control.BringToFront();
+    }
+
+    // Nạp màn hình Chọn bắp nước độc lập
+    private void OpenFoodSelectionView(decimal ticketTotalAmount = 0m)
+    {
+        var foodUC = new FoodSelectionUC(ticketTotalAmount);
+
+        foodUC.OnContinueToCheckout += (s, cartData) =>
+        {
+            SwitchView("💳 Thanh toán hóa đơn", new CheckoutUC());
+        };
+
+        foodUC.OnBackClicked += (s, e) =>
+        {
+            SwitchView("💺 Chọn ghế đặt vé", new SeatSelectionUC());
+        };
+
+        SwitchView("🍿 Chọn bắp nước", foodUC);
+    }
+    
+    // =========================================================
+    // LUỒNG ĐẶT VÉ LIÊN HOÀN (BOOKING FLOW)
+    // =========================================================
+    private void StartBookingFlow()
+    {
+        // BƯỚC 1: BẮT ĐẦU VỚI MÀN HÌNH CHỌN GHẾ
+        var seatUC = new SeatSelectionUC();
+
+        SwitchView("💺 Bước 1: Chọn ghế ngồi", seatUC);
+
+        // Tự động chuyển tiếp sang Bắp nước với số tiền vé ước tính (150.000đ)
+        // Khi SeatSelectionUC hoàn thiện event chọn ghế, có thể đăng ký sự kiện tại đây:
+        // OpenFoodStep(150000m);
+
+        // BƯỚC 2: HÀM CHUYỂN SANG BẮP NƯỚC VÀ XÁC NHẬN THANH TOÁN
+        void OpenFoodStep(decimal seatAmount)
+        {
+            var foodUC = new FoodSelectionUC(seatAmount);
+
+            // Bấm "TIẾP TỤC THANH TOÁN" -> Mở Dialog Confirm
+            foodUC.OnContinueToCheckout += (sender, cartData) =>
             {
-                foreach (Control item in menu.Controls)
+                using var confirmDialog = new ConfirmBookingDialog();
+
+                if (confirmDialog.ShowDialog(this) == DialogResult.OK)
                 {
-                    if (item is Button button)
-                    {
-                        button.BackColor = sidebarColor;
-                        button.ForeColor = textColor;
-                    }
+                    MessageBox.Show(
+                        "Thanh toán thành công! Đã tạo hóa đơn và vé.", 
+                        "Thông báo", 
+                        MessageBoxButtons.OK, 
+                        MessageBoxIcon.Information
+                    );
+
+                    SwitchView("🎟️ Vé của bạn", new TicketUC());
                 }
-            }
+            };
+
+            // Bấm "← Quay lại" -> Về màn chọn ghế
+            foodUC.OnBackClicked += (sender, e) =>
+            {
+                SwitchView("💺 Bước 1: Chọn ghế ngồi", seatUC);
+            };
+
+            SwitchView("🍿 Bước 2: Chọn bắp nước & Combo", foodUC);
         }
-
-        selectedButton.BackColor = accentColor;
-        selectedButton.ForeColor = Color.White;
-    }
-
-  
-    // 5. DASHBOARD
-
-
-    private void ShowDashboard()
-    {
-        lblPageTitle.Text = "Dashboard";
-
-        pageHost.Controls.Clear();
-
-        // Bố cục Dashboard
-        TableLayoutPanel layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 3,
-            BackColor = backgroundColor,
-            Padding = new Padding(0, 10, 0, 0)
-        };
-
-        layout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 75));
-
-        layout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 165));
-
-        layout.RowStyles.Add(
-            new RowStyle(SizeType.Percent, 100));
-
-        // Tiêu đề Dashboard
-        Panel welcomePanel = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = backgroundColor
-        };
-
-        Label lblWelcome = new Label
-        {
-            Text = "Tổng quan hệ thống",
-            Font = new Font("Segoe UI", 18, FontStyle.Bold),
-            ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(5, 0)
-        };
-
-        Label lblDescription = new Label
-        {
-            Text = "Theo dõi hoạt động kinh doanh của rạp chiếu phim",
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(7, 38)
-        };
-
-        welcomePanel.Controls.Add(lblWelcome);
-        welcomePanel.Controls.Add(lblDescription);
-
-        // Bốn thẻ thống kê
-        TableLayoutPanel cardLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 4,
-            RowCount = 1,
-            BackColor = backgroundColor,
-            Padding = new Padding(0, 5, 0, 10)
-        };
-
-        for (int i = 0; i < 4; i++)
-        {
-            cardLayout.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Percent, 25));
-        }
-
-        cardLayout.Controls.Add(
-            CreateStatisticCard(
-                "TỔNG SỐ PHIM",
-                "0",
-                "Phim trong hệ thống",
-                "▣",
-                Color.FromArgb(37, 99, 235)
-            ), 0, 0);
-
-        cardLayout.Controls.Add(
-            CreateStatisticCard(
-                "PHÒNG CHIẾU",
-                "0",
-                "Phòng đang quản lý",
-                "▤",
-                Color.FromArgb(16, 185, 129)
-            ), 1, 0);
-
-        cardLayout.Controls.Add(
-            CreateStatisticCard(
-                "SUẤT CHIẾU",
-                "0",
-                "Suất chiếu hôm nay",
-                "◷",
-                Color.FromArgb(245, 158, 11)
-            ), 2, 0);
-
-        cardLayout.Controls.Add(
-            CreateStatisticCard(
-                "DOANH THU",
-                "0 VNĐ",
-                "Doanh thu hôm nay",
-                "＄",
-                Color.FromArgb(139, 92, 246)
-            ), 3, 0);
-
-        // Khu vực hoạt động
-        Panel activityPanel = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = panelColor,
-            Padding = new Padding(20),
-            Margin = new Padding(0, 10, 0, 0)
-        };
-
-        Label lblActivityTitle = new Label
-        {
-            Text = "HOẠT ĐỘNG HỆ THỐNG",
-            Font = new Font("Segoe UI", 13, FontStyle.Bold),
-            ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(20, 20)
-        };
-
-        Label lblActivitySub = new Label
-        {
-            Text = "Theo dõi các hoạt động mới nhất",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(20, 52)
-        };
-
-        Panel separator = new Panel
-        {
-            BackColor = Color.FromArgb(51, 65, 85),
-            Height = 1,
-            Dock = DockStyle.Top
-        };
-
-        Label lblEmpty = new Label
-        {
-            Text = "Chưa có dữ liệu hoạt động.",
-            Font = new Font("Segoe UI", 10),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(20, 100)
-        };
-
-        activityPanel.Controls.Add(lblActivityTitle);
-        activityPanel.Controls.Add(lblActivitySub);
-        activityPanel.Controls.Add(lblEmpty);
-        activityPanel.Controls.Add(separator);
-
-        // Thêm các khu vực vào Dashboard
-        layout.Controls.Add(welcomePanel, 0, 0);
-        layout.Controls.Add(cardLayout, 0, 1);
-        layout.Controls.Add(activityPanel, 0, 2);
-
-        pageHost.Controls.Add(layout);
-    }
-
-   
-    // 6. TẠO THẺ THỐNG KÊ
-
-
-    private Panel CreateStatisticCard(
-        string title,
-        string value,
-        string description,
-        string icon,
-        Color iconColor)
-    {
-        Panel card = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = panelColor,
-            Margin = new Padding(5, 5, 8, 5)
-        };
-
-        Panel iconPanel = new Panel
-        {
-            Size = new Size(42, 42),
-            Location = new Point(15, 15),
-            BackColor = Color.FromArgb(
-                Math.Min(iconColor.R + 65, 255),
-                Math.Min(iconColor.G + 65, 255),
-                Math.Min(iconColor.B + 65, 255))
-        };
-
-        Label lblIcon = new Label
-        {
-            Text = icon,
-            Font = new Font("Segoe UI", 17, FontStyle.Bold),
-            ForeColor = iconColor,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-
-        iconPanel.Controls.Add(lblIcon);
-
-        Label lblTitle = new Label
-        {
-            Text = title,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(15, 72)
-        };
-
-        Label lblValue = new Label
-        {
-            Text = value,
-            Font = new Font("Segoe UI", 20, FontStyle.Bold),
-            ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(15, 93)
-        };
-
-        Label lblDescription = new Label
-        {
-            Text = description,
-            Font = new Font("Segoe UI", 8),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(15, 130)
-        };
-
-        card.Controls.Add(iconPanel);
-        card.Controls.Add(lblTitle);
-        card.Controls.Add(lblValue);
-        card.Controls.Add(lblDescription);
-
-        return card;
-    }
-
-  
-    // 7. MỞ QUẢN LÝ PHIM
-  
-
-    private void ShowMovieManagement()
-    {
-        lblPageTitle.Text = "Quản lý phim";
-
-        pageHost.Controls.Clear();
-
-        MovieManagementUC movieUC = new MovieManagementUC
-        {
-            Dock = DockStyle.Fill
-        };
-
-        pageHost.Controls.Add(movieUC);
-    }
-
- 
-    // 8. CÁC TRANG CHƯA HOÀN THIỆN
- 
-
-    private void ShowPlaceholder(string pageName)
-    {
-        lblPageTitle.Text = pageName;
-
-        pageHost.Controls.Clear();
-
-        Panel page = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = backgroundColor
-        };
-
-        Label lblTitle = new Label
-        {
-            Text = pageName,
-            Font = new Font("Segoe UI", 22, FontStyle.Bold),
-            ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(10, 30)
-        };
-
-        Label lblDescription = new Label
-        {
-            Text = "Chức năng này sẽ được hoàn thiện trong phần tiếp theo.",
-            Font = new Font("Segoe UI", 10),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(12, 80)
-        };
-
-        page.Controls.Add(lblTitle);
-        page.Controls.Add(lblDescription);
-
-        pageHost.Controls.Add(page);
     }
 }

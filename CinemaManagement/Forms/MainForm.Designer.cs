@@ -10,16 +10,21 @@ partial class MainForm
         {
             components.Dispose();
         }
-
         base.Dispose(disposing);
     }
 
+    #region Windows Form Designer generated code
+
     private void InitializeComponent()
     {
-        components = new System.ComponentModel.Container();
-
-        AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(800, 450);
-        Text = "Cinema Management";
+        this.SuspendLayout();
+        this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+        this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+        this.ClientSize = new System.Drawing.Size(1280, 760);
+        this.Name = "MainForm";
+        this.Text = "Cinema Management System";
+        this.ResumeLayout(false);
     }
+
+    #endregion
 }
