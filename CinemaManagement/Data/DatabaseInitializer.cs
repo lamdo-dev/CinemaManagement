@@ -23,18 +23,70 @@ public static class DatabaseInitializer
             );";
 
         // Lệnh SQL tạo bảng Movies
+        // Bảng Movies
         string createMoviesTable = @"
             CREATE TABLE IF NOT EXISTS Movies (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 Title TEXT NOT NULL,
                 Description TEXT,
                 DurationMinutes INTEGER NOT NULL,
+                Director TEXT,
+                Genre TEXT,
                 PosterUrl TEXT,
-                Status INTEGER NOT NULL
-            );";
+                ReleaseDate TEXT,
+                Status INTEGER NOT NULL DEFAULT 0
+            );
+        ";
 
-        // Thực thi tạo bảng
         connection.Execute(createUsersTable);
         connection.Execute(createMoviesTable);
+        
+        
+        //bs
+        // Bổ sung các cột nếu chưa tồn tại
+        AddColumnIfNotExists(connection, "Movies", "Director", "TEXT");
+        AddColumnIfNotExists(connection, "Movies", "Genre", "TEXT");
+        AddColumnIfNotExists(connection, "Movies", "ReleaseDate", "TEXT");
+        AddColumnIfNotExists(connection, "Movies", "PosterUrl", "TEXT");
     }
+
+    private static void AddColumnIfNotExists(
+        SqliteConnection connection,
+        string table,
+        string column,
+        string type)
+    {
+        using var command = connection.CreateCommand();
+
+        command.CommandText = $"PRAGMA table_info(\"{table}\");";
+
+        bool columnExists = false;
+
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                string existingColumn = reader["name"]?.ToString() ?? "";
+
+                if (existingColumn.Equals(
+                        column,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    columnExists = true;
+                    break;
+                }
+            }
+        }
+
+        if (!columnExists)
+        {
+            using var alterCommand = connection.CreateCommand();
+
+            alterCommand.CommandText =
+                $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {type};";
+
+            alterCommand.ExecuteNonQuery();
+        }
+    }
+
 }

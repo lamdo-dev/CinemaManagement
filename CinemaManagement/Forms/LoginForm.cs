@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using CinemaManagement.Forms;
 using CinemaManagement.Models.Enums;
 
 namespace CinemaManagement;
@@ -47,10 +48,12 @@ public partial class LoginForm : Form
     {
         var path = new GraphicsPath();
         float d = radius * 2F;
+
         path.AddArc(rect.X, rect.Y, d, d, 180, 90);
         path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
         path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
         path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+
         path.CloseFigure();
         return path;
     }
@@ -89,8 +92,8 @@ public partial class LoginForm : Form
             ctrl.MouseUp += (s, e) => dragging = false;
         };
 
-        attachEvents(pnlLeft);
-        attachEvents(pnlRightCard);
+        if (pnlLeft != null) attachEvents(pnlLeft);
+        if (pnlRightCard != null) attachEvents(pnlRightCard);
     }
 
     // Ẩn / hiện mật khẩu
@@ -109,11 +112,11 @@ public partial class LoginForm : Form
 
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            MessageBox.Show("Please enter both username and password!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        // Tự động phân quyền test
+        // Phân quyền theo tên tài khoản test
         UserRole userRole = username.ToLower() switch
         {
             "admin" => UserRole.Admin,
@@ -121,10 +124,12 @@ public partial class LoginForm : Form
             _ => UserRole.Customer
         };
 
-        MessageBox.Show($"Đăng nhập thành công! Quyền: {userRole}", "Cineworld Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show($"Đăng nhập thành công!\nQuyền hạn: {userRole}", "Cineworld Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         this.Hide();
-        var mainForm = new MainForm(userRole);
+
+        // Khởi tạo MainForm và truyền vai trò vào
+        MainForm mainForm = new MainForm(userRole.ToString());
         mainForm.FormClosed += (s, args) => this.Close();
         mainForm.Show();
     }
