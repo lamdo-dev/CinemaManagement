@@ -194,7 +194,7 @@ public partial class LoginForm : Form
             return;
         }
 
-        UserSession.CurrentUser = user;
+        UserSession.Login(user);
         OnLoginSuccess?.Invoke(this, user);
 
         MessageBox.Show($"Đăng nhập thành công!\nXin chào: {user.FullName} ({user.Role})", "Cineworld Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
