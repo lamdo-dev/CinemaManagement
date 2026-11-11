@@ -1,138 +1,518 @@
-﻿using System;
+﻿
+using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
+using CinemaManagement.Models;
+using CinemaManagement.Models.Enums;
+using CinemaManagement.Dialogs;
 
 namespace CinemaManagement.UserControls.Admin;
 
 public partial class MovieManagementUC : UserControl
 {
+    // Danh sách phim mẫu
+    private List<Movie> movies = new();
+
+    // Các thành phần giao diện
     private DataGridView dgvMovies = null!;
-    private TextBox txtTitle = null!;
-    private TextBox txtDuration = null!;
-    private ComboBox cmbGenre = null!;
-    private ComboBox cmbStatus = null!;
+    private TextBox txtSearch = null!;
+    private ComboBox cboStatus = null!;
+    private Label lblTotal = null!;
+
     private Button btnAdd = null!;
     private Button btnEdit = null!;
     private Button btnDelete = null!;
-    private Button btnClear = null!;
+
+    // Màu giao diện đồng bộ với MainForm
+    private readonly Color backgroundColor =
+        Color.FromArgb(15, 23, 42);
+
+    private readonly Color panelColor =
+        Color.FromArgb(30, 41, 59);
+
+    private readonly Color accentColor =
+        Color.FromArgb(37, 99, 235);
+
+    private readonly Color textColor =
+        Color.FromArgb(226, 232, 240);
 
     public MovieManagementUC()
     {
         InitializeComponent();
-        BuildUI();
+
+        Dock = DockStyle.Fill;
+        BackColor = backgroundColor;
+        Padding = new Padding(10);
+
+        BuildInterface();
+        LoadSampleData();
+        LoadMovieData();
     }
 
-    private void BuildUI()
+    // =====================================
+    // 1. XÂY DỰNG GIAO DIỆN
+    // =====================================
+
+    private void BuildInterface()
     {
-        this.Dock = DockStyle.Fill;
-        this.BackColor = Color.FromArgb(248, 249, 250);
-        this.Padding = new Padding(15);
-
-        // Khung trên: Nhập thông tin phim
-        var grpInfo = new GroupBox
+        // Tiêu đề trang
+        Label lblTitle = new Label
         {
-            Text = "Thông Tin Phim",
+            Text = "QUẢN LÝ PHIM",
+            Font = new Font("Segoe UI", 22, FontStyle.Bold),
+            ForeColor = Color.White,
+            AutoSize = true,
+            Location = new Point(10, 10)
+        };
+
+        Label lblDescription = new Label
+        {
+            Text = "Quản lý danh sách phim trong hệ thống rạp chiếu",
+            Font = new Font("Segoe UI", 10),
+            ForeColor = Color.FromArgb(148, 163, 184),
+            AutoSize = true,
+            Location = new Point(12, 52)
+        };
+
+        // Khu vực tìm kiếm
+        Panel filterPanel = new Panel
+        {
             Dock = DockStyle.Top,
-            Height = 135,
-            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-            ForeColor = Color.FromArgb(44, 62, 80),
-            Padding = new Padding(15)
+            Height = 75,
+            BackColor = panelColor,
+            Padding = new Padding(15),
+            Margin = new Padding(0, 15, 0, 10)
         };
 
-        var lblT = new Label { Text = "Tên phim:", Location = new Point(20, 35), AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Regular) };
-        txtTitle = new TextBox { Location = new Point(95, 32), Width = 280, Font = new Font("Segoe UI", 9.5F) };
-
-        var lblD = new Label { Text = "Thời lượng (phút):", Location = new Point(400, 35), AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Regular) };
-        txtDuration = new TextBox { Location = new Point(520, 32), Width = 90, Font = new Font("Segoe UI", 9.5F) };
-
-        var lblG = new Label { Text = "Thể loại:", Location = new Point(20, 75), AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Regular) };
-        cmbGenre = new ComboBox { Location = new Point(95, 72), Width = 180, DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Segoe UI", 9.5F) };
-        cmbGenre.Items.AddRange(new object[] { "Hành Động", "Tâm Lý - Tình Cảm", "Hài Kịch", "Kinh Dị", "Khoa Học Viễn Tưởng", "Hoạt Hình" });
-        cmbGenre.SelectedIndex = 0;
-
-        var lblS = new Label { Text = "Trạng thái:", Location = new Point(400, 75), AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Regular) };
-        cmbStatus = new ComboBox { Location = new Point(520, 72), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList, Font = new Font("Segoe UI", 9.5F) };
-        cmbStatus.Items.AddRange(new object[] { "Đang chiếu", "Sắp chiếu", "Đã ngưng chiếu" });
-        cmbStatus.SelectedIndex = 0;
-
-        // Các nút bấm chức năng
-        btnAdd = new Button { Text = "➕ Thêm", Location = new Point(695, 30), Size = new Size(85, 32), BackColor = Color.FromArgb(46, 204, 113), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
-        btnEdit = new Button { Text = "✏️ Sửa", Location = new Point(790, 30), Size = new Size(85, 32), BackColor = Color.FromArgb(52, 152, 219), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
-        btnDelete = new Button { Text = "🗑️ Xóa", Location = new Point(695, 70), Size = new Size(85, 32), BackColor = Color.FromArgb(231, 76, 60), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
-        btnClear = new Button { Text = "🔄 Mới", Location = new Point(790, 70), Size = new Size(85, 32), BackColor = Color.FromArgb(149, 165, 166), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
-
-        btnAdd.Click += (s, e) => {
-            if (string.IsNullOrWhiteSpace(txtTitle.Text)) { MessageBox.Show("Vui lòng nhập tên phim!"); return; }
-            dgvMovies.Rows.Add(dgvMovies.Rows.Count + 1, txtTitle.Text, cmbGenre.SelectedItem, txtDuration.Text + " phút", cmbStatus.SelectedItem);
-            MessageBox.Show("Đã thêm phim mới thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            ClearInput();
-        };
-
-        btnDelete.Click += (s, e) => {
-            if (dgvMovies.SelectedRows.Count > 0)
-            {
-                dgvMovies.Rows.RemoveAt(dgvMovies.SelectedRows[0].Index);
-                MessageBox.Show("Đã xóa phim khỏi danh sách!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-        };
-
-        btnClear.Click += (s, e) => ClearInput();
-
-        grpInfo.Controls.AddRange(new Control[] { lblT, txtTitle, lblD, txtDuration, lblG, cmbGenre, lblS, cmbStatus, btnAdd, btnEdit, btnDelete, btnClear });
-
-        // Khung dưới: DataGridView hiển thị danh sách
-        var grpList = new GroupBox
+        Label lblSearch = new Label
         {
-            Text = "Danh Sách Phim Chiếu Rạp",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-            ForeColor = Color.FromArgb(44, 62, 80),
-            Padding = new Padding(10)
+            Text = "Tìm kiếm phim:",
+            ForeColor = textColor,
+            AutoSize = true,
+            Location = new Point(15, 27)
         };
 
+        txtSearch = new TextBox
+        {
+            Location = new Point(145, 21),
+            Size = new Size(250, 30),
+            Font = new Font("Segoe UI", 10)
+        };
+
+        Label lblStatus = new Label
+        {
+            Text = "Trạng thái:",
+            ForeColor = textColor,
+            AutoSize = true,
+            Location = new Point(425, 27)
+        };
+
+        cboStatus = new ComboBox
+        {
+            Location = new Point(515, 21),
+            Size = new Size(180, 30),
+            Font = new Font("Segoe UI", 10),
+            DropDownStyle = ComboBoxStyle.DropDownList
+        };
+
+        cboStatus.Items.AddRange(new object[]
+        {
+            "Tất cả",
+            "Đang chiếu",
+            "Sắp chiếu",
+            "Đã kết thúc"
+        });
+
+        cboStatus.SelectedIndex = 0;
+
+        filterPanel.Controls.Add(lblSearch);
+        filterPanel.Controls.Add(txtSearch);
+        filterPanel.Controls.Add(lblStatus);
+        filterPanel.Controls.Add(cboStatus);
+
+        // Các nút chức năng
+        btnAdd = CreateButton(
+            "+ Thêm phim",
+            accentColor
+        );
+
+        btnEdit = CreateButton(
+            "Sửa phim",
+            Color.FromArgb(217, 119, 6)
+        );
+
+        btnDelete = CreateButton(
+            "Xóa phim",
+            Color.FromArgb(220, 38, 38)
+        );
+
+        FlowLayoutPanel buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 55,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = backgroundColor,
+            Padding = new Padding(0, 5, 0, 5),
+            WrapContents = false
+        };
+
+        buttonPanel.Controls.Add(btnAdd);
+        buttonPanel.Controls.Add(btnEdit);
+        buttonPanel.Controls.Add(btnDelete);
+
+        // Bảng danh sách phim
         dgvMovies = new DataGridView
         {
             Dock = DockStyle.Fill,
-            BackgroundColor = Color.White,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            BackgroundColor = panelColor,
+            BorderStyle = BorderStyle.None,
+            AutoSizeColumnsMode =
+                DataGridViewAutoSizeColumnsMode.Fill,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
             ReadOnly = true,
+            MultiSelect = false,
+            SelectionMode =
+                DataGridViewSelectionMode.FullRowSelect,
             RowHeadersVisible = false,
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular)
+            EnableHeadersVisualStyles = false
         };
 
-        dgvMovies.Columns.Add("Id", "Mã");
-        dgvMovies.Columns.Add("Title", "Tên Phim");
-        dgvMovies.Columns.Add("Genre", "Thể Loại");
-        dgvMovies.Columns.Add("Duration", "Thời Lượng");
-        dgvMovies.Columns.Add("Status", "Trạng Thái");
+        // Header bảng
+        dgvMovies.ColumnHeadersDefaultCellStyle.BackColor =
+            accentColor;
 
-        // Dữ liệu mẫu demo
-        dgvMovies.Rows.Add(1, "Mai", "Tâm Lý - Tình Cảm", "131 phút", "Đang chiếu");
-        dgvMovies.Rows.Add(2, "Đất Rừng Phương Nam", "Hành Động - Lịch Sử", "110 phút", "Đang chiếu");
-        dgvMovies.Rows.Add(3, "Dune: Hành Tinh Cát 2", "Khoa Học Viễn Tưởng", "166 phút", "Đang chiếu");
-        dgvMovies.Rows.Add(4, "Kung Fu Panda 4", "Hoạt Hình - Hài", "94 phút", "Sắp chiếu");
-        dgvMovies.Rows.Add(5, "Godzilla x Kong", "Hành Động - Quái Thú", "115 phút", "Sắp chiếu");
+        dgvMovies.ColumnHeadersDefaultCellStyle.ForeColor =
+            Color.White;
 
-        dgvMovies.CellClick += (s, e) => {
-            if (e.RowIndex >= 0)
-            {
-                var row = dgvMovies.Rows[e.RowIndex];
-                txtTitle.Text = row.Cells[1].Value?.ToString();
-                txtDuration.Text = row.Cells[3].Value?.ToString()?.Replace(" phút", "");
-            }
+        dgvMovies.ColumnHeadersDefaultCellStyle.Font =
+            new Font("Segoe UI", 10, FontStyle.Bold);
+
+        dgvMovies.ColumnHeadersHeight = 45;
+
+        // Nội dung bảng
+        dgvMovies.DefaultCellStyle.BackColor =
+            Color.FromArgb(30, 41, 59);
+
+        dgvMovies.DefaultCellStyle.ForeColor =
+            Color.White;
+
+        dgvMovies.DefaultCellStyle.Font =
+            new Font("Segoe UI", 9.5f);
+
+        dgvMovies.DefaultCellStyle.SelectionBackColor =
+            Color.FromArgb(51, 65, 85);
+
+        dgvMovies.DefaultCellStyle.SelectionForeColor =
+            Color.White;
+
+        dgvMovies.RowTemplate.Height = 40;
+
+        // Tạo các cột
+        dgvMovies.Columns.Add("Id", "Mã phim");
+        dgvMovies.Columns.Add("Title", "Tên phim");
+        dgvMovies.Columns.Add("Genre", "Thể loại");
+        dgvMovies.Columns.Add("Duration", "Thời lượng");
+        dgvMovies.Columns.Add("Director", "Đạo diễn");
+        dgvMovies.Columns.Add("ReleaseDate", "Ngày khởi chiếu");
+        dgvMovies.Columns.Add("Status", "Trạng thái");
+
+        // Chân trang
+        lblTotal = new Label
+        {
+            Text = "Tổng số phim: 0",
+            Dock = DockStyle.Bottom,
+            Height = 35,
+            ForeColor = textColor,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
-        grpList.Controls.Add(dgvMovies);
-        this.Controls.Add(grpList);
-        this.Controls.Add(grpInfo);
+        // Thêm các thành phần vào UserControl
+        Controls.Add(dgvMovies);
+        Controls.Add(lblTotal);
+        Controls.Add(buttonPanel);
+        Controls.Add(filterPanel);
+        Controls.Add(lblDescription);
+        Controls.Add(lblTitle);
+
+        // Sự kiện
+        txtSearch.TextChanged += (s, e) => LoadMovieData();
+
+        cboStatus.SelectedIndexChanged +=
+            (s, e) => LoadMovieData();
+
+        btnAdd.Click += BtnAdd_Click;
+        btnEdit.Click += BtnEdit_Click;
+        btnDelete.Click += BtnDelete_Click;
     }
 
-    private void ClearInput()
+    // =====================================
+    // 2. TẠO BUTTON
+    // =====================================
+
+    private Button CreateButton(string text, Color color)
     {
-        txtTitle.Clear();
-        txtDuration.Clear();
-        cmbGenre.SelectedIndex = 0;
-        cmbStatus.SelectedIndex = 0;
+        Button button = new Button
+        {
+            Text = text,
+            Size = new Size(135, 38),
+            BackColor = color,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 12, 0)
+        };
+
+        button.FlatAppearance.BorderSize = 0;
+
+        return button;
+    }
+    
+    // 3. DỮ LIỆU PHIM MẪU
+   
+    private void LoadSampleData()
+    {
+        movies = new List<Movie>
+        {
+            new Movie
+            {
+                Id = 1,
+                Title = "Avengers: Endgame",
+                Genre = "Hành động",
+                DurationMinutes = 181,
+                Director = "Anthony Russo",
+                ReleaseDate = new DateTime(2026, 10, 10),
+                Status = MovieStatus.Showing
+            },
+
+            new Movie
+            {
+                Id = 2,
+                Title = "Inside Out 2",
+                Genre = "Hoạt hình",
+                DurationMinutes = 96,
+                Director = "Kelsey Mann",
+                ReleaseDate = new DateTime(2026, 10, 15),
+                Status = MovieStatus.Showing
+            },
+
+            new Movie
+            {
+                Id = 3,
+                Title = "The Batman",
+                Genre = "Hành động",
+                DurationMinutes = 176,
+                Director = "Matt Reeves",
+                ReleaseDate = new DateTime(2026, 12, 20),
+                Status = MovieStatus.ComingSoon
+            },
+
+            new Movie
+            {
+                Id = 4,
+                Title = "Frozen 2",
+                Genre = "Hoạt hình",
+                DurationMinutes = 103,
+                Director = "Jennifer Lee",
+                ReleaseDate = new DateTime(2025, 5, 10),
+                Status = MovieStatus.Ended
+            }
+        };
+    }
+
+  
+    // 4. HIỂN THỊ DANH SÁCH PHIM
+ 
+    private void LoadMovieData()
+    {
+        dgvMovies.Rows.Clear();
+
+        string keyword = txtSearch.Text.Trim()
+            .ToLowerInvariant();
+
+        string selectedStatus =
+            cboStatus.SelectedItem?.ToString() ?? "Tất cả";
+
+        var result = movies.Where(movie =>
+        {
+            bool matchName =
+                movie.Title.ToLowerInvariant().Contains(keyword);
+
+            bool matchStatus = selectedStatus switch
+            {
+                "Đang chiếu" =>
+                    movie.Status == MovieStatus.Showing,
+
+                "Sắp chiếu" =>
+                    movie.Status == MovieStatus.ComingSoon,
+
+                "Đã kết thúc" =>
+                    movie.Status == MovieStatus.Ended,
+
+                _ => true
+            };
+
+            return matchName && matchStatus;
+
+        }).ToList();
+
+        foreach (Movie movie in result)
+        {
+            dgvMovies.Rows.Add(
+                movie.Id,
+                movie.Title,
+                movie.Genre,
+                movie.DurationMinutes + " phút",
+                movie.Director,
+                movie.ReleaseDate.ToString("dd/MM/yyyy"),
+                GetStatusText(movie.Status)
+            );
+        }
+
+        lblTotal.Text = $"Tổng số phim: {result.Count}";
+    }
+
+   
+    // 5. HIỂN THỊ TRẠNG THÁI TIẾNG VIỆT
+  
+    private string GetStatusText(MovieStatus status)
+    {
+        return status switch
+        {
+            MovieStatus.Showing => "Đang chiếu",
+            MovieStatus.ComingSoon => "Sắp chiếu",
+            MovieStatus.Ended => "Đã kết thúc",
+            _ => "Không xác định"
+        };
+    }
+
+   
+    // 6. NÚT THÊM PHIM
+  
+
+    
+    private void BtnAdd_Click(object? sender, EventArgs e)
+    {
+        using MovieEditDialog dialog = new MovieEditDialog();
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            // Lấy thông tin phim vừa nhập
+            Movie newMovie = dialog.MovieData;
+
+            // Tự động tạo mã phim
+            newMovie.Id = movies.Count == 0
+                ? 1
+                : movies.Max(m => m.Id) + 1;
+
+            // Thêm vào danh sách
+            movies.Add(newMovie);
+
+            // Cập nhật bảng
+            LoadMovieData();
+
+            MessageBox.Show(
+                "Thêm phim thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+    }
+
+
+    
+    // 7. NÚT SỬA PHIM
+    
+
+   
+    private void BtnEdit_Click(object? sender, EventArgs e)
+    {
+        // Kiểm tra đã chọn phim chưa
+        if (dgvMovies.SelectedRows.Count == 0)
+        {
+            MessageBox.Show("Vui lòng chọn phim cần sửa!");
+            return;
+        }
+
+        // Lấy mã phim được chọn
+        int id = Convert.ToInt32(
+            dgvMovies.SelectedRows[0].Cells["Id"].Value
+        );
+
+        // Tìm phim trong danh sách
+        Movie? selectedMovie = movies.FirstOrDefault(
+            m => m.Id == id
+        );
+
+        if (selectedMovie == null)
+        {
+            MessageBox.Show("Không tìm thấy phim!");
+            return;
+        }
+
+        // Mở cửa sổ chỉnh sửa
+        using MovieEditDialog dialog =
+            new MovieEditDialog(selectedMovie);
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            // Tìm vị trí phim cũ
+            int index = movies.FindIndex(m => m.Id == id);
+
+            if (index >= 0)
+            {
+                // Cập nhật phim
+                movies[index] = dialog.MovieData;
+
+                // Làm mới bảng
+                LoadMovieData();
+
+                MessageBox.Show(
+                    "Cập nhật phim thành công!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+        }
+    }
+
+
+   
+    // 8. NÚT XÓA PHIM
+    
+
+    private void BtnDelete_Click(object? sender, EventArgs e)
+    {
+        if (dgvMovies.SelectedRows.Count == 0)
+        {
+            MessageBox.Show("Vui lòng chọn phim cần xóa!");
+            return;
+        }
+
+        int id = Convert.ToInt32(
+            dgvMovies.SelectedRows[0].Cells["Id"].Value
+        );
+
+        DialogResult confirm = MessageBox.Show(
+            "Bạn có chắc chắn muốn xóa phim này?",
+            "Xác nhận xóa",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question
+        );
+
+        if (confirm == DialogResult.Yes)
+        {
+            movies.RemoveAll(movie => movie.Id == id);
+
+            LoadMovieData();
+
+            MessageBox.Show("Xóa phim thành công!");
+        }
     }
 }
