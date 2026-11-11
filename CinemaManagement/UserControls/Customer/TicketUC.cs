@@ -6,8 +6,11 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
+using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Utils;
 
 public partial class TicketUC : UserControl
 {
@@ -24,31 +27,37 @@ public partial class TicketUC : UserControl
     public BookingResultEventArgs? BookingData { get; private set; }
 
     // Controls UI
-    private Panel pnlLeftSuccess;
-    private Panel pnlRightTicketCard;
+    private Panel pnlLeftSuccess = null!;
+    private Panel pnlRightTicketCard = null!;
 
     // Left Panel Controls
-    private Label lblStatusHeader;
-    private Label lblBookingCodeText;
-    private Button btnGoHome;
-    private Button btnViewHistory;
+    private Label lblStatusHeader = null!;
+    private Label lblBookingCodeText = null!;
+    private Button btnGoHome = null!;
+    private Button btnViewHistory = null!;
 
     // Right Ticket Controls
-    private PictureBox picPoster;
-    private Label lblMovieTitle;
-    private Label lblShowtimeDetails;
-    private Label lblSeatsDetails;
-    private Label lblTotalAmount;
-    private PictureBox picQRCode;
-    private Button btnDownloadTicket;
+    private PictureBox picPoster = null!;
+    private Label lblMovieTitle = null!;
+    private Label lblShowtimeDetails = null!;
+    private Label lblSeatsDetails = null!;
+    private Label lblFoodDetails = null!;
+    private Label lblTotalAmount = null!;
+    private PictureBox picQRCode = null!;
+    private Button btnDownloadTicket = null!;
 
-    // Events
+    // Events đẩy ra bên ngoài
     public event EventHandler? OnGoHomeClicked;
     public event EventHandler? OnViewHistoryClicked;
+    public event EventHandler<BookingResultEventArgs?>? OnDownloadTicketClicked;
 
     public TicketUC()
     {
         InitializeComponents();
+        if (UserSession.LatestBooking != null)
+        {
+            SetBookingData(UserSession.LatestBooking);
+        }
     }
 
     public TicketUC(BookingResultEventArgs bookingData) : this()
@@ -144,7 +153,7 @@ public partial class TicketUC : UserControl
             Cursor = Cursors.Hand
         };
         btnViewHistory.FlatAppearance.BorderSize = 0;
-        btnViewHistory.Click += (s, e) => OnViewHistoryClicked?.Invoke(this, EventArgs.Empty);
+        btnViewHistory.Click += BtnViewHistory_Click;
 
         pnlLeftSuccess.Controls.AddRange(new Control[] { picCheckmark, lblStatusHeader, lblBookingCodeText, lblSubDesc, btnGoHome, btnViewHistory });
 
@@ -175,46 +184,64 @@ public partial class TicketUC : UserControl
             SizeMode = PictureBoxSizeMode.StretchImage,
             BackColor = Color.FromArgb(35, 36, 50)
         };
+        picPoster.Paint += (s, e) =>
+        {
+            if (picPoster.Image != null) return;
+            using var f = new Font("Segoe UI Emoji", 28f);
+            using var b = new SolidBrush(Color.FromArgb(140, 140, 165));
+            var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            e.Graphics.DrawString("🎬", f, b, picPoster.ClientRectangle, sf);
+        };
 
         lblMovieTitle = new Label
         {
             Text = "Spider-Man: Across The Spider-Verse",
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(150, 15),
-            Size = new Size(355, 32),
+            Location = new Point(150, 12),
+            Size = new Size(355, 30),
             AutoEllipsis = true
         };
 
         lblShowtimeDetails = new Label
         {
-            Text = "🎬 Rạp: Screen 1 (PVR Gold)\n⏰ Suất: 12:15 AM - 22/01/2026",
+            Text = "🎬 Rạp: Phòng 01 (Standard)\n⏰ Suất: 19:30 - Hôm nay",
             Font = new Font("Segoe UI", 9.5f),
             ForeColor = ColorTextMuted,
-            Location = new Point(150, 52),
-            Size = new Size(355, 45)
+            Location = new Point(150, 45),
+            Size = new Size(355, 42)
         };
 
         lblSeatsDetails = new Label
         {
-            Text = "🪑 Ghế: E5, E6, E7, E8, E9, E10, E11",
+            Text = "🪑 Ghế: E5, E6",
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
             ForeColor = ColorGold,
-            Location = new Point(150, 100),
-            Size = new Size(355, 25),
+            Location = new Point(150, 92),
+            Size = new Size(355, 22),
+            AutoEllipsis = true
+        };
+
+        lblFoodDetails = new Label
+        {
+            Text = "🍿 Bắp nước: Không kèm bắp nước",
+            Font = new Font("Segoe UI", 9f),
+            ForeColor = ColorTextMuted,
+            Location = new Point(150, 118),
+            Size = new Size(355, 22),
             AutoEllipsis = true
         };
 
         lblTotalAmount = new Label
         {
-            Text = "💳 Tổng thanh toán: 540.000 đ",
+            Text = "💳 Tổng thanh toán: 180.000 đ",
             Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
             ForeColor = ColorSuccessGreen,
-            Location = new Point(150, 130),
+            Location = new Point(150, 148),
             Size = new Size(355, 25)
         };
 
-        pnlMovieInfoBox.Controls.AddRange(new Control[] { picPoster, lblMovieTitle, lblShowtimeDetails, lblSeatsDetails, lblTotalAmount });
+        pnlMovieInfoBox.Controls.AddRange(new Control[] { picPoster, lblMovieTitle, lblShowtimeDetails, lblSeatsDetails, lblFoodDetails, lblTotalAmount });
 
         // Khung hiển thị QR Code ở trung tâm vé
         picQRCode = new PictureBox
@@ -229,7 +256,7 @@ public partial class TicketUC : UserControl
         // Nút Tải vé / Lưu ảnh vé
         btnDownloadTicket = new Button
         {
-            Text = "📥 TẢI VÉ / LƯU ẢNH (PDF)",
+            Text = "📥 TẢI VÉ / LƯU VÉ ĐIỆN TỬ",
             Font = new Font("Segoe UI", 11, FontStyle.Bold),
             ForeColor = Color.White,
             BackColor = Color.FromArgb(42, 44, 62),
@@ -275,7 +302,6 @@ public partial class TicketUC : UserControl
         Graphics g = e.Graphics;
         g.SmoothingMode = SmoothingMode.None;
 
-        int size = 200;
         int offsetX = 20;
         int offsetY = 20;
 
@@ -289,7 +315,8 @@ public partial class TicketUC : UserControl
             DrawQRFinderPattern(g, offsetX, offsetY + 140);
 
             // Các ô điểm dữ liệu giả lập (Data Pixels Grid)
-            Random rand = new Random(12345); // Fixed seed for consistent QR pattern
+            int seed = (BookingData?.BookingCode ?? "BK-2026").GetHashCode();
+            Random rand = new Random(seed);
             for (int r = 0; r < 20; r++)
             {
                 for (int c = 0; c < 20; c++)
@@ -328,15 +355,58 @@ public partial class TicketUC : UserControl
 
         if (BookingData.Showtime != null)
         {
-            lblShowtimeDetails.Text = $"🎬 Rạp: Screen 1 (Standard)\n⏰ Suất: {BookingData.Showtime.StartTime:HH:mm - dd/MM/yyyy}";
+            int roomNum = BookingData.Showtime.RoomId > 0 ? BookingData.Showtime.RoomId : 1;
+            lblShowtimeDetails.Text = $"🎬 Rạp: Phòng 0{roomNum}\n⏰ Suất: {BookingData.Showtime.StartTime:HH:mm - dd/MM/yyyy}";
         }
 
         lblSeatsDetails.Text = $"🪑 Ghế: {(BookingData.Seats.Count > 0 ? string.Join(", ", BookingData.Seats) : "Chưa chọn")}";
+
+        if (BookingData.FoodCart != null && BookingData.FoodCart.Count > 0)
+        {
+            lblFoodDetails.Text = "🍿 Bắp nước: " + string.Join(", ", BookingData.FoodCart.Select(x => $"{x.Value.Name} x{x.Value.Qty}"));
+        }
+        else
+        {
+            lblFoodDetails.Text = "🍿 Bắp nước: Không kèm bắp nước";
+        }
+
         lblTotalAmount.Text = $"💳 Tổng thanh toán: {BookingData.TotalAmount.ToString("N0", new CultureInfo("vi-VN"))} đ";
+        picQRCode.Invalidate();
+    }
+
+    private void BtnViewHistory_Click(object? sender, EventArgs e)
+    {
+        OnViewHistoryClicked?.Invoke(this, EventArgs.Empty);
+
+        if (UserSession.BookingHistory.Count == 0)
+        {
+            MessageBox.Show("Bạn chưa có đơn đặt vé nào trong phiên làm việc này.", "Lịch sử đặt vé", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"📜 LỊCH SỬ ĐẶT VÉ ({UserSession.BookingHistory.Count} đơn):\n");
+        for (int i = UserSession.BookingHistory.Count - 1; i >= 0; i--)
+        {
+            var b = UserSession.BookingHistory[i];
+            sb.AppendLine($"• [{b.BookingCode}] {b.Movie?.Title ?? "Phim"} | Suất: {b.Showtime?.StartTime:HH:mm dd/MM} | Ghế: {string.Join(", ", b.Seats)} | Tổng: {b.TotalAmount:N0} đ");
+        }
+
+        MessageBox.Show(sb.ToString(), "Lịch sử đặt vé của tôi", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void BtnDownloadTicket_Click(object? sender, EventArgs e)
     {
-        MessageBox.Show($"Vé điện tử mã [{BookingData?.BookingCode ?? "BK-2026"}] đã được tải xuống máy thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        OnDownloadTicketClicked?.Invoke(this, BookingData);
+
+        string code = BookingData?.BookingCode ?? "BK-2026";
+        MessageBox.Show(
+            $"📥 Vé điện tử mã [{code}] đã được xuất và lưu về máy thành công!\n\n" +
+            $"• Phim: {lblMovieTitle.Text}\n" +
+            $"• {lblSeatsDetails.Text}\n" +
+            $"• {lblTotalAmount.Text}",
+            "Xuất vé thành công",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 }

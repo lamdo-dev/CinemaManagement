@@ -4,8 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
-using CinemaManagement.Models;
-using CinemaManagement.Models.Enums;
 
 public partial class SeatMatrixUC : UserControl
 {
@@ -16,12 +14,12 @@ public partial class SeatMatrixUC : UserControl
     public static readonly Color ColorSelected = Color.FromArgb(52, 152, 219);   // Xanh dương (Đang chọn)
     public static readonly Color ColorOccupied = Color.FromArgb(70, 70, 85);     // Xám xẫm (Đã bán/Khóa)
 
-    private Panel pnlScreen;
-    private Panel pnlMatrixContainer;
-    private List<Button> seatButtons = new List<Button>();
+    private Panel pnlScreen = null!;
+    private Panel pnlMatrixContainer = null!;
+    private readonly List<Button> seatButtons = new List<Button>();
 
     public List<string> SelectedSeatCodes { get; private set; } = new List<string>();
-    
+
     // Sự kiện gửi danh sách ghế được chọn ra ngoài cho SeatSelectionUC tính tiền
     public event EventHandler<List<string>>? OnSeatSelectionChanged;
 
@@ -69,7 +67,7 @@ public partial class SeatMatrixUC : UserControl
         GenerateSeatMatrix(10, 14);
     }
 
-    public void GenerateSeatMatrix(int rows, int cols)
+    public void GenerateSeatMatrix(int rows, int cols, IEnumerable<string>? extraOccupiedSeats = null)
     {
         pnlMatrixContainer.Controls.Clear();
         seatButtons.Clear();
@@ -80,8 +78,19 @@ public partial class SeatMatrixUC : UserControl
         int startX = 50;
         int startY = 20;
 
-        // Danh sách ghế giả lập đã đặt trước
-        List<string> occupiedSeats = new List<string> { "C5", "C6", "D7", "D8", "E8", "E9" };
+        // Danh sách ghế giả lập đã đặt trước + các ghế đã bán trong phiên
+        HashSet<string> occupiedSeats = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "C5", "C6", "D7", "D8", "E8", "E9"
+        };
+
+        if (extraOccupiedSeats != null)
+        {
+            foreach (var code in extraOccupiedSeats)
+            {
+                occupiedSeats.Add(code);
+            }
+        }
 
         for (int r = 0; r < rows; r++)
         {
@@ -136,12 +145,22 @@ public partial class SeatMatrixUC : UserControl
         }
     }
 
+    public static decimal GetSeatPriceByCode(string seatCode)
+    {
+        if (string.IsNullOrEmpty(seatCode)) return 90000m;
+        char row = char.ToUpperInvariant(seatCode[0]);
+        int rowIndex = row - 'A';
+        if (rowIndex >= 3 && rowIndex <= 6) return 120000m; // VIP
+        if (rowIndex > 6) return 110000m;                   // Plus/Premium
+        return 90000m;                                      // Standard
+    }
+
     private void BtnSeat_Click(object? sender, EventArgs e)
     {
         if (sender is Button btn)
         {
             string seatCode = btn.Name;
-            Color originalColor = (Color)btn.Tag;
+            Color originalColor = (Color)btn.Tag!;
 
             if (SelectedSeatCodes.Contains(seatCode))
             {
@@ -156,7 +175,7 @@ public partial class SeatMatrixUC : UserControl
                 btn.BackColor = ColorSelected;
             }
 
-            // Thông báo danh sách ghế đã thay đổi
+            // Thông báo danh sách ghế đã thay đổi ra bên ngoài
             OnSeatSelectionChanged?.Invoke(this, new List<string>(SelectedSeatCodes));
         }
     }
