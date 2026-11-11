@@ -9,6 +9,8 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.UserControls.Customer;
+using CinemaManagement.Utils;
 
 public partial class ConfirmBookingDialog : Form
 {
@@ -24,7 +26,7 @@ public partial class ConfirmBookingDialog : Form
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public List<string> SelectedSeats { get; set; } = new List<string>();
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart { get; set; } 
+    public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart { get; set; }
         = new Dictionary<int, (string, decimal, int, string)>();
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -33,20 +35,26 @@ public partial class ConfirmBookingDialog : Form
     public decimal FoodSubTotal { get; set; }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public decimal DiscountAmount { get; set; }
-    public decimal FinalTotal => (TicketSubTotal + FoodSubTotal) - DiscountAmount;
+    public decimal FinalTotal => Math.Max(0m, (TicketSubTotal + FoodSubTotal) - DiscountAmount);
 
-    private PictureBox picPoster;
-    private Label lblMovieTitle;
-    private Label lblShowtime;
-    private Label lblSeats;
-    private Label lblFoodSummary;
-    private Label lblTicketPrice;
-    private Label lblFoodPrice;
-    private Label lblDiscountPrice;
-    private Label lblFinalTotal;
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public BookingResultEventArgs? ConfirmedBookingResult { get; private set; }
 
-    private Button btnConfirm;
-    private Button btnCancel;
+    // Sự kiện đẩy ra bên ngoài khi xác nhận đặt vé & thanh toán thành công
+    public event EventHandler<BookingResultEventArgs>? OnBookingConfirmed;
+
+    private PictureBox picPoster = null!;
+    private Label lblMovieTitle = null!;
+    private Label lblShowtime = null!;
+    private Label lblSeats = null!;
+    private Label lblFoodSummary = null!;
+    private Label lblTicketPrice = null!;
+    private Label lblFoodPrice = null!;
+    private Label lblDiscountPrice = null!;
+    private Label lblFinalTotal = null!;
+
+    private Button btnConfirm = null!;
+    private Button btnCancel = null!;
 
     public ConfirmBookingDialog()
     {
@@ -104,6 +112,15 @@ public partial class ConfirmBookingDialog : Form
 
         Panel pnlMovieBox = new Panel { Location = new Point(20, 75), Size = new Size(480, 130), BackColor = ColorCard };
         picPoster = new PictureBox { Location = new Point(12, 12), Size = new Size(75, 106), SizeMode = PictureBoxSizeMode.StretchImage, BackColor = Color.FromArgb(40, 42, 60) };
+        picPoster.Paint += (s, e) =>
+        {
+            if (picPoster.Image != null) return;
+            using var f = new Font("Segoe UI Emoji", 20f);
+            using var b = new SolidBrush(Color.FromArgb(140, 140, 165));
+            var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            e.Graphics.DrawString("🎬", f, b, picPoster.ClientRectangle, sf);
+        };
+
         lblMovieTitle = new Label { Text = "TÊN PHIM", Font = new Font("Segoe UI", 12, FontStyle.Bold), ForeColor = Color.White, Location = new Point(100, 15), Size = new Size(365, 25), AutoEllipsis = true };
         lblShowtime = new Label { Text = "⏰ Suất: --:-- | --/--/----", Font = new Font("Segoe UI", 9.5f), ForeColor = ColorTextMuted, Location = new Point(100, 45), Size = new Size(365, 22) };
         lblSeats = new Label { Text = "🪑 Ghế đã chọn: --", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = ColorGold, Location = new Point(100, 72), Size = new Size(365, 25), AutoEllipsis = true };
@@ -131,7 +148,7 @@ public partial class ConfirmBookingDialog : Form
 
         btnConfirm = new Button { Text = "✓ XÁC NHẬN THANH TOÁN", Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = Color.Black, BackColor = ColorGold, FlatStyle = FlatStyle.Flat, Size = new Size(290, 45), Location = new Point(210, 15), Cursor = Cursors.Hand };
         btnConfirm.FlatAppearance.BorderSize = 0;
-        btnConfirm.Click += (s, e) => { this.DialogResult = DialogResult.OK; this.Close(); };
+        btnConfirm.Click += BtnConfirm_Click;
 
         pnlFooter.Controls.Add(btnCancel);
         pnlFooter.Controls.Add(btnConfirm);
@@ -140,6 +157,26 @@ public partial class ConfirmBookingDialog : Form
         this.Controls.Add(pnlMovieBox);
         this.Controls.Add(pnlFooter);
         this.Controls.Add(pnlHeader);
+    }
+
+    private void BtnConfirm_Click(object? sender, EventArgs e)
+    {
+        ConfirmedBookingResult = new BookingResultEventArgs
+        {
+            BookingCode = $"BK-{DateTime.Now:yyyyMMdd-HHmmss}",
+            Movie = MovieData ?? new Movie { Id = 1, Title = "Spider-Man: Across The Spider-Verse" },
+            Showtime = ShowtimeData ?? new Showtime { Id = 1, StartTime = DateTime.Now },
+            Seats = new List<string>(SelectedSeats),
+            FoodCart = new Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)>(FoodCart),
+            TotalAmount = FinalTotal,
+            BookingTime = DateTime.Now
+        };
+
+        UserSession.AddBooking(ConfirmedBookingResult);
+        OnBookingConfirmed?.Invoke(this, ConfirmedBookingResult);
+
+        this.DialogResult = DialogResult.OK;
+        this.Close();
     }
 
     private Label AddDetailRow(Panel parent, string title, string val, ref int yPos, Color? color = null)

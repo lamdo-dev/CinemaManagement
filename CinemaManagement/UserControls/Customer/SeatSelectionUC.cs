@@ -4,9 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
 using CinemaManagement.UserControls.Common;
+using CinemaManagement.Utils;
 
 public partial class SeatSelectionUC : UserControl
 {
@@ -15,17 +17,17 @@ public partial class SeatSelectionUC : UserControl
     private readonly Color ColorGold = Color.FromArgb(195, 155, 80);
     private readonly Color ColorTextMuted = Color.FromArgb(150, 150, 170);
 
-    private Panel pnlHeader;
-    private Button btnBack;
-    private Panel pnlLeftLegend;
-    private Panel pnlBottomBar;
+    private Panel pnlHeader = null!;
+    private Button btnBack = null!;
+    private Panel pnlLeftLegend = null!;
+    private Panel pnlBottomBar = null!;
+    private Label lblContextInfo = null!;
 
-    private SeatMatrixUC seatMatrix;
-    private Label lblSelectedSeats;
-    private Label lblTotalPrice;
-    private Button btnContinue;
+    private SeatMatrixUC seatMatrix = null!;
+    private Label lblSelectedSeats = null!;
+    private Label lblTotalPrice = null!;
+    private Button btnContinue = null!;
 
-    private decimal basePrice = 90000m; // Giá ghế thường
     private decimal currentTotal = 0m;
 
     public Movie? MovieData { get; private set; }
@@ -38,6 +40,25 @@ public partial class SeatSelectionUC : UserControl
     public SeatSelectionUC()
     {
         InitializeComponents();
+    }
+
+    public SeatSelectionUC(Movie? movie, Showtime? showtime) : this()
+    {
+        SetBookingContext(movie, showtime);
+    }
+
+    public void SetBookingContext(Movie? movie, Showtime? showtime)
+    {
+        MovieData = movie ?? new Movie { Id = 1, Title = "Spider-Man: Across The Spider-Verse", Genre = "Action", DurationMinutes = 140 };
+        ShowtimeData = showtime ?? new Showtime { Id = 1, MovieId = MovieData.Id, RoomId = 1, StartTime = DateTime.Today.AddHours(19).AddMinutes(30), BasePrice = 90000m };
+
+        if (lblContextInfo != null)
+        {
+            lblContextInfo.Text = $"🎬 {MovieData.Title}\n⏰ Suất: {ShowtimeData.StartTime:HH:mm - dd/MM/yyyy}";
+        }
+
+        var extraOccupied = UserSession.GetBookedSeats(MovieData, ShowtimeData);
+        seatMatrix.GenerateSeatMatrix(10, 14, extraOccupied);
     }
 
     private void InitializeComponents()
@@ -101,6 +122,16 @@ public partial class SeatSelectionUC : UserControl
         AddLegendItem(pnlLeftLegend, "Ghế Premium/Plus", "110.000 đ", SeatMatrixUC.ColorPlus, 190);
         AddLegendItem(pnlLeftLegend, "Ghế Đang chọn", "Đã chọn", SeatMatrixUC.ColorSelected, 260);
         AddLegendItem(pnlLeftLegend, "Ghế Đã bán", "Không trống", SeatMatrixUC.ColorOccupied, 330);
+
+        lblContextInfo = new Label
+        {
+            Text = "🎬 Suất chiếu đang chọn",
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = ColorGold,
+            Location = new Point(15, 405),
+            Size = new Size(230, 65)
+        };
+        pnlLeftLegend.Controls.Add(lblContextInfo);
 
         // -------------------------------------------------------------
         // 3. THANH TỔNG TIỀN VÀ NÚT TIẾP TỤC BÊN DƯỚI (BOTTOM BAR)
@@ -171,7 +202,7 @@ public partial class SeatSelectionUC : UserControl
         Panel box = new Panel { Size = new Size(20, 20), Location = new Point(15, yPos), BackColor = color };
         Label lblT = new Label { Text = title, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Color.White, Location = new Point(45, yPos), AutoSize = true };
         Label lblP = new Label { Text = price, Font = new Font("Segoe UI", 8.5f), ForeColor = ColorTextMuted, Location = new Point(45, yPos + 20), AutoSize = true };
-        
+
         container.Controls.Add(box);
         container.Controls.Add(lblT);
         container.Controls.Add(lblP);
@@ -187,9 +218,7 @@ public partial class SeatSelectionUC : UserControl
         else
         {
             lblSelectedSeats.Text = $"Ghế đã chọn: {string.Join(", ", selectedSeats)}";
-            
-            // Tính tổng tiền đơn giản (Giá mẫu: 90.000đ/vé)
-            currentTotal = selectedSeats.Count * basePrice;
+            currentTotal = selectedSeats.Sum(SeatMatrixUC.GetSeatPriceByCode);
         }
 
         lblTotalPrice.Text = $"Tổng tiền: {currentTotal.ToString("N0", new CultureInfo("vi-VN"))} đ";
@@ -203,6 +232,6 @@ public partial class SeatSelectionUC : UserControl
             return;
         }
 
-        OnContinueToFood?.Invoke(this, (seatMatrix.SelectedSeatCodes, currentTotal));
+        OnContinueToFood?.Invoke(this, (new List<string>(seatMatrix.SelectedSeatCodes), currentTotal));
     }
 }

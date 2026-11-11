@@ -382,4 +382,9 @@ public class BookingResultEventArgs : EventArgs
     public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart { get; set; } = new Dictionary<int, (string, decimal, int, string)>();
     public decimal TotalAmount { get; set; }
     public DateTime BookingTime { get; set; }
+
+    // Kênh bán: "Online" (khách tự đặt) hoặc "POS" (bán tại quầy)
+    public string Channel { get; set; } = "Online";
+    public string PaymentMethod { get; set; } = "Thẻ / Ví điện tử";
+    public string CustomerName { get; set; } = string.Empty;
 }
