@@ -30,7 +30,10 @@ namespace CinemaManagement.UserControls.Customer
         private Panel pnlCartSummary = null!;
         private FlowLayoutPanel flpCartItemList = null!;
         private Label lblTotalFoodPrice = null!;
+
+        // Hai nút điều hướng
         private Button btnContinue = null!;
+        private Button btnSkipFood = null!;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         [Browsable(false)]
@@ -78,7 +81,7 @@ namespace CinemaManagement.UserControls.Customer
                 decimal Price,
                 int Qty,
                 string ImgPath
-                )>(bookingContext.FoodCart);
+            )>(bookingContext.FoodCart);
 
             // Cập nhật giao diện sản phẩm và giỏ hàng
             LoadFoodCatalog();
@@ -90,7 +93,9 @@ namespace CinemaManagement.UserControls.Customer
             Dock = DockStyle.Fill;
             BackColor = ColorBg;
 
+            // ==========================================
             // HEADER
+            // ==========================================
             pnlHeader = new Panel
             {
                 Dock = DockStyle.Top,
@@ -111,6 +116,7 @@ namespace CinemaManagement.UserControls.Customer
             };
 
             btnBack.FlatAppearance.BorderSize = 0;
+
             btnBack.Click += (s, e) =>
                 OnBackClicked?.Invoke(this, EventArgs.Empty);
 
@@ -172,7 +178,9 @@ namespace CinemaManagement.UserControls.Customer
             pnlHeader.Controls.Add(btnBack);
             pnlHeader.Controls.Add(pnlStepper);
 
+            // ==========================================
             // GIỎ HÀNG BÊN PHẢI
+            // ==========================================
             pnlCartSummary = new Panel
             {
                 Dock = DockStyle.Right,
@@ -221,7 +229,9 @@ namespace CinemaManagement.UserControls.Customer
             pnlCartHeader.Controls.Add(lblCartTitle);
             pnlCartHeader.Controls.Add(btnClearCart);
 
-            // Danh sách giỏ hàng
+            // ==========================================
+            // DANH SÁCH GIỎ HÀNG
+            // ==========================================
             flpCartItemList = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -231,11 +241,14 @@ namespace CinemaManagement.UserControls.Customer
                 FlowDirection = FlowDirection.TopDown
             };
 
-            // Footer giỏ hàng
+            // ==========================================
+            // FOOTER GIỎ HÀNG
+            // Tăng chiều cao để chứa hai nút
+            // ==========================================
             Panel pnlCartFooter = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 130
+                Height = 175
             };
 
             Label lblTotalLabel = new Label
@@ -256,14 +269,15 @@ namespace CinemaManagement.UserControls.Customer
                 AutoSize = true
             };
 
+            // Nút tiếp tục thanh toán
             btnContinue = new Button
             {
                 Text = "TIẾP TỤC THANH TOÁN →",
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = Color.Black,
                 BackColor = ColorGold,
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(330, 45),
+                Size = new Size(330, 40),
                 Location = new Point(0, 75),
                 Cursor = Cursors.Hand
             };
@@ -271,15 +285,42 @@ namespace CinemaManagement.UserControls.Customer
             btnContinue.FlatAppearance.BorderSize = 0;
             btnContinue.Click += BtnContinue_Click;
 
+            // ==========================================
+            // NÚT BỎ QUA BẮP NƯỚC
+            // ==========================================
+            btnSkipFood = new Button
+            {
+                Text = "BỎ QUA BẮP NƯỚC →",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(55, 57, 72),
+                FlatStyle = FlatStyle.Flat,
+                Size = new Size(330, 38),
+                Location = new Point(0, 122),
+                Cursor = Cursors.Hand
+            };
+
+            btnSkipFood.FlatAppearance.BorderSize = 0;
+
+            btnSkipFood.FlatAppearance.MouseOverBackColor =
+                Color.FromArgb(75, 77, 95);
+
+            btnSkipFood.Click += BtnSkipFood_Click;
+
+            // Thêm các control vào Footer
             pnlCartFooter.Controls.Add(lblTotalLabel);
             pnlCartFooter.Controls.Add(lblTotalFoodPrice);
             pnlCartFooter.Controls.Add(btnContinue);
+            pnlCartFooter.Controls.Add(btnSkipFood);
 
+            // Thêm các control vào giỏ hàng
             pnlCartSummary.Controls.Add(flpCartItemList);
             pnlCartSummary.Controls.Add(pnlCartHeader);
             pnlCartSummary.Controls.Add(pnlCartFooter);
 
+            // ==========================================
             // DANH SÁCH SẢN PHẨM
+            // ==========================================
             flpFoodCatalog = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -293,7 +334,9 @@ namespace CinemaManagement.UserControls.Customer
             Controls.Add(pnlHeader);
         }
 
-        // Tải danh sách sản phẩm
+        // ==========================================
+        // TẢI DANH SÁCH SẢN PHẨM
+        // ==========================================
         private void LoadFoodCatalog()
         {
             flpFoodCatalog.Controls.Clear();
@@ -344,7 +387,9 @@ namespace CinemaManagement.UserControls.Customer
             }
         }
 
-        // Tạo card sản phẩm
+        // ==========================================
+        // TẠO CARD SẢN PHẨM
+        // ==========================================
         private Panel CreateFoodCard(
             int id,
             string name,
@@ -434,6 +479,7 @@ namespace CinemaManagement.UserControls.Customer
 
             btnPlus.FlatAppearance.BorderSize = 0;
 
+            // Giảm số lượng
             btnMinus.Click += (s, e) =>
             {
                 int qty = int.Parse(lblQty.Text);
@@ -447,6 +493,7 @@ namespace CinemaManagement.UserControls.Customer
                 }
             };
 
+            // Tăng số lượng
             btnPlus.Click += (s, e) =>
             {
                 int qty = int.Parse(lblQty.Text);
@@ -471,7 +518,9 @@ namespace CinemaManagement.UserControls.Customer
             return card;
         }
 
-        // Cập nhật một sản phẩm
+        // ==========================================
+        // CẬP NHẬT MỘT SẢN PHẨM
+        // ==========================================
         private void UpdateCartItem(
             int id,
             string name,
@@ -492,7 +541,9 @@ namespace CinemaManagement.UserControls.Customer
             UpdateCartSummaryUI();
         }
 
-        // Đồng bộ giỏ hàng vào BookingContext
+        // ==========================================
+        // ĐỒNG BỘ GIỎ HÀNG VÀO BOOKINGCONTEXT
+        // ==========================================
         private void SyncBookingContext()
         {
             if (_bookingContext == null)
@@ -501,7 +552,9 @@ namespace CinemaManagement.UserControls.Customer
             _bookingContext.SetFoodCart(cartItems);
         }
 
-        // Cập nhật giao diện giỏ hàng
+        // ==========================================
+        // CẬP NHẬT GIAO DIỆN GIỎ HÀNG
+        // ==========================================
         private void UpdateCartSummaryUI()
         {
             flpCartItemList.Controls.Clear();
@@ -563,9 +616,12 @@ namespace CinemaManagement.UserControls.Customer
                 $"{totalAmount.ToString("N0", new CultureInfo("vi-VN"))} đ";
 
             btnContinue.Enabled = true;
+            btnSkipFood.Enabled = true;
         }
 
-        // Tiếp tục thanh toán
+        // ==========================================
+        // TIẾP TỤC THANH TOÁN
+        // ==========================================
         private void BtnContinue_Click(object? sender, EventArgs e)
         {
             // Kiểm tra BookingContext
@@ -605,12 +661,62 @@ namespace CinemaManagement.UserControls.Customer
                 decimal Price,
                 int Qty,
                 string ImgPath
-                )>(cartItems);
+            )>(cartItems);
 
             // Chuyển dữ liệu sang MainForm
             OnContinueToCheckout?.Invoke(
                 this,
                 (foodCartCopy, totalFood));
+        }
+
+        // ==========================================
+        // BỎ QUA BẮP NƯỚC VÀ ĐI THẲNG ĐẾN THANH TOÁN
+        // ==========================================
+        private void BtnSkipFood_Click(object? sender, EventArgs e)
+        {
+            // Kiểm tra BookingContext
+            if (_bookingContext == null)
+            {
+                MessageBox.Show(
+                    "Không tìm thấy thông tin đặt vé. Vui lòng thử lại.",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            // Kiểm tra thông tin đặt ghế
+            if (!_bookingContext.CanCheckout)
+            {
+                MessageBox.Show(
+                    "Vui lòng hoàn thành bước chọn phim, suất chiếu và ghế trước khi thanh toán.",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            // Xóa toàn bộ bắp nước trong giỏ hàng
+            cartItems.Clear();
+
+            // Đồng bộ giỏ hàng rỗng vào BookingContext
+            SyncBookingContext();
+
+            // Tạo giỏ hàng rỗng để chuyển sang CheckoutUC
+            var emptyFoodCart = new Dictionary<int, (
+                string Name,
+                decimal Price,
+                int Qty,
+                string ImgPath
+            )>();
+
+            // Chuyển thẳng đến thanh toán
+            // Tổng tiền bắp nước = 0 đồng
+            OnContinueToCheckout?.Invoke(
+                this,
+                (emptyFoodCart, 0m));
         }
     }
 }

@@ -76,7 +76,9 @@ namespace CinemaManagement.UserControls.Customer
             SetBookingContext(movie, showtime);
         }
 
-        // Thiết lập phim và suất chiếu
+        // ==========================================
+        // THIẾT LẬP PHIM VÀ SUẤT CHIẾU
+        // ==========================================
         public void SetBookingContext(Movie? movie, Showtime? showtime)
         {
             if (movie == null || showtime == null)
@@ -94,8 +96,8 @@ namespace CinemaManagement.UserControls.Customer
                 return;
             }
 
-            // Kiểm tra suất chiếu hiện tại có khác dữ liệu trong
-            // BookingContext hay không.
+            // Kiểm tra suất chiếu hiện tại có khác dữ liệu
+            // trong BookingContext hay không.
             bool isDifferentShowtime;
 
             if (_bookingContext != null)
@@ -158,12 +160,17 @@ namespace CinemaManagement.UserControls.Customer
             UpdateSeatInformation();
         }
 
+        // ==========================================
+        // KHỞI TẠO GIAO DIỆN
+        // ==========================================
         private void InitializeComponents()
         {
             Dock = DockStyle.Fill;
             BackColor = ColorBg;
 
+            // ==========================================
             // HEADER
+            // ==========================================
             pnlHeader = new Panel
             {
                 Dock = DockStyle.Top,
@@ -184,9 +191,11 @@ namespace CinemaManagement.UserControls.Customer
             };
 
             btnBack.FlatAppearance.BorderSize = 0;
+
             btnBack.Click += (s, e) =>
                 OnBackClicked?.Invoke(this, EventArgs.Empty);
 
+            // Stepper
             Panel pnlStepper = new Panel
             {
                 Size = new Size(500, 40),
@@ -238,13 +247,19 @@ namespace CinemaManagement.UserControls.Customer
 
             pnlStepper.Controls.AddRange(new Control[]
             {
-                lblStep1, lblDiv1, lblStep2, lblDiv2, lblStep3
+                lblStep1,
+                lblDiv1,
+                lblStep2,
+                lblDiv2,
+                lblStep3
             });
 
             pnlHeader.Controls.Add(btnBack);
             pnlHeader.Controls.Add(pnlStepper);
 
+            // ==========================================
             // BẢNG GIÁ GHẾ
+            // ==========================================
             pnlLeftLegend = new Panel
             {
                 Dock = DockStyle.Left,
@@ -310,7 +325,9 @@ namespace CinemaManagement.UserControls.Customer
 
             pnlLeftLegend.Controls.Add(lblContextInfo);
 
+            // ==========================================
             // THANH TỔNG TIỀN
+            // ==========================================
             pnlBottomBar = new Panel
             {
                 Dock = DockStyle.Bottom,
@@ -337,27 +354,55 @@ namespace CinemaManagement.UserControls.Customer
                 AutoSize = true
             };
 
+            // ==========================================
+            // NÚT TIẾP TỤC CHỌN BẮP NƯỚC
+            // ==========================================
             btnContinue = new Button
             {
-                Text = "TIẾP TỤC (BẮP NƯỚC) →",
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                Text = "TIẾP TỤC - CHỌN BẮP NƯỚC →",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = Color.Black,
                 BackColor = ColorGold,
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(230, 45),
-                Location = new Point(880, 15),
+                Size = new Size(270, 45),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Cursor = Cursors.Hand
             };
 
             btnContinue.FlatAppearance.BorderSize = 0;
+
+            btnContinue.FlatAppearance.MouseOverBackColor =
+                Color.FromArgb(220, 180, 105);
+
             btnContinue.Click += BtnContinue_Click;
+
+            // Hàm tự động căn nút bên phải
+            Action positionContinueButton = () =>
+            {
+                btnContinue.Location = new Point(
+                    Math.Max(
+                        20,
+                        pnlBottomBar.ClientSize.Width -
+                        btnContinue.Width - 20),
+                    15);
+            };
+
+            // Căn vị trí ban đầu
+            positionContinueButton();
+
+            // Tự động căn lại khi thay đổi kích thước cửa sổ
+            pnlBottomBar.Resize += (s, e) =>
+            {
+                positionContinueButton();
+            };
 
             pnlBottomBar.Controls.Add(lblSelectedSeats);
             pnlBottomBar.Controls.Add(lblTotalPrice);
             pnlBottomBar.Controls.Add(btnContinue);
 
+            // ==========================================
             // SƠ ĐỒ GHẾ
+            // ==========================================
             seatMatrix = new SeatMatrixUC
             {
                 Dock = DockStyle.Fill
@@ -366,6 +411,7 @@ namespace CinemaManagement.UserControls.Customer
             seatMatrix.OnSeatSelectionChanged +=
                 SeatMatrix_OnSeatSelectionChanged;
 
+            // Thứ tự thêm control quan trọng đối với Dock
             Controls.Add(seatMatrix);
             Controls.Add(pnlLeftLegend);
             Controls.Add(pnlHeader);
@@ -374,7 +420,9 @@ namespace CinemaManagement.UserControls.Customer
             UpdateSeatInformation();
         }
 
-        // Tạo chú thích bảng giá
+        // ==========================================
+        // TẠO CHÚ THÍCH BẢNG GIÁ
+        // ==========================================
         private void AddLegendItem(
             Panel container,
             string title,
@@ -412,7 +460,9 @@ namespace CinemaManagement.UserControls.Customer
             container.Controls.Add(lblP);
         }
 
-        // Khi người dùng chọn ghế
+        // ==========================================
+        // KHI NGƯỜI DÙNG CHỌN GHẾ
+        // ==========================================
         private void SeatMatrix_OnSeatSelectionChanged(
             object? sender,
             List<string> selectedSeats)
@@ -425,7 +475,9 @@ namespace CinemaManagement.UserControls.Customer
             UpdateSeatInformation();
         }
 
-        // Đồng bộ thông tin đặt vé
+        // ==========================================
+        // ĐỒNG BỘ BOOKING CONTEXT
+        // ==========================================
         private void SyncBookingContext(IEnumerable<string> seats)
         {
             if (_bookingContext == null)
@@ -435,7 +487,9 @@ namespace CinemaManagement.UserControls.Customer
             _bookingContext.SetTicketAmount(currentTotal);
         }
 
-        // Cập nhật giao diện
+        // ==========================================
+        // CẬP NHẬT THÔNG TIN GHẾ VÀ GIÁ VÉ
+        // ==========================================
         private void UpdateSeatInformation()
         {
             List<string> seats =
@@ -460,6 +514,8 @@ namespace CinemaManagement.UserControls.Customer
                     "N0",
                     new CultureInfo("vi-VN"))} đ";
 
+            // Chỉ cho phép tiếp tục khi đã chọn phim,
+            // suất chiếu và ít nhất một ghế.
             btnContinue.Enabled =
                 MovieData != null &&
                 ShowtimeData != null &&
@@ -468,7 +524,9 @@ namespace CinemaManagement.UserControls.Customer
             SyncBookingContext(seats);
         }
 
-        // Tiếp tục chọn bắp nước
+        // ==========================================
+        // TIẾP TỤC CHỌN BẮP NƯỚC
+        // ==========================================
         private void BtnContinue_Click(object? sender, EventArgs e)
         {
             if (MovieData == null || ShowtimeData == null)
@@ -496,11 +554,14 @@ namespace CinemaManagement.UserControls.Customer
                 return;
             }
 
+            // Tính tổng tiền vé
             currentTotal = selectedSeats.Sum(
                 SeatMatrixUC.GetSeatPriceByCode);
 
+            // Đồng bộ dữ liệu vào BookingContext
             SyncBookingContext(selectedSeats);
 
+            // Gửi thông tin ghế và giá vé sang MainForm
             OnContinueToFood?.Invoke(
                 this,
                 (new List<string>(selectedSeats), currentTotal));
