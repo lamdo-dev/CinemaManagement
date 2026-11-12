@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -45,7 +44,6 @@ namespace CinemaManagement.UserControls.Staff
                 Genre = "Action",
                 DurationMinutes = 132
             },
-
             new Movie
             {
                 Id = 3,
@@ -53,7 +51,6 @@ namespace CinemaManagement.UserControls.Staff
                 Genre = "Romance",
                 DurationMinutes = 128
             },
-
             new Movie
             {
                 Id = 4,
@@ -61,7 +58,6 @@ namespace CinemaManagement.UserControls.Staff
                 Genre = "Sci-Fi",
                 DurationMinutes = 192
             },
-
             new Movie
             {
                 Id = 5,
@@ -69,7 +65,6 @@ namespace CinemaManagement.UserControls.Staff
                 Genre = "Drama",
                 DurationMinutes = 180
             },
-
             new Movie
             {
                 Id = 6,
@@ -88,14 +83,12 @@ namespace CinemaManagement.UserControls.Staff
                 90000m,
                 1
             ),
-
             (
                 "IMAX 3D • Phòng IMAX",
                 new[] { "10:30", "13:40", "17:15", "20:45" },
                 120000m,
                 2
             ),
-
             (
                 "4DX 3D • Phòng VIP",
                 new[] { "12:00", "15:30", "18:45" },
@@ -107,14 +100,14 @@ namespace CinemaManagement.UserControls.Staff
         private readonly List<(int Id, string Name,
             decimal Price, string Category)> _products = new()
         {
-            (1, "Coca Cola Regular 375ml", 35000m, "Drink"),
-            (2, "Sprite Regular 375ml", 35000m, "Drink"),
-            (3, "Fanta Orange 375ml", 35000m, "Drink"),
-            (4, "Bắp Rang Bơ Thơm Lừng L", 55000m, "Popcorn"),
-            (5, "Bắp Rang Phô Mai L", 65000m, "Popcorn"),
-            (6, "Combo Solo (1 Bắp L + 1 Nước L)", 85000m, "Combo"),
-            (7, "Combo Couple (1 Bắp L + 2 Nước L)", 115000m, "Combo"),
-            (8, "Combo Family (2 Bắp L + 3 Nước L)", 195000m, "Combo")
+            (1, "Coca Cola Regular\n375ml", 35000m, "Drink"),
+            (2, "Sprite Regular\n375ml", 35000m, "Drink"),
+            (3, "Fanta Orange\n375ml", 35000m, "Drink"),
+            (4, "Bắp Rang Bơ\nThơm Lừng L", 55000m, "Popcorn"),
+            (5, "Bắp Rang Phô Mai\nCỡ Lớn L", 65000m, "Popcorn"),
+            (6, "Combo Solo\n(1 Bắp L + 1 Nước L)", 85000m, "Combo"),
+            (7, "Combo Couple\n(1 Bắp L + 2 Nước L)", 115000m, "Combo"),
+            (8, "Combo Family\n(2 Bắp L + 3 Nước L)", 195000m, "Combo")
         };
 
         // =====================================================
@@ -212,6 +205,12 @@ namespace CinemaManagement.UserControls.Staff
 
             if (cboMovie.Items.Count > 0)
                 cboMovie.SelectedIndex = 0;
+
+            if (cboFormat.Items.Count > 0)
+                cboFormat.SelectedIndex = 0;
+
+            if (cboPayment.Items.Count > 0)
+                cboPayment.SelectedIndex = 0;
         }
 
         // =====================================================
@@ -450,7 +449,8 @@ namespace CinemaManagement.UserControls.Staff
             Panel pnlShowtime = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 175,
+                Width = 900,
+                Height = 180,
                 BackColor = Color.White,
                 Padding = new Padding(20, 12, 20, 12)
             };
@@ -467,7 +467,7 @@ namespace CinemaManagement.UserControls.Staff
             Button btnScanner = new Button
             {
                 Text = "📷 Soát vé",
-                Location = new Point(560, 6),
+                Location = new Point(770, 8),
                 Size = new Size(110, 30),
                 BackColor = Color.FromArgb(30, 41, 59),
                 ForeColor = Color.White,
@@ -489,8 +489,9 @@ namespace CinemaManagement.UserControls.Staff
 
             cboMovie = new ComboBox
             {
-                Location = new Point(20, 40),
-                Size = new Size(300, 28),
+                Location = new Point(20, 42),
+                Size = new Size(280, 30),
+                DropDownWidth = 340,
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 10)
             };
@@ -503,8 +504,9 @@ namespace CinemaManagement.UserControls.Staff
 
             cboFormat = new ComboBox
             {
-                Location = new Point(330, 40),
-                Size = new Size(220, 28),
+                Location = new Point(312, 42),
+                Size = new Size(350, 30),
+                DropDownWidth = 400,
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 10)
             };
@@ -520,32 +522,35 @@ namespace CinemaManagement.UserControls.Staff
 
             flpTimes = new FlowLayoutPanel
             {
-                Location = new Point(20, 76),
-                Size = new Size(650, 42),
+                Location = new Point(20, 80),
+                Size = new Size(860, 42),
                 WrapContents = false,
-                AutoScroll = true
+                AutoScroll = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             lblShowtimeInfo = new Label
             {
                 Text = "Chưa chọn suất chiếu",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Italic),
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = ColorMuted,
-                Location = new Point(20, 130),
-                Size = new Size(420, 30)
+                Location = new Point(20, 134),
+                Size = new Size(640, 30),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             btnPickSeats = new Button
             {
                 Text = "💺 ② CHỌN GHẾ",
-                Location = new Point(450, 124),
-                Size = new Size(220, 38),
+                Location = new Point(680, 128),
+                Size = new Size(200, 38),
                 BackColor = Color.FromArgb(46, 204, 113),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Cursor = Cursors.Hand,
-                Enabled = false
+                Enabled = false,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
 
             btnPickSeats.FlatAppearance.BorderSize = 0;
@@ -612,10 +617,10 @@ namespace CinemaManagement.UserControls.Staff
         {
             Panel card = new Panel
             {
-                Width = 170,
-                Height = 175,
+                Width = 210,
+                Height = 185,
                 BackColor = Color.White,
-                Margin = new Padding(10),
+                Margin = new Padding(8),
                 Cursor = Cursors.Hand
             };
 
@@ -629,9 +634,9 @@ namespace CinemaManagement.UserControls.Staff
             Label imgBox = new Label
             {
                 Text = icon,
-                Font = new Font("Segoe UI Emoji", 30f),
+                Font = new Font("Segoe UI Emoji", 28f),
                 Dock = DockStyle.Top,
-                Height = 90,
+                Height = 82,
                 BackColor = Color.FromArgb(237, 233, 254),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Cursor = Cursors.Hand
@@ -640,9 +645,10 @@ namespace CinemaManagement.UserControls.Staff
             Label lblName = new Label
             {
                 Text = name,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 Dock = DockStyle.Top,
-                Height = 44,
+                Height = 56,
+                Padding = new Padding(4, 2, 4, 2),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Cursor = Cursors.Hand
             };
@@ -658,7 +664,7 @@ namespace CinemaManagement.UserControls.Staff
             };
 
             EventHandler addHandler = (s, e) =>
-                AddFood(id, name, price);
+                AddFood(id, name.Replace("\n", " "), price);
 
             card.Click += addHandler;
             imgBox.Click += addHandler;
@@ -702,12 +708,12 @@ namespace CinemaManagement.UserControls.Staff
 
             flpTimes.Controls.Clear();
 
+            Button? firstTimeBtn = null;
+
             foreach (var time in format.Times)
             {
                 var start = DateTime.Parse(
                     $"{DateTime.Today:yyyy-MM-dd} {time}");
-
-                bool passed = start < DateTime.Now;
 
                 Button btnTime = new Button
                 {
@@ -716,11 +722,8 @@ namespace CinemaManagement.UserControls.Staff
                     Margin = new Padding(0, 0, 8, 0),
                     FlatStyle = FlatStyle.Flat,
                     Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                    BackColor = passed
-                        ? Color.FromArgb(230, 230, 235)
-                        : Color.FromArgb(237, 233, 254),
-                    ForeColor = passed ? Color.Gray : ColorPrimary,
-                    Enabled = !passed,
+                    BackColor = Color.FromArgb(237, 233, 254),
+                    ForeColor = ColorPrimary,
                     Cursor = Cursors.Hand,
                     Tag = start
                 };
@@ -729,9 +732,19 @@ namespace CinemaManagement.UserControls.Staff
                 btnTime.Click += BtnTime_Click;
 
                 flpTimes.Controls.Add(btnTime);
+
+                firstTimeBtn ??= btnTime;
             }
 
-            RefreshOrderView();
+            // Tự động chọn khung giờ đầu tiên để có thể bấm ② CHỌN GHẾ ngay
+            if (firstTimeBtn != null)
+            {
+                BtnTime_Click(firstTimeBtn, EventArgs.Empty);
+            }
+            else
+            {
+                RefreshOrderView();
+            }
         }
 
         private void BtnTime_Click(object? sender, EventArgs e)
@@ -803,8 +816,7 @@ namespace CinemaManagement.UserControls.Staff
                 Text =
                     $"Chọn ghế - {_selectedMovie.Title} " +
                     $"({_selectedShowtime.StartTime:HH:mm})",
-
-                Size = new Size(820, 640),
+                Size = new Size(840, 650),
                 StartPosition = FormStartPosition.CenterParent,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 MaximizeBox = false,
@@ -836,13 +848,13 @@ namespace CinemaManagement.UserControls.Staff
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Location = new Point(15, 18),
-                Size = new Size(520, 25)
+                Size = new Size(540, 25)
             };
 
             Button btnOk = new Button
             {
                 Text = "✓ XÁC NHẬN GHẾ",
-                Location = new Point(600, 10),
+                Location = new Point(620, 10),
                 Size = new Size(185, 40),
                 BackColor = Color.FromArgb(195, 155, 80),
                 FlatStyle = FlatStyle.Flat,
@@ -1120,7 +1132,6 @@ namespace CinemaManagement.UserControls.Staff
             object? sender,
             EventArgs e)
         {
-            // Kiểm tra hóa đơn
             if (TotalAmount <= 0)
             {
                 MessageBox.Show(
@@ -1134,7 +1145,6 @@ namespace CinemaManagement.UserControls.Staff
 
             bool hasTicket = _selectedSeats.Count > 0;
 
-            // Kiểm tra thông tin vé
             if (hasTicket &&
                 (_selectedMovie == null ||
                  _selectedShowtime == null))
@@ -1148,7 +1158,6 @@ namespace CinemaManagement.UserControls.Staff
                 return;
             }
 
-            // Không cho phép có tiền vé nhưng không có ghế
             if (!hasTicket && _ticketAmount > 0)
             {
                 MessageBox.Show(
@@ -1160,7 +1169,6 @@ namespace CinemaManagement.UserControls.Staff
                 return;
             }
 
-            // Kiểm tra phương thức thanh toán
             if (cboPayment.SelectedIndex < 0)
             {
                 MessageBox.Show(
@@ -1172,7 +1180,6 @@ namespace CinemaManagement.UserControls.Staff
                 return;
             }
 
-            // Kiểm tra tiền mặt
             if (IsCashPayment &&
                 ParseCash() < TotalAmount)
             {
@@ -1187,13 +1194,11 @@ namespace CinemaManagement.UserControls.Staff
                 return;
             }
 
-            // Chuẩn hóa ghế
             var normalizedSeats = _selectedSeats
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Select(x => x.Trim().ToUpperInvariant())
                 .ToList();
 
-            // Kiểm tra ghế trùng trong đơn
             if (normalizedSeats.Count != normalizedSeats
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Count())
@@ -1218,53 +1223,38 @@ namespace CinemaManagement.UserControls.Staff
                 return;
             }
 
-            // Tạo kết quả thanh toán
             var result = new BookingResultEventArgs
             {
                 BookingCode = GenerateBookingCode(),
-
                 Movie = hasTicket ? _selectedMovie : null,
-
                 Showtime = hasTicket ? _selectedShowtime : null,
-
                 Seats = normalizedSeats,
-
                 FoodCart = new Dictionary<int,
                     (string Name, decimal Price, int Qty, string ImgPath)>
                     (_foodCart),
-
                 TotalAmount = TotalAmount,
-
                 BookingTime = DateTime.Now,
-
                 Channel = "POS",
-
                 PaymentMethod =
                     cboPayment.SelectedItem?.ToString()
                     ?? "Tiền mặt",
-
                 CustomerName =
                     string.IsNullOrWhiteSpace(txtCustomer.Text)
                         ? "Khách lẻ"
                         : txtCustomer.Text.Trim()
             };
 
-            // Tránh nhấn thanh toán nhiều lần
             btnPay.Enabled = false;
 
             try
             {
-                // Chỉ ghi nhận vào lịch sử vé khi đơn có vé.
-                // Đơn chỉ mua đồ ăn không phải đơn đặt vé.
                 if (hasTicket)
                 {
                     UserSession.AddBooking(result);
                 }
 
-                // Báo cho MainForm biết thanh toán hoàn tất
                 OnPaymentCompleted?.Invoke(this, result);
 
-                // Tạo hóa đơn
                 string receipt = BuildReceipt(result);
 
                 DialogResult ask = MessageBox.Show(
@@ -1278,7 +1268,6 @@ namespace CinemaManagement.UserControls.Staff
                         : MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
 
-                // Mở giao diện vé nếu khách muốn in vé
                 if (hasTicket &&
                     ask == DialogResult.Yes)
                 {
@@ -1287,7 +1276,6 @@ namespace CinemaManagement.UserControls.Staff
                         result);
                 }
 
-                // Reset đơn sau khi thanh toán thành công
                 ResetOrder();
             }
             catch (InvalidOperationException ex)
@@ -1313,11 +1301,8 @@ namespace CinemaManagement.UserControls.Staff
             var sb = new StringBuilder();
 
             sb.AppendLine("========== CINEMA APP ==========");
-
             sb.AppendLine($"Mã đơn: {r.BookingCode}");
-
             sb.AppendLine($"Khách hàng: {r.CustomerName}");
-
             sb.AppendLine(
                 $"Thời gian: {r.BookingTime:HH:mm:ss dd/MM/yyyy}");
 
@@ -1325,15 +1310,11 @@ namespace CinemaManagement.UserControls.Staff
                 r.Showtime != null)
             {
                 sb.AppendLine("--------------------------------");
-
                 sb.AppendLine($"Phim: {r.Movie.Title}");
-
                 sb.AppendLine(
                     $"Suất: {r.Showtime.StartTime:HH:mm dd/MM/yyyy}");
-
                 sb.AppendLine(
                     $"Phòng: {r.Showtime.RoomId}");
-
                 sb.AppendLine(
                     $"Ghế: {string.Join(", ", r.Seats)}");
             }
@@ -1341,7 +1322,6 @@ namespace CinemaManagement.UserControls.Staff
             if (r.FoodCart.Count > 0)
             {
                 sb.AppendLine("--------------------------------");
-
                 sb.AppendLine("BẮP NƯỚC:");
 
                 foreach (var item in r.FoodCart)
@@ -1353,27 +1333,22 @@ namespace CinemaManagement.UserControls.Staff
             }
 
             sb.AppendLine("--------------------------------");
-
             sb.AppendLine($"Thanh toán: {r.PaymentMethod}");
-
             sb.AppendLine(
                 $"TỔNG: {r.TotalAmount.ToString("N0", VN)} đ");
 
             if (IsCashPayment)
             {
                 decimal received = ParseCash();
-
                 decimal change = received - r.TotalAmount;
 
                 sb.AppendLine(
                     $"Khách đưa: {received.ToString("N0", VN)} đ");
-
                 sb.AppendLine(
                     $"Tiền thối: {change.ToString("N0", VN)} đ");
             }
 
             sb.AppendLine("================================");
-
             sb.AppendLine("       CẢM ƠN QUÝ KHÁCH!");
 
             return sb.ToString();
@@ -1385,18 +1360,11 @@ namespace CinemaManagement.UserControls.Staff
 
         public void ResetOrder()
         {
-            _selectedMovie = null;
-
-            _selectedShowtime = null;
-
             _selectedSeats.Clear();
-
             _ticketAmount = 0m;
-
             _foodCart.Clear();
 
             txtCustomer.Text = string.Empty;
-
             txtCashReceived.Text = string.Empty;
 
             if (cboPayment.Items.Count > 0)
@@ -1405,7 +1373,10 @@ namespace CinemaManagement.UserControls.Staff
             if (cboMovie.Items.Count > 0)
                 cboMovie.SelectedIndex = 0;
 
-            RefreshOrderView();
+            if (cboFormat.Items.Count > 0)
+                cboFormat.SelectedIndex = 0;
+
+            OnMovieOrFormatChanged();
         }
     }
 }
