@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
 
@@ -16,10 +15,10 @@ public partial class ShowtimeUC : UserControl
     private readonly Color ColorTextMuted = Color.FromArgb(150, 150, 170);
 
     // Controls UI
-    private Panel pnlHeader;
-    private Button btnBack;
-    private FlowLayoutPanel flpDateSelector;
-    private FlowLayoutPanel flpShowtimeList;
+    private Panel pnlHeader = null!;
+    private Button btnBack = null!;
+    private FlowLayoutPanel flpDateSelector = null!;
+    private FlowLayoutPanel flpShowtimeList = null!;
     private DateTime selectedDate = DateTime.Today;
 
     public Movie? MovieData { get; private set; }
@@ -32,6 +31,7 @@ public partial class ShowtimeUC : UserControl
     public ShowtimeUC()
     {
         InitializeComponents();
+        LoadShowtimes();
     }
 
     public ShowtimeUC(Movie movie) : this()
@@ -166,15 +166,22 @@ public partial class ShowtimeUC : UserControl
         }
     }
 
+    
     private void BtnDate_Click(object? sender, EventArgs e)
     {
-        if (sender is Button btn && btn.Tag is DateTime date)
-        {
-            selectedDate = date;
-            GenerateDateButtons(); // Reload giao diện nút ngày
-            LoadShowtimes();        // Reload danh sách suất chiếu
-        }
+        if (sender is not Button btn ||
+            btn.Tag is not DateTime date)
+            return;
+
+        selectedDate = date;
+
+        // Cập nhật trạng thái nút ngày
+        GenerateDateButtons();
+
+        // Tải lại danh sách suất chiếu
+        LoadShowtimes();
     }
+
 
     public void SetMovie(Movie movie)
     {
@@ -182,33 +189,60 @@ public partial class ShowtimeUC : UserControl
         LoadShowtimes();
     }
 
-    // Tải và hiển thị danh sách Suất chiếu (Giả lập theo từng định dạng)
+    // Tải và hiển thị danh sách Suất chiếu
     private void LoadShowtimes()
     {
+        flpShowtimeList.SuspendLayout();
         flpShowtimeList.Controls.Clear();
 
-        if (MovieData == null) return;
-
-        // Tạo 3 khối nhóm định dạng phim mẫu (Digital 2D, IMAX 3D, 4DX 3D)
-        string[] formats = { "DIGITAL 2D", "IMAX 3D", "4DX 3D" };
-        string[][] sampleTimes = {
-            new[] { "09:20", "11:45", "14:15", "16:50", "19:30", "22:00" },
-            new[] { "10:30", "13:40", "17:15", "20:45" },
-            new[] { "12:00", "15:30", "18:45" }
-        };
-
-        for (int i = 0; i < formats.Length; i++)
+        if (MovieData != null)
         {
-            Panel pnlFormatGroup = CreateShowtimeCardGroup(formats[i], sampleTimes[i]);
-            flpShowtimeList.Controls.Add(pnlFormatGroup);
+            // Hiển thị 3 định dạng phim cho bộ phim đã chọn
+            (string Format, string[] Times, decimal BasePrice, int RoomId)[] formats =
+            {
+                ("DIGITAL 2D • Phòng 01", new[] { "09:20", "11:45", "14:15", "16:50", "19:30", "22:00" }, 90000m, 1),
+                ("IMAX 3D • Phòng IMAX", new[] { "10:30", "13:40", "17:15", "20:45" }, 120000m, 2),
+                ("4DX 3D • Phòng VIP", new[] { "12:00", "15:30", "18:45" }, 150000m, 3)
+            };
+
+            foreach (var f in formats)
+            {
+                Panel pnlFormatGroup = CreateShowtimeCardGroup(MovieData, f.Format, f.Times, f.BasePrice, f.RoomId);
+                flpShowtimeList.Controls.Add(pnlFormatGroup);
+            }
         }
+        else
+        {
+            // Khi mở trực tiếp từ menu "Lịch chiếu" (chưa chọn phim cụ thể), hiển thị lịch chiếu của tất cả phim
+            var sampleMovies = new List<(Movie Movie, string Format, string[] Times, decimal BasePrice, int RoomId)>
+            {
+                (new Movie { Id = 1, Title = "Die Hard", Genre = "Action", DurationMinutes = 132 },
+                    "DIGITAL 2D • Phòng 01", new[] { "09:20", "13:15", "16:50", "19:30", "22:00" }, 90000m, 1),
+                (new Movie { Id = 4, Title = "Avatar: The Way of Water", Genre = "Sci-Fi", DurationMinutes = 192 },
+                    "IMAX 3D • Phòng IMAX", new[] { "10:30", "14:00", "17:45", "21:15" }, 120000m, 2),
+                (new Movie { Id = 5, Title = "Oppenheimer", Genre = "Drama", DurationMinutes = 180 },
+                    "DIGITAL 2D • Phòng 02", new[] { "11:00", "15:00", "18:30", "21:45" }, 90000m, 2),
+                (new Movie { Id = 6, Title = "Spider-Man: Across The Spider-Verse", Genre = "Action", DurationMinutes = 140 },
+                    "4DX 3D • Phòng VIP", new[] { "09:45", "12:30", "16:00", "19:15" }, 150000m, 3),
+                (new Movie { Id = 3, Title = "La La Land", Genre = "Romance", DurationMinutes = 128 },
+                    "DIGITAL 2D • Phòng 03", new[] { "10:15", "14:30", "20:00" }, 90000m, 1)
+            };
+
+            foreach (var item in sampleMovies)
+            {
+                Panel card = CreateShowtimeCardGroup(item.Movie, item.Format, item.Times, item.BasePrice, item.RoomId);
+                flpShowtimeList.Controls.Add(card);
+            }
+        }
+
+        flpShowtimeList.ResumeLayout();
     }
 
-    private Panel CreateShowtimeCardGroup(string formatName, string[] times)
+    private Panel CreateShowtimeCardGroup(Movie movie, string formatName, string[] times, decimal basePrice, int roomId)
     {
         Panel card = new Panel
         {
-            Size = new Size(1100, 150),
+            Size = new Size(1000, 150),
             BackColor = ColorCard,
             Margin = new Padding(0, 0, 0, 15)
         };
@@ -221,16 +255,24 @@ public partial class ShowtimeUC : UserControl
             SizeMode = PictureBoxSizeMode.StretchImage,
             BackColor = Color.FromArgb(45, 45, 60)
         };
-
-        if (MovieData != null && !string.IsNullOrEmpty(MovieData.PosterUrl) && System.IO.File.Exists(MovieData.PosterUrl))
+        picPoster.Paint += (s, e) =>
         {
-            try { picPoster.Image = Image.FromFile(MovieData.PosterUrl); } catch { }
+            if (picPoster.Image != null) return;
+            using var f = new Font("Segoe UI Emoji", 20f);
+            using var b = new SolidBrush(Color.FromArgb(140, 140, 165));
+            var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            e.Graphics.DrawString("🎬", f, b, picPoster.ClientRectangle, sf);
+        };
+
+        if (!string.IsNullOrEmpty(movie.PosterUrl) && System.IO.File.Exists(movie.PosterUrl))
+        {
+            try { picPoster.Image = Image.FromFile(movie.PosterUrl); } catch { }
         }
 
         // Tên Phim & Định dạng
         Label lblTitle = new Label
         {
-            Text = MovieData?.Title ?? "Movie Title",
+            Text = movie.Title,
             Font = new Font("Segoe UI", 13, FontStyle.Bold),
             ForeColor = Color.White,
             Location = new Point(115, 15),
@@ -239,7 +281,7 @@ public partial class ShowtimeUC : UserControl
 
         Label lblFormatTag = new Label
         {
-            Text = formatName,
+            Text = $"{formatName}   •   Giá từ {basePrice:N0} đ",
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = ColorGold,
             Location = new Point(115, 45),
@@ -250,7 +292,7 @@ public partial class ShowtimeUC : UserControl
         FlowLayoutPanel flpTimes = new FlowLayoutPanel
         {
             Location = new Point(115, 75),
-            Size = new Size(960, 60),
+            Size = new Size(860, 60),
             AutoScroll = false
         };
 
@@ -268,20 +310,50 @@ public partial class ShowtimeUC : UserControl
                 Cursor = Cursors.Hand
             };
             btnTime.FlatAppearance.BorderSize = 0;
-            btnTime.MouseEnter += (s, e) => btnTime.BackColor = ColorGold;
-            btnTime.MouseLeave += (s, e) => btnTime.BackColor = Color.FromArgb(42, 43, 58);
+            btnTime.MouseEnter += (s, e) =>
+            {
+                btnTime.BackColor = ColorGold;
+                btnTime.ForeColor = Color.Black;
+            };
+            btnTime.MouseLeave += (s, e) =>
+            {
+                btnTime.BackColor = Color.FromArgb(42, 43, 58);
+                btnTime.ForeColor = Color.White;
+            };
+
             
-            // Xử lý sự kiện chọn suất chiếu
+            // Xử lý sự kiện Click chọn suất chiếu -> đẩy ra ngoài cho MainForm mở SeatSelectionUC
             btnTime.Click += (s, e) =>
             {
+                MovieData = movie;
+
+                DateTime startTime = DateTime.Parse(
+                    $"{selectedDate:yyyy-MM-dd} {timeStr}");
+
+                // Không sử dụng RoomId làm ShowtimeId.
+                // ID = 0 chỉ dùng tạm thời cho dữ liệu mẫu.
                 Showtime selectedShowtime = new Showtime
                 {
-                    Id = 1,
-                    MovieId = MovieData?.Id ?? 1,
-                    StartTime = DateTime.Parse($"{selectedDate:yyyy-MM-dd} {timeStr}")
+                    Id = 0,
+                    MovieId = movie.Id,
+                    RoomId = roomId,
+                    StartTime = startTime,
+
+                    EndTime = startTime.AddMinutes(
+                        movie.DurationMinutes > 0
+                            ? movie.DurationMinutes
+                            : 120),
+
+                    BasePrice = basePrice
                 };
-                OnShowtimeSelected?.Invoke(this, selectedShowtime);
+
+                // Gửi thông tin suất chiếu về MainForm
+                OnShowtimeSelected?.Invoke(
+                    this,
+                    selectedShowtime
+                );
             };
+
 
             flpTimes.Controls.Add(btnTime);
         }
