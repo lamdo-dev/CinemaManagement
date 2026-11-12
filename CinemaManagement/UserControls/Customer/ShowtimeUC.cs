@@ -166,15 +166,22 @@ public partial class ShowtimeUC : UserControl
         }
     }
 
+    
     private void BtnDate_Click(object? sender, EventArgs e)
     {
-        if (sender is Button btn && btn.Tag is DateTime date)
-        {
-            selectedDate = date;
-            GenerateDateButtons(); // Reload giao diện nút ngày
-            LoadShowtimes();       // Reload danh sách suất chiếu
-        }
+        if (sender is not Button btn ||
+            btn.Tag is not DateTime date)
+            return;
+
+        selectedDate = date;
+
+        // Cập nhật trạng thái nút ngày
+        GenerateDateButtons();
+
+        // Tải lại danh sách suất chiếu
+        LoadShowtimes();
     }
+
 
     public void SetMovie(Movie movie)
     {
@@ -314,22 +321,39 @@ public partial class ShowtimeUC : UserControl
                 btnTime.ForeColor = Color.White;
             };
 
+            
             // Xử lý sự kiện Click chọn suất chiếu -> đẩy ra ngoài cho MainForm mở SeatSelectionUC
             btnTime.Click += (s, e) =>
             {
                 MovieData = movie;
-                var startTime = DateTime.Parse($"{selectedDate:yyyy-MM-dd} {timeStr}");
+
+                DateTime startTime = DateTime.Parse(
+                    $"{selectedDate:yyyy-MM-dd} {timeStr}");
+
+                // Không sử dụng RoomId làm ShowtimeId.
+                // ID = 0 chỉ dùng tạm thời cho dữ liệu mẫu.
                 Showtime selectedShowtime = new Showtime
                 {
-                    Id = roomId,
+                    Id = 0,
                     MovieId = movie.Id,
                     RoomId = roomId,
                     StartTime = startTime,
-                    EndTime = startTime.AddMinutes(movie.DurationMinutes > 0 ? movie.DurationMinutes : 120),
+
+                    EndTime = startTime.AddMinutes(
+                        movie.DurationMinutes > 0
+                            ? movie.DurationMinutes
+                            : 120),
+
                     BasePrice = basePrice
                 };
-                OnShowtimeSelected?.Invoke(this, selectedShowtime);
+
+                // Gửi thông tin suất chiếu về MainForm
+                OnShowtimeSelected?.Invoke(
+                    this,
+                    selectedShowtime
+                );
             };
+
 
             flpTimes.Controls.Add(btnTime);
         }
