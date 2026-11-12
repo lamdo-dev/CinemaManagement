@@ -684,7 +684,7 @@ public partial class LoginForm : Form
             return;
         }
 
-        UserSession.CurrentUser = user;
+        UserSession.Login(user);
         OnLoginSuccess?.Invoke(this, user);
 
         MessageBox.Show($"Chào mừng trở lại rạp Cineworld!\nChúc {user.FullName} có trải nghiệm xem phim thật tuyệt vời! 🍿🎉", 
