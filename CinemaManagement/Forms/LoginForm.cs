@@ -41,43 +41,38 @@ public partial class LoginForm : Form
 
     private Panel pnlLeft = null!;
     private Panel pnlRight = null!;
+    private FlowLayoutPanel flpContent = null!;
     private Label lblClose = null!;
 
     private Label lblTitle = null!;
     private Label lblSubtitle = null!;
 
-    private Panel pnlFullName = null!;
+    private Panel pnlGroupFullName = null!;
     private TextBox txtFullName = null!;
-    private Label lblFullNameTitle = null!;
 
-    private Panel pnlEmail = null!;
+    private Panel pnlGroupEmail = null!;
     private TextBox txtEmail = null!;
-    private Label lblEmailTitle = null!;
 
-    private Panel pnlUsername = null!;
+    private Panel pnlGroupUsername = null!;
     private TextBox txtUsername = null!;
-    private Label lblUsernameTitle = null!;
 
-    private Panel pnlPassword = null!;
+    private Panel pnlGroupPassword = null!;
     private TextBox txtPassword = null!;
-    private Label lblPasswordTitle = null!;
     private Label lblToggleEye = null!;
 
-    private Panel pnlOtp = null!;
+    private Panel pnlGroupOtp = null!;
     private TextBox txtOtp = null!;
-    private Label lblOtpTitle = null!;
 
-    private Panel pnlNewPassword = null!;
+    private Panel pnlGroupNewPassword = null!;
     private TextBox txtNewPassword = null!;
-    private Label lblNewPasswordTitle = null!;
 
-    private Panel pnlConfirmPassword = null!;
+    private Panel pnlGroupConfirmPassword = null!;
     private TextBox txtConfirmPassword = null!;
-    private Label lblConfirmPasswordTitle = null!;
 
+    private Panel pnlForgotWrapper = null!;
     private LinkLabel lnkForgotPassword = null!;
     private Button btnAction = null!;
-    private Panel pnlSwitchMode = null!;
+    private FlowLayoutPanel pnlSwitchMode = null!;
     private Label lblSwitchPrompt = null!;
     private LinkLabel lnkSwitchAction = null!;
 
@@ -87,9 +82,9 @@ public partial class LoginForm : Form
     {
         InitializeComponent();
 
-        SetStyle(ControlStyles.AllPaintingInWmPaint | 
-                 ControlStyles.OptimizedDoubleBuffer | 
-                 ControlStyles.UserPaint | 
+        SetStyle(ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint |
                  ControlStyles.ResizeRedraw, true);
 
         BuildOceanCuteLayout();
@@ -97,17 +92,23 @@ public partial class LoginForm : Form
         SwitchViewMode(FormMode.Login);
     }
 
-    #region Khởi tạo Layout
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        if (this.Width > 0 && this.Height > 0)
+        {
+            this.Region = new Region(GetRoundedPath(new Rectangle(0, 0, this.Width, this.Height), 26));
+        }
+    }
+
+    #region Khởi tạo Layout (Responsive Auto-Scale)
 
     private void BuildOceanCuteLayout()
     {
-        this.Size = new Size(980, 590);
-        this.Region = new Region(GetRoundedPath(new Rectangle(0, 0, this.Width, this.Height), 26));
-
         pnlLeft = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 430
+            Width = 420
         };
 
         try
@@ -127,8 +128,7 @@ public partial class LoginForm : Form
         pnlRight = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = _colCardBg,
-            Padding = new Padding(50, 30, 50, 30)
+            BackColor = _colCardBg
         };
         pnlRight.Paint += RenderRightPanelBorder;
 
@@ -137,8 +137,8 @@ public partial class LoginForm : Form
             Text = "✕",
             Font = new Font("Segoe UI", 12F, FontStyle.Bold),
             ForeColor = Color.FromArgb(170, 185, 205),
-            Size = new Size(32, 32),
-            Location = new Point(pnlRight.Width - 45, 15),
+            Size = new Size(34, 34),
+            Location = new Point(pnlRight.Width - 46, 12),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Cursor = Cursors.Hand,
             TextAlign = ContentAlignment.MiddleCenter
@@ -148,13 +148,26 @@ public partial class LoginForm : Form
         lblClose.Click += (s, e) => Application.Exit();
         pnlRight.Controls.Add(lblClose);
 
+        // Container chính dùng FlowLayoutPanel để tự động xếp dòng theo DPI mà không bao giờ đè chữ
+        flpContent = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0),
+            Margin = new Padding(0)
+        };
+
         lblTitle = new Label
         {
             Text = "WELCOME BACK ✨",
-            Font = new Font("Segoe UI", 21F, FontStyle.Bold),
+            Font = new Font("Segoe UI", 20F, FontStyle.Bold),
             ForeColor = _colTextDark,
-            Location = new Point(50, 32),
-            Size = new Size(440, 38),
+            AutoSize = true,
+            MaximumSize = new Size(460, 0),
+            Margin = new Padding(0, 0, 0, 4),
             BackColor = Color.Transparent
         };
 
@@ -163,59 +176,46 @@ public partial class LoginForm : Form
             Text = "Ready for an exciting movie journey? 🍿",
             Font = new Font("Segoe UI", 9.5F),
             ForeColor = _colTextMuted,
-            Location = new Point(52, 72),
-            Size = new Size(440, 24),
+            AutoSize = true,
+            MaximumSize = new Size(460, 0),
+            Margin = new Padding(2, 0, 0, 22),
             BackColor = Color.Transparent
         };
 
-        pnlRight.Controls.Add(lblTitle);
-        pnlRight.Controls.Add(lblSubtitle);
+        flpContent.Controls.Add(lblTitle);
+        flpContent.Controls.Add(lblSubtitle);
 
-        (lblFullNameTitle, pnlFullName, txtFullName) = CreateInputGroup("HỌ VÀ TÊN", "Nhập họ và tên của bạn...", "👤");
-        pnlRight.Controls.Add(lblFullNameTitle);
-        pnlRight.Controls.Add(pnlFullName);
+        (pnlGroupFullName, txtFullName) = CreateInputGroup("HỌ VÀ TÊN", "Nhập họ và tên của bạn...", "👤");
+        flpContent.Controls.Add(pnlGroupFullName);
 
-        (lblEmailTitle, pnlEmail, txtEmail) = CreateInputGroup("EMAIL ĐĂNG KÝ", "example@domain.com", "✉");
-        pnlRight.Controls.Add(lblEmailTitle);
-        pnlRight.Controls.Add(pnlEmail);
+        (pnlGroupEmail, txtEmail) = CreateInputGroup("EMAIL ĐĂNG KÝ", "example@domain.com", "✉");
+        flpContent.Controls.Add(pnlGroupEmail);
 
-        (lblUsernameTitle, pnlUsername, txtUsername) = CreateInputGroup("TÊN ĐĂNG NHẬP", "Tên tài khoản của bạn", "★");
-        pnlRight.Controls.Add(lblUsernameTitle);
-        pnlRight.Controls.Add(pnlUsername);
+        (pnlGroupUsername, txtUsername) = CreateInputGroup("TÊN ĐĂNG NHẬP", "Tên tài khoản của bạn", "★");
+        flpContent.Controls.Add(pnlGroupUsername);
 
-        (lblPasswordTitle, pnlPassword, txtPassword) = CreateInputGroup("MẬT KHẨU", "Mật khẩu bảo mật", "🔒");
+        (pnlGroupPassword, txtPassword) = CreateInputGroup("MẬT KHẨU", "Mật khẩu bảo mật", "🔒", hasEyeToggle: true);
         txtPassword.PasswordChar = '●';
+        flpContent.Controls.Add(pnlGroupPassword);
 
-        lblToggleEye = new Label
+        (pnlGroupOtp, txtOtp) = CreateInputGroup("MÃ OTP (6 CHỮ SỐ)", "Nhập mã OTP gồm 6 chữ số", "🔑");
+        flpContent.Controls.Add(pnlGroupOtp);
+
+        (pnlGroupNewPassword, txtNewPassword) = CreateInputGroup("MẬT KHẨU MỚI", "Nhập mật khẩu mới của bạn", "🔒");
+        txtNewPassword.PasswordChar = '●';
+        flpContent.Controls.Add(pnlGroupNewPassword);
+
+        (pnlGroupConfirmPassword, txtConfirmPassword) = CreateInputGroup("XÁC NHẬN MẬT KHẨU MỚI", "Nhập lại mật khẩu mới", "🛡");
+        txtConfirmPassword.PasswordChar = '●';
+        flpContent.Controls.Add(pnlGroupConfirmPassword);
+
+        pnlForgotWrapper = new Panel
         {
-            Text = "👁",
-            Font = new Font("Segoe UI Emoji", 11.5F),
-            ForeColor = _colTextMuted,
-            Size = new Size(32, 32),
-            Location = new Point(pnlPassword.Width - 38, 5),
-            Cursor = Cursors.Hand,
-            TextAlign = ContentAlignment.MiddleCenter,
+            Width = 430,
+            Height = 26,
+            Margin = new Padding(0, 0, 0, 8),
             BackColor = Color.Transparent
         };
-        lblToggleEye.Click += TogglePasswordVisibility;
-        pnlPassword.Controls.Add(lblToggleEye);
-
-        pnlRight.Controls.Add(lblPasswordTitle);
-        pnlRight.Controls.Add(pnlPassword);
-
-        (lblOtpTitle, pnlOtp, txtOtp) = CreateInputGroup("MÃ OTP (6 CHỮ SỐ)", "Nhập mã OTP gồm 6 chữ số", "🔑");
-        pnlRight.Controls.Add(lblOtpTitle);
-        pnlRight.Controls.Add(pnlOtp);
-
-        (lblNewPasswordTitle, pnlNewPassword, txtNewPassword) = CreateInputGroup("MẬT KHẨU MỚI", "Nhập mật khẩu mới của bạn", "🔒");
-        txtNewPassword.PasswordChar = '●';
-        pnlRight.Controls.Add(lblNewPasswordTitle);
-        pnlRight.Controls.Add(pnlNewPassword);
-
-        (lblConfirmPasswordTitle, pnlConfirmPassword, txtConfirmPassword) = CreateInputGroup("XÁC NHẬN MẬT KHẨU MỚI", "Nhập lại mật khẩu mới", "🛡");
-        txtConfirmPassword.PasswordChar = '●';
-        pnlRight.Controls.Add(lblConfirmPasswordTitle);
-        pnlRight.Controls.Add(pnlConfirmPassword);
 
         lnkForgotPassword = new LinkLabel
         {
@@ -224,36 +224,43 @@ public partial class LoginForm : Form
             LinkColor = _colOceanBlue,
             ActiveLinkColor = _colDeepOcean,
             VisitedLinkColor = _colOceanBlue,
-            Size = new Size(160, 22),
+            AutoSize = true,
+            Dock = DockStyle.Right,
             TextAlign = ContentAlignment.MiddleRight,
             BackColor = Color.Transparent,
             Cursor = Cursors.Hand,
             LinkBehavior = LinkBehavior.HoverUnderline
         };
         lnkForgotPassword.LinkClicked += (s, e) => SwitchViewMode(FormMode.ForgotPasswordStep1);
-        pnlRight.Controls.Add(lnkForgotPassword);
+        pnlForgotWrapper.Controls.Add(lnkForgotPassword);
+        flpContent.Controls.Add(pnlForgotWrapper);
 
         btnAction = new Button
         {
             Text = "ĐĂNG NHẬP NGAY",
-            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
             ForeColor = Color.White,
             BackColor = _colOceanBlue,
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand,
-            Size = new Size(420, 46)
+            Size = new Size(430, 46),
+            Margin = new Padding(0, 8, 0, 14)
         };
         btnAction.FlatAppearance.BorderSize = 0;
         btnAction.Paint += RenderOceanButton;
         btnAction.MouseEnter += (s, e) => { btnAction.BackColor = _colOceanBlueHover; btnAction.Invalidate(); };
         btnAction.MouseLeave += (s, e) => { btnAction.BackColor = _colOceanBlue; btnAction.Invalidate(); };
         btnAction.Click += btnAction_Click;
-        pnlRight.Controls.Add(btnAction);
+        flpContent.Controls.Add(btnAction);
 
-        pnlSwitchMode = new Panel
+        pnlSwitchMode = new FlowLayoutPanel
         {
-            Size = new Size(420, 30),
-            BackColor = Color.Transparent
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 4, 0, 0)
         };
 
         lblSwitchPrompt = new Label
@@ -261,10 +268,8 @@ public partial class LoginForm : Form
             Text = "Bạn chưa có tài khoản?",
             Font = new Font("Segoe UI", 9.25F),
             ForeColor = _colTextMuted,
-            AutoSize = false,
-            Size = new Size(180, 24),
-            TextAlign = ContentAlignment.MiddleRight,
-            Location = new Point(20, 3)
+            AutoSize = true,
+            Margin = new Padding(0, 2, 4, 0)
         };
 
         lnkSwitchAction = new LinkLabel
@@ -274,10 +279,8 @@ public partial class LoginForm : Form
             LinkColor = _colOceanBlue,
             ActiveLinkColor = _colDeepOcean,
             VisitedLinkColor = _colOceanBlue,
-            AutoSize = false,
-            Size = new Size(190, 24),
-            TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(205, 2),
+            AutoSize = true,
+            Margin = new Padding(0, 2, 0, 0),
             Cursor = Cursors.Hand,
             LinkBehavior = LinkBehavior.HoverUnderline
         };
@@ -291,7 +294,11 @@ public partial class LoginForm : Form
 
         pnlSwitchMode.Controls.Add(lblSwitchPrompt);
         pnlSwitchMode.Controls.Add(lnkSwitchAction);
-        pnlRight.Controls.Add(pnlSwitchMode);
+        flpContent.Controls.Add(pnlSwitchMode);
+
+        pnlRight.Controls.Add(flpContent);
+        pnlRight.Resize += (s, e) => CenterContentVertically();
+        flpContent.SizeChanged += (s, e) => CenterContentVertically();
 
         txtFullName.KeyDown += OnKeyDownSubmit;
         txtEmail.KeyDown += OnKeyDownSubmit;
@@ -305,31 +312,69 @@ public partial class LoginForm : Form
         this.Controls.Add(pnlLeft);
     }
 
-    private (Label lblTitle, Panel pnlBox, TextBox txtField) CreateInputGroup(string title, string placeholder, string icon)
+    private void CenterContentVertically()
     {
+        if (pnlRight == null || flpContent == null) return;
+
+        int x = Math.Max(30, (pnlRight.ClientSize.Width - flpContent.Width) / 2);
+        int y = Math.Max(45, (pnlRight.ClientSize.Height - flpContent.Height) / 2);
+        flpContent.Location = new Point(x, y);
+
+        // Căn giữa dòng chuyển chế độ bên dưới nút bấm
+        if (pnlSwitchMode != null && btnAction != null)
+        {
+            int leftMargin = Math.Max(0, (btnAction.Width - pnlSwitchMode.Width) / 2);
+            pnlSwitchMode.Margin = new Padding(leftMargin, 4, 0, 0);
+        }
+    }
+
+    private (Panel pnlGroup, TextBox txtField) CreateInputGroup(string title, string placeholder, string icon, bool hasEyeToggle = false)
+    {
+        var pnlGroup = new Panel
+        {
+            Width = 430,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Margin = new Padding(0, 0, 0, 12),
+            BackColor = Color.Transparent
+        };
+
         var lbl = new Label
         {
             Text = title,
             Font = new Font("Segoe UI", 8.25F, FontStyle.Bold),
             ForeColor = Color.FromArgb(90, 115, 145),
-            Size = new Size(420, 18),
+            AutoSize = true,
+            Location = new Point(0, 0),
             BackColor = Color.Transparent
         };
 
-        var pnl = new Panel
+        var pnlBox = new Panel
         {
-            Size = new Size(420, 42),
+            Width = 430,
+            Height = 42,
             BackColor = _colInputBg
         };
+
+        // Đặt vị trí ô nhập ngay dưới nhãn tiêu đề theo chiều cao thực tế của Font ở DPI hiện tại
+        lbl.SizeChanged += (s, e) => { pnlBox.Top = lbl.Bottom + 5; };
+        pnlBox.Top = lbl.PreferredHeight + 5;
 
         var lblIcon = new Label
         {
             Text = icon,
             Font = new Font("Segoe UI", 11F),
             ForeColor = _colOceanBlue,
-            Size = new Size(30, 30),
-            Location = new Point(12, 6),
+            Width = 36,
+            Dock = DockStyle.Left,
             TextAlign = ContentAlignment.MiddleCenter,
+            BackColor = Color.Transparent
+        };
+
+        var pnlTextWrapper = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(4, 10, 6, 8),
             BackColor = Color.Transparent
         };
 
@@ -339,19 +384,39 @@ public partial class LoginForm : Form
             Font = new Font("Segoe UI", 10.5F),
             ForeColor = _colTextDark,
             BackColor = _colInputBg,
-            Location = new Point(48, 11),
-            Size = new Size(325, 20),
+            Dock = DockStyle.Fill,
             PlaceholderText = placeholder
         };
+        pnlTextWrapper.Controls.Add(txt);
+
+        if (hasEyeToggle)
+        {
+            lblToggleEye = new Label
+            {
+                Text = "👁",
+                Font = new Font("Segoe UI Emoji", 11.5F),
+                ForeColor = _colTextMuted,
+                Width = 38,
+                Dock = DockStyle.Right,
+                Cursor = Cursors.Hand,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            };
+            lblToggleEye.Click += TogglePasswordVisibility;
+            pnlBox.Controls.Add(lblToggleEye);
+        }
+
+        pnlBox.Controls.Add(pnlTextWrapper);
+        pnlBox.Controls.Add(lblIcon);
 
         bool isFocused = false;
-        txt.GotFocus += (s, e) => { isFocused = true; pnl.Invalidate(); };
-        txt.LostFocus += (s, e) => { isFocused = false; pnl.Invalidate(); };
+        txt.GotFocus += (s, e) => { isFocused = true; pnlBox.Invalidate(); };
+        txt.LostFocus += (s, e) => { isFocused = false; pnlBox.Invalidate(); };
 
-        pnl.Paint += (s, e) =>
+        pnlBox.Paint += (s, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var rect = new Rectangle(0, 0, pnl.Width - 1, pnl.Height - 1);
+            var rect = new Rectangle(0, 0, pnlBox.Width - 1, pnlBox.Height - 1);
             using var path = GetRoundedPath(rect, 12);
 
             using var bgBrush = new SolidBrush(_colInputBg);
@@ -361,10 +426,10 @@ public partial class LoginForm : Form
             e.Graphics.DrawPath(pen, path);
         };
 
-        pnl.Controls.Add(lblIcon);
-        pnl.Controls.Add(txt);
+        pnlGroup.Controls.Add(lbl);
+        pnlGroup.Controls.Add(pnlBox);
 
-        return (lbl, pnl, txt);
+        return (pnlGroup, txt);
     }
 
     #endregion
@@ -373,19 +438,20 @@ public partial class LoginForm : Form
 
     private void HideAllInputs()
     {
-        lblFullNameTitle.Visible = pnlFullName.Visible = false;
-        lblEmailTitle.Visible = pnlEmail.Visible = false;
-        lblUsernameTitle.Visible = pnlUsername.Visible = false;
-        lblPasswordTitle.Visible = pnlPassword.Visible = false;
-        lblOtpTitle.Visible = pnlOtp.Visible = false;
-        lblNewPasswordTitle.Visible = pnlNewPassword.Visible = false;
-        lblConfirmPasswordTitle.Visible = pnlConfirmPassword.Visible = false;
-        lnkForgotPassword.Visible = false;
+        pnlGroupFullName.Visible = false;
+        pnlGroupEmail.Visible = false;
+        pnlGroupUsername.Visible = false;
+        pnlGroupPassword.Visible = false;
+        pnlGroupOtp.Visible = false;
+        pnlGroupNewPassword.Visible = false;
+        pnlGroupConfirmPassword.Visible = false;
+        pnlForgotWrapper.Visible = false;
     }
 
     private void SwitchViewMode(FormMode targetMode)
     {
         _currentMode = targetMode;
+        flpContent.SuspendLayout();
         HideAllInputs();
 
         switch (_currentMode)
@@ -395,22 +461,11 @@ public partial class LoginForm : Form
                 lblTitle.Text = "WELCOME BACK ✨";
                 lblSubtitle.Text = "Ready for an exciting movie journey? 🍿";
 
-                int startY = 150;
-                lblUsernameTitle.Visible = pnlUsername.Visible = true;
-                lblUsernameTitle.Location = new Point(50, startY);
-                pnlUsername.Location = new Point(50, startY + 22);
-
-                lblPasswordTitle.Visible = pnlPassword.Visible = true;
-                lblPasswordTitle.Location = new Point(50, startY + 82);
-                pnlPassword.Location = new Point(50, startY + 104);
-
-                lnkForgotPassword.Visible = true;
-                lnkForgotPassword.Location = new Point(300, startY + 154);
+                pnlGroupUsername.Visible = true;
+                pnlGroupPassword.Visible = true;
+                pnlForgotWrapper.Visible = true;
 
                 btnAction.Text = "ĐĂNG NHẬP NGAY";
-                btnAction.Location = new Point(50, startY + 188);
-
-                pnlSwitchMode.Location = new Point(50, startY + 252);
                 lblSwitchPrompt.Text = "Bạn chưa có tài khoản?";
                 lnkSwitchAction.Text = "Đăng ký thành viên";
                 break;
@@ -421,23 +476,11 @@ public partial class LoginForm : Form
                 lblTitle.Text = "TẠO TÀI KHOẢN MỚI ✨";
                 lblSubtitle.Text = "Tham gia Cineworld VIP để nhận hàng ngàn vé ưu đãi!";
 
-                int startY = 120;
-                lblFullNameTitle.Visible = pnlFullName.Visible = true;
-                lblFullNameTitle.Location = new Point(50, startY);
-                pnlFullName.Location = new Point(50, startY + 22);
+                pnlGroupFullName.Visible = true;
+                pnlGroupUsername.Visible = true;
+                pnlGroupPassword.Visible = true;
 
-                lblUsernameTitle.Visible = pnlUsername.Visible = true;
-                lblUsernameTitle.Location = new Point(50, startY + 74);
-                pnlUsername.Location = new Point(50, startY + 96);
-
-                lblPasswordTitle.Visible = pnlPassword.Visible = true;
-                lblPasswordTitle.Location = new Point(50, startY + 148);
-                pnlPassword.Location = new Point(50, startY + 170);
-
-                btnAction.Text = "TẠO TÀI KHOẢN VIP";
-                btnAction.Location = new Point(50, startY + 230);
-
-                pnlSwitchMode.Location = new Point(50, startY + 290);
+                btnAction.Text = "TẠO TÀI KHOẢN ";
                 lblSwitchPrompt.Text = "Đã có tài khoản rồi?";
                 lnkSwitchAction.Text = "Đăng nhập ngay";
                 break;
@@ -448,15 +491,9 @@ public partial class LoginForm : Form
                 lblTitle.Text = "KHÔI PHỤC MẬT KHẨU ✉";
                 lblSubtitle.Text = "Nhập email của bạn để nhận mã xác minh OTP tức thì.";
 
-                int startY = 160;
-                lblEmailTitle.Visible = pnlEmail.Visible = true;
-                lblEmailTitle.Location = new Point(50, startY);
-                pnlEmail.Location = new Point(50, startY + 24);
+                pnlGroupEmail.Visible = true;
 
                 btnAction.Text = "GỬI MÃ XÁC NHẬN";
-                btnAction.Location = new Point(50, startY + 95);
-
-                pnlSwitchMode.Location = new Point(50, startY + 160);
                 lblSwitchPrompt.Text = "Đã nhớ mật khẩu?";
                 lnkSwitchAction.Text = "Quay về Đăng nhập";
                 break;
@@ -467,29 +504,19 @@ public partial class LoginForm : Form
                 lblTitle.Text = "ĐẶT LẠI MẬT KHẨU 🔑";
                 lblSubtitle.Text = $"Nhập mã OTP đã gửi tới {_recoveryEmail}";
 
-                int startY = 110;
-                lblOtpTitle.Visible = pnlOtp.Visible = true;
-                lblOtpTitle.Location = new Point(50, startY);
-                pnlOtp.Location = new Point(50, startY + 20);
-
-                lblNewPasswordTitle.Visible = pnlNewPassword.Visible = true;
-                lblNewPasswordTitle.Location = new Point(50, startY + 70);
-                pnlNewPassword.Location = new Point(50, startY + 90);
-
-                lblConfirmPasswordTitle.Visible = pnlConfirmPassword.Visible = true;
-                lblConfirmPasswordTitle.Location = new Point(50, startY + 140);
-                pnlConfirmPassword.Location = new Point(50, startY + 160);
+                pnlGroupOtp.Visible = true;
+                pnlGroupNewPassword.Visible = true;
+                pnlGroupConfirmPassword.Visible = true;
 
                 btnAction.Text = "XÁC NHẬN ĐỔI MẬT KHẨU";
-                btnAction.Location = new Point(50, startY + 220);
-
-                pnlSwitchMode.Location = new Point(50, startY + 280);
                 lblSwitchPrompt.Text = "Chưa nhận được mã?";
                 lnkSwitchAction.Text = "Gửi lại OTP";
                 break;
             }
         }
 
+        flpContent.ResumeLayout(true);
+        CenterContentVertically();
         pnlRight.Invalidate();
     }
 
@@ -511,22 +538,26 @@ public partial class LoginForm : Form
             g.FillRectangle(overlayBrush, pnlLeft.ClientRectangle);
         }
 
+        int boxWidth = pnlLeft.Width - 50;
+        int boxHeight = 260;
+        int boxY = (pnlLeft.Height - boxHeight) / 2;
+
         using (var darkBackdrop = new SolidBrush(Color.FromArgb(55, 0, 0, 0)))
         {
-            g.FillRectangle(darkBackdrop, 25, 140, pnlLeft.Width - 50, 260);
+            g.FillRectangle(darkBackdrop, 25, boxY, boxWidth, boxHeight);
         }
 
-        using var fontCinema = new Font("Segoe UI Emoji", 42F);
+        using var fontCinema = new Font("Segoe UI Emoji", 40F);
         using var brushWhite = new SolidBrush(Color.White);
         string icons = "🍿  🎬  🐳";
         var sizeIcons = g.MeasureString(icons, fontCinema);
-        g.DrawString(icons, fontCinema, brushWhite, (pnlLeft.Width - sizeIcons.Width) / 2, 160);
+        g.DrawString(icons, fontCinema, brushWhite, (pnlLeft.Width - sizeIcons.Width) / 2, boxY + 20);
 
-        using var fontBrand = new Font("Segoe UI", 32F, FontStyle.Bold);
+        using var fontBrand = new Font("Segoe UI", 30F, FontStyle.Bold);
         string brand = "CINEWORLD";
         var sizeBrand = g.MeasureString(brand, fontBrand);
         float brandX = (pnlLeft.Width - sizeBrand.Width) / 2;
-        float brandY = 270;
+        float brandY = boxY + 125;
 
         using (var shadowBrush = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
         {
@@ -534,14 +565,14 @@ public partial class LoginForm : Form
         }
         g.DrawString(brand, fontBrand, Brushes.White, brandX, brandY);
 
-        using var fontTagline = new Font("Segoe UI", 10.5F, FontStyle.Bold);
+        using var fontTagline = new Font("Segoe UI", 10F, FontStyle.Bold);
         using var brushTagline = new SolidBrush(Color.FromArgb(245, 250, 255));
         string tagline = "FRESH & COZY CINEMA EXPERIENCE";
         var sizeTag = g.MeasureString(tagline, fontTagline);
-        g.DrawString(tagline, fontTagline, brushTagline, (pnlLeft.Width - sizeTag.Width) / 2, 335);
+        g.DrawString(tagline, fontTagline, brushTagline, (pnlLeft.Width - sizeTag.Width) / 2, boxY + 188);
 
         using var pPen = new Pen(Color.FromArgb(200, 255, 255, 255), 2F);
-        g.DrawLine(pPen, 80, 375, 350, 375);
+        g.DrawLine(pPen, 75, boxY + 225, pnlLeft.Width - 75, boxY + 225);
     }
 
     private void RenderRightPanelBorder(object? sender, PaintEventArgs e)
@@ -562,7 +593,7 @@ public partial class LoginForm : Form
         using var path = GetRoundedPath(rect, 14);
         btnAction.Region = new Region(path);
 
-        using var brush = new LinearGradientBrush(rect, 
+        using var brush = new LinearGradientBrush(rect,
             btnAction.BackColor, _colDeepOcean, 45F);
         g.FillPath(brush, path);
 
@@ -621,6 +652,7 @@ public partial class LoginForm : Form
 
         attachEvents(pnlLeft);
         attachEvents(pnlRight);
+        attachEvents(flpContent);
         attachEvents(lblTitle);
         attachEvents(lblSubtitle);
     }
@@ -671,7 +703,7 @@ public partial class LoginForm : Form
 
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            MessageBox.Show("Bạn ơi, hãy nhập đầy đủ Tên đăng nhập và Mật khẩu nhé! ✨", 
+            MessageBox.Show("Bạn ơi, hãy nhập đầy đủ Tên đăng nhập và Mật khẩu nhé! ✨",
                 "Nhắc nhở nhẹ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -679,7 +711,7 @@ public partial class LoginForm : Form
         var user = _authService.Login(username, password);
         if (user == null)
         {
-            MessageBox.Show("Tên đăng nhập hoặc mật khẩu chưa đúng rồi, bạn thử lại nhé! ❌", 
+            MessageBox.Show("Tên đăng nhập hoặc mật khẩu chưa đúng rồi, bạn thử lại nhé! ❌",
                 "Lỗi đăng nhập", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
@@ -687,7 +719,7 @@ public partial class LoginForm : Form
         UserSession.Login(user);
         OnLoginSuccess?.Invoke(this, user);
 
-        MessageBox.Show($"Chào mừng trở lại rạp Cineworld!\nChúc {user.FullName} có trải nghiệm xem phim thật tuyệt vời! 🍿🎉", 
+        MessageBox.Show($"Chào mừng trở lại rạp Cineworld!\nChúc {user.FullName} có trải nghiệm xem phim thật tuyệt vời! 🍿🎉",
             "Đăng nhập thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         this.Hide();
@@ -705,7 +737,7 @@ public partial class LoginForm : Form
 
         if (string.IsNullOrEmpty(fullName) || string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            MessageBox.Show("Vui lòng điền đầy đủ Họ tên, Tên đăng nhập và Mật khẩu nhé! ✨", 
+            MessageBox.Show("Vui lòng điền đầy đủ Họ tên, Tên đăng nhập và Mật khẩu nhé! ✨",
                 "Nhắc nhở nhẹ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -745,7 +777,7 @@ public partial class LoginForm : Form
 
         if (string.IsNullOrEmpty(email))
         {
-            MessageBox.Show("Bạn vui lòng điền địa chỉ Email để nhận mã OTP nhé! ✉", 
+            MessageBox.Show("Bạn vui lòng điền địa chỉ Email để nhận mã OTP nhé! ✉",
                 "Nhập Email", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             txtEmail.Focus();
             return;
@@ -754,7 +786,7 @@ public partial class LoginForm : Form
         string emailPattern = @"^[^@\s]+@[^@\s]+\.[^@\s]+$";
         if (!Regex.IsMatch(email, emailPattern))
         {
-            MessageBox.Show("Email có vẻ chưa đúng định dạng rồi, bạn kiểm tra lại nhé (vd: tenban@gmail.com)!", 
+            MessageBox.Show("Email có vẻ chưa đúng định dạng rồi, bạn kiểm tra lại nhé (vd: tenban@gmail.com)!",
                 "Lỗi định dạng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             txtEmail.Focus();
             return;
@@ -780,7 +812,7 @@ public partial class LoginForm : Form
 
         if (string.IsNullOrEmpty(enteredOtp))
         {
-            MessageBox.Show("Vui lòng nhập mã OTP gồm 6 chữ số đã được gửi tới email của bạn! 🔑", 
+            MessageBox.Show("Vui lòng nhập mã OTP gồm 6 chữ số đã được gửi tới email của bạn! 🔑",
                 "Thiếu OTP", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             txtOtp.Focus();
             return;
@@ -788,7 +820,7 @@ public partial class LoginForm : Form
 
         if (enteredOtp != _generatedOtp)
         {
-            MessageBox.Show("Mã OTP không chính xác hoặc đã hết hạn! Vui lòng kiểm tra lại. ❌", 
+            MessageBox.Show("Mã OTP không chính xác hoặc đã hết hạn! Vui lòng kiểm tra lại. ❌",
                 "OTP sai", MessageBoxButtons.OK, MessageBoxIcon.Error);
             txtOtp.Focus();
             return;
@@ -796,14 +828,14 @@ public partial class LoginForm : Form
 
         if (string.IsNullOrEmpty(newPass) || string.IsNullOrEmpty(confirmPass))
         {
-            MessageBox.Show("Vui lòng nhập mật khẩu mới và xác nhận lại mật khẩu! 🔒", 
+            MessageBox.Show("Vui lòng nhập mật khẩu mới và xác nhận lại mật khẩu! 🔒",
                 "Thiếu thông tin", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         if (newPass.Length < 6)
         {
-            MessageBox.Show("Mật khẩu mới phải có ít nhất 6 ký tự để đảm bảo an toàn! 🛡", 
+            MessageBox.Show("Mật khẩu mới phải có ít nhất 6 ký tự để đảm bảo an toàn! 🛡",
                 "Mật khẩu quá ngắn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             txtNewPassword.Focus();
             return;
@@ -811,13 +843,13 @@ public partial class LoginForm : Form
 
         if (newPass != confirmPass)
         {
-            MessageBox.Show("Mật khẩu mới và mật khẩu xác nhận không trùng khớp nhau! ⚠", 
+            MessageBox.Show("Mật khẩu mới và mật khẩu xác nhận không trùng khớp nhau! ⚠",
                 "Không trùng khớp", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             txtConfirmPassword.Focus();
             return;
         }
 
-        MessageBox.Show("🎉 Chúc mừng! Mật khẩu của bạn đã được thay đổi thành công.\nHãy đăng nhập bằng mật khẩu mới nhé! 🍿", 
+        MessageBox.Show("🎉 Chúc mừng! Mật khẩu của bạn đã được thay đổi thành công.\nHãy đăng nhập bằng mật khẩu mới nhé! 🍿",
             "Đổi mật khẩu thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         SwitchViewMode(FormMode.Login);
