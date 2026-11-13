@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using CinemaManagement.Repositories;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 
@@ -11,17 +12,17 @@ namespace CinemaManagement.UserControls.Admin;
 
 public partial class RoomManagementUC : UserControl
 {
-    // 1. KHAI BÁO DỮ LIỆU VÀ GIAO DIỆN
+    // REPOSITORY VÀ DỮ LIỆU
+    private readonly RoomRepository _roomRepository = new();
 
     private List<Room> rooms = new();
     private List<Seat> seats = new();
 
     private long? selectedRoomId;
     private int? selectedSeatId;
-
-    private int nextSeatId = 1;
     private bool refreshingGrid = false;
 
+    // CÁC CONTROL
     private DataGridView dgvRooms = null!;
     private TextBox txtSearch = null!;
     private ComboBox cboCapacity = null!;
@@ -38,6 +39,7 @@ public partial class RoomManagementUC : UserControl
     private Button btnDelete = null!;
     private Button btnApplySeatType = null!;
 
+    // MÀU GIAO DIỆN
     private readonly Color backgroundColor =
         Color.FromArgb(15, 23, 42);
 
@@ -49,9 +51,8 @@ public partial class RoomManagementUC : UserControl
 
     private readonly Color textColor =
         Color.FromArgb(226, 232, 240);
-    
-    // 2. CONSTRUCTOR
 
+    // CONSTRUCTOR
     public RoomManagementUC()
     {
         InitializeComponent();
@@ -61,16 +62,33 @@ public partial class RoomManagementUC : UserControl
 
         BuildInterface();
 
-        LoadSampleData();
-
-        RefreshRoomTable();
+        LoadRoomData();
     }
-    
-    // 3. XÂY DỰNG GIAO DIỆN
 
+    // 1. TẢI DỮ LIỆU TỪ SQLITE
+    private void LoadRoomData(long? preferredRoomId = null)
+    {
+        try
+        {
+            rooms = _roomRepository.GetAll();
+
+            RefreshRoomTable(preferredRoomId);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể tải dữ liệu phòng chiếu:\n" + ex.Message,
+                "Lỗi tải dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
+    }
+
+    // 2. XÂY DỰNG GIAO DIỆN
     private void BuildInterface()
     {
-        TableLayoutPanel mainLayout = new TableLayoutPanel
+        TableLayoutPanel mainLayout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -79,30 +97,29 @@ public partial class RoomManagementUC : UserControl
             Padding = new Padding(0)
         };
 
-        // Hàng 1: Tiêu đề
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 90));
 
-        // Hàng 2: Hai thẻ thống kê
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 85));
 
-        // Hàng 3: Tìm kiếm và lọc
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 65));
 
-        // Hàng 4: Các nút chức năng
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 55));
 
-        // Hàng 5: Danh sách phòng và sơ đồ ghế
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Percent, 100));
+
         // HEADER
-
-        Panel headerPanel = new Panel
+        Panel headerPanel = new()
         {
             Dock = DockStyle.Fill,
             BackColor = backgroundColor
         };
 
-        Label lblTitle = new Label
+        Label lblTitle = new()
         {
             Text = "QUẢN LÝ PHÒNG CHIẾU",
             Font = new Font("Segoe UI", 21, FontStyle.Bold),
@@ -111,7 +128,7 @@ public partial class RoomManagementUC : UserControl
             Location = new Point(5, 10)
         };
 
-        Label lblDescription = new Label
+        Label lblDescription = new()
         {
             Text = "Quản lý danh sách phòng và sơ đồ ghế ngồi",
             Font = new Font("Segoe UI", 9),
@@ -122,12 +139,9 @@ public partial class RoomManagementUC : UserControl
 
         headerPanel.Controls.Add(lblTitle);
         headerPanel.Controls.Add(lblDescription);
-        
-        
-        // THỐNG KÊ PHÒNG VÀ GHẾ
-     
 
-        TableLayoutPanel statisticPanel = new TableLayoutPanel
+        // THỐNG KÊ
+        TableLayoutPanel statisticPanel = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
@@ -137,7 +151,6 @@ public partial class RoomManagementUC : UserControl
             Margin = new Padding(0)
         };
 
-        // Chia đều thành 2 cột
         statisticPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 50));
 
@@ -147,32 +160,26 @@ public partial class RoomManagementUC : UserControl
         statisticPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        // Thẻ tổng số phòng
         Panel cardRoom = CreateStatisticCard(
             "TỔNG SỐ PHÒNG",
             Color.FromArgb(37, 99, 235),
             out lblTotalRooms
         );
 
-        // Thẻ tổng số ghế
         Panel cardSeat = CreateStatisticCard(
             "TỔNG SỐ GHẾ",
             Color.FromArgb(16, 185, 129),
             out lblTotalSeats
         );
 
-        // Khoảng cách giữa hai thẻ
         cardRoom.Margin = new Padding(0, 0, 8, 0);
         cardSeat.Margin = new Padding(8, 0, 0, 0);
 
-        // Đưa hai thẻ vào bảng
         statisticPanel.Controls.Add(cardRoom, 0, 0);
         statisticPanel.Controls.Add(cardSeat, 1, 0);
 
-        
         // TÌM KIẾM VÀ LỌC
-
-        FlowLayoutPanel filterPanel = new FlowLayoutPanel
+        FlowLayoutPanel filterPanel = new()
         {
             Dock = DockStyle.Fill,
             BackColor = panelColor,
@@ -180,7 +187,7 @@ public partial class RoomManagementUC : UserControl
             WrapContents = false
         };
 
-        Label lblSearch = new Label
+        Label lblSearch = new()
         {
             Text = "Tìm phòng:",
             AutoSize = true,
@@ -195,7 +202,7 @@ public partial class RoomManagementUC : UserControl
             Margin = new Padding(0, 3, 20, 0)
         };
 
-        Label lblCapacity = new Label
+        Label lblCapacity = new()
         {
             Text = "Sức chứa:",
             AutoSize = true,
@@ -226,9 +233,8 @@ public partial class RoomManagementUC : UserControl
         filterPanel.Controls.Add(lblCapacity);
         filterPanel.Controls.Add(cboCapacity);
 
-        // CÁC NÚT CHỨC NĂNG PHÒNG
-
-        FlowLayoutPanel actionPanel = new FlowLayoutPanel
+        // CÁC NÚT CHỨC NĂNG
+        FlowLayoutPanel actionPanel = new()
         {
             Dock = DockStyle.Fill,
             BackColor = backgroundColor,
@@ -254,10 +260,9 @@ public partial class RoomManagementUC : UserControl
         actionPanel.Controls.Add(btnAdd);
         actionPanel.Controls.Add(btnEdit);
         actionPanel.Controls.Add(btnDelete);
-        
-        // KHU VỰC DANH SÁCH VÀ SƠ ĐỒ GHẾ
 
-        SplitContainer splitContainer = new SplitContainer
+        // DANH SÁCH PHÒNG VÀ SƠ ĐỒ GHẾ
+        SplitContainer splitContainer = new()
         {
             Size = new Size(1200, 500),
             Dock = DockStyle.Fill,
@@ -269,10 +274,7 @@ public partial class RoomManagementUC : UserControl
         };
 
         BuildRoomList(splitContainer.Panel1);
-
         BuildSeatMap(splitContainer.Panel2);
-        
-        // GHÉP GIAO DIỆN
 
         mainLayout.Controls.Add(headerPanel, 0, 0);
         mainLayout.Controls.Add(statisticPanel, 0, 1);
@@ -281,9 +283,8 @@ public partial class RoomManagementUC : UserControl
         mainLayout.Controls.Add(splitContainer, 0, 4);
 
         Controls.Add(mainLayout);
-        
-        // SỰ KIỆN
 
+        // SỰ KIỆN
         txtSearch.TextChanged += (s, e) =>
         {
             RefreshRoomTable();
@@ -300,15 +301,14 @@ public partial class RoomManagementUC : UserControl
 
         btnApplySeatType.Click += BtnApplySeatType_Click;
     }
-    
-    // 4. XÂY DỰNG BẢNG DANH SÁCH PHÒNG
 
+    // 3. XÂY DỰNG BẢNG DANH SÁCH PHÒNG
     private void BuildRoomList(Panel parent)
     {
         parent.BackColor = panelColor;
         parent.Padding = new Padding(10);
 
-        Label lblHeader = new Label
+        Label lblHeader = new()
         {
             Text = "DANH SÁCH PHÒNG CHIẾU",
             Font = new Font("Segoe UI", 12, FontStyle.Bold),
@@ -373,18 +373,16 @@ public partial class RoomManagementUC : UserControl
         parent.Controls.Add(dgvRooms);
         parent.Controls.Add(lblHeader);
 
-        dgvRooms.SelectionChanged +=
-            DgvRooms_SelectionChanged;
+        dgvRooms.SelectionChanged += DgvRooms_SelectionChanged;
     }
-    
-    // 5. XÂY DỰNG KHU VỰC SƠ ĐỒ GHẾ
 
+    // 4. XÂY DỰNG SƠ ĐỒ GHẾ
     private void BuildSeatMap(Panel parent)
     {
         parent.BackColor = panelColor;
         parent.Padding = new Padding(10);
 
-        TableLayoutPanel layout = new TableLayoutPanel
+        TableLayoutPanel layout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -410,8 +408,7 @@ public partial class RoomManagementUC : UserControl
         layout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 40));
 
-        // Tiêu đề
-        Label lblTitle = new Label
+        Label lblTitle = new()
         {
             Text = "SƠ ĐỒ GHẾ NGỒI",
             Font = new Font("Segoe UI", 12, FontStyle.Bold),
@@ -420,8 +417,8 @@ public partial class RoomManagementUC : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        // Chú thích màu ghế
-        FlowLayoutPanel legendPanel = new FlowLayoutPanel
+        // CHÚ THÍCH MÀU GHẾ
+        FlowLayoutPanel legendPanel = new()
         {
             Dock = DockStyle.Fill,
             BackColor = panelColor,
@@ -449,8 +446,8 @@ public partial class RoomManagementUC : UserControl
             )
         );
 
-        // Chọn loại ghế cần áp dụng
-        FlowLayoutPanel seatToolPanel = new FlowLayoutPanel
+        // CHỌN LOẠI GHẾ
+        FlowLayoutPanel seatToolPanel = new()
         {
             Dock = DockStyle.Fill,
             BackColor = panelColor,
@@ -458,7 +455,7 @@ public partial class RoomManagementUC : UserControl
             Padding = new Padding(0, 5, 0, 0)
         };
 
-        Label lblType = new Label
+        Label lblType = new()
         {
             Text = "Loại ghế:",
             AutoSize = true,
@@ -492,7 +489,7 @@ public partial class RoomManagementUC : UserControl
         seatToolPanel.Controls.Add(cboSeatType);
         seatToolPanel.Controls.Add(btnApplySeatType);
 
-        // Khu vực hiển thị sơ đồ
+        // KHU VỰC HIỂN THỊ GHẾ
         seatMapHost = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -503,7 +500,6 @@ public partial class RoomManagementUC : UserControl
             Padding = new Padding(10)
         };
 
-        // Thông tin ghế đang chọn
         lblSeatInfo = new Label
         {
             Text = "Chưa chọn ghế nào.",
@@ -521,24 +517,21 @@ public partial class RoomManagementUC : UserControl
 
         parent.Controls.Add(layout);
     }
-    
-    // 6. TẠO THẺ THỐNG KÊ
 
-    
+    // 5. TẠO THẺ THỐNG KÊ
     private Panel CreateStatisticCard(
         string title,
         Color cardAccentColor,
         out Label valueLabel)
     {
-        Panel card = new Panel
+        Panel card = new()
         {
             Dock = DockStyle.Fill,
             BackColor = panelColor,
             Margin = new Padding(0)
         };
 
-        // Thanh màu bên trái
-        Panel accentBar = new Panel
+        Panel accentBar = new()
         {
             Location = new Point(0, 0),
             Size = new Size(5, 75),
@@ -548,8 +541,7 @@ public partial class RoomManagementUC : UserControl
                      AnchorStyles.Left
         };
 
-        // Tiêu đề thống kê
-        Label lblTitle = new Label
+        Label lblTitle = new()
         {
             Text = title,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
@@ -558,7 +550,6 @@ public partial class RoomManagementUC : UserControl
             Location = new Point(20, 9)
         };
 
-        // Số liệu thống kê
         valueLabel = new Label
         {
             Text = "0",
@@ -575,12 +566,10 @@ public partial class RoomManagementUC : UserControl
         return card;
     }
 
-    
-    // 7. TẠO CHÚ THÍCH LOẠI GHẾ
-
+    // 6. TẠO CHÚ THÍCH LOẠI GHẾ
     private Panel CreateLegendItem(string text, Color color)
     {
-        Panel item = new Panel
+        Panel item = new()
         {
             Width = 115,
             Height = 30,
@@ -588,14 +577,14 @@ public partial class RoomManagementUC : UserControl
             Margin = new Padding(0, 3, 5, 0)
         };
 
-        Panel colorBox = new Panel
+        Panel colorBox = new()
         {
             Size = new Size(15, 15),
             Location = new Point(2, 6),
             BackColor = color
         };
 
-        Label label = new Label
+        Label label = new()
         {
             Text = text,
             AutoSize = true,
@@ -610,13 +599,10 @@ public partial class RoomManagementUC : UserControl
         return item;
     }
 
-
-    // 8. TẠO BUTTON
-
-
+    // 7. TẠO BUTTON
     private Button CreateButton(string text, Color color)
     {
-        Button button = new Button
+        Button button = new()
         {
             Text = text,
             Size = new Size(135, 38),
@@ -633,124 +619,23 @@ public partial class RoomManagementUC : UserControl
         return button;
     }
 
-    // 9. TẠO DỮ LIỆU MẪU
-
-
-    private void LoadSampleData()
-    {
-        rooms = new List<Room>
-        {
-            new Room
-            {
-                Id = 1,
-                Name = "Phòng 01",
-                TotalRows = 6,
-                TotalColumns = 8,
-                TotalSeats = 48
-            },
-
-            new Room
-            {
-                Id = 2,
-                Name = "Phòng 02",
-                TotalRows = 6,
-                TotalColumns = 10,
-                TotalSeats = 60
-            },
-
-            new Room
-            {
-                Id = 3,
-                Name = "Phòng 03",
-                TotalRows = 8,
-                TotalColumns = 10,
-                TotalSeats = 80
-            },
-
-            new Room
-            {
-                Id = 4,
-                Name = "Phòng IMAX",
-                TotalRows = 10,
-                TotalColumns = 12,
-                TotalSeats = 120
-            }
-        };
-
-        seats.Clear();
-        nextSeatId = 1;
-
-        foreach (Room room in rooms)
-        {
-            CreateSeatsForRoom(room, true);
-        }
-    }
-
-    
-    // 10. TẠO GHẾ CHO TỪNG PHÒNG
-    
-    private void CreateSeatsForRoom(
-        Room room,
-        bool useSampleTypes = false)
-    {
-        int roomId = checked((int)room.Id);
-
-        for (int row = 0; row < room.TotalRows; row++)
-        {
-            for (int col = 0; col < room.TotalColumns; col++)
-            {
-                SeatType type = SeatType.Standard;
-
-                // Tạo một số ghế VIP để minh họa
-                if (useSampleTypes &&
-                    row == 1 &&
-                    col >= 2 &&
-                    col <= Math.Min(4, room.TotalColumns - 1))
-                {
-                    type = SeatType.VIP;
-                }
-
-                // Tạo một số ghế đôi để minh họa
-                else if (useSampleTypes &&
-                         row == room.TotalRows - 1 &&
-                         col < 2)
-                {
-                    type = SeatType.Couple;
-                }
-
-                seats.Add(new Seat
-                {
-                    Id = nextSeatId++,
-                    RoomId = roomId,
-                    SeatNumber =
-                        $"{(char)('A' + row)}{col + 1}",
-
-                    RowIndex = row,
-                    ColumnIndex = col,
-
-                    Type = type,
-
-                    PriceMultiplier = GetMultiplier(type)
-                });
-            }
-        }
-    }
-    
-    // 11. CẬP NHẬT BẢNG DANH SÁCH PHÒNG
-
+    // 8. CẬP NHẬT DANH SÁCH PHÒNG
     private void RefreshRoomTable(long? preferredRoomId = null)
     {
-        string keyword = txtSearch.Text.Trim()
-            .ToLowerInvariant();
+        if (dgvRooms == null)
+            return;
 
-        string capacity = cboCapacity.SelectedItem?.ToString()
-                          ?? "Tất cả";
+        string keyword = txtSearch.Text.Trim();
 
-        var result = rooms.Where(room =>
+        string capacity =
+            cboCapacity.SelectedItem?.ToString() ?? "Tất cả";
+
+        List<Room> result = rooms.Where(room =>
         {
-            bool matchName = room.Name
-                .ToLowerInvariant()
-                .Contains(keyword);
+            bool matchName = room.Name.Contains(
+                keyword,
+                StringComparison.OrdinalIgnoreCase
+            );
 
             bool matchCapacity = capacity switch
             {
@@ -800,9 +685,7 @@ public partial class RoomManagementUC : UserControl
             }
 
             if (selectedIndex < 0 && result.Count > 0)
-            {
                 selectedIndex = 0;
-            }
 
             if (selectedIndex >= 0)
             {
@@ -819,7 +702,6 @@ public partial class RoomManagementUC : UserControl
 
         UpdateStatistics();
 
-        // Cập nhật sơ đồ ghế
         if (dgvRooms.SelectedRows.Count > 0)
         {
             DisplaySelectedRoom();
@@ -828,14 +710,13 @@ public partial class RoomManagementUC : UserControl
         {
             selectedRoomId = null;
             selectedSeatId = null;
+            seats.Clear();
+
             RenderSeatMap(null);
         }
     }
 
-    // =========================================
-    // 12. CẬP NHẬT THỐNG KÊ
-    // =========================================
-
+    // 9. CẬP NHẬT THỐNG KÊ
     private void UpdateStatistics()
     {
         lblTotalRooms.Text = rooms.Count.ToString();
@@ -845,10 +726,7 @@ public partial class RoomManagementUC : UserControl
         ).ToString();
     }
 
-    // =========================================
-    // 13. SỰ KIỆN CHỌN PHÒNG
-    // =========================================
-
+    // 10. SỰ KIỆN CHỌN PHÒNG
     private void DgvRooms_SelectionChanged(
         object? sender,
         EventArgs e)
@@ -878,11 +756,27 @@ public partial class RoomManagementUC : UserControl
         selectedRoomId = room.Id;
         selectedSeatId = null;
 
-        RenderSeatMap(room);
-    }
-    
-    // 14. HIỂN THỊ SƠ ĐỒ GHẾ
+        try
+        {
+            seats = _roomRepository.GetSeatsByRoomId(roomId);
 
+            RenderSeatMap(room);
+        }
+        catch (Exception ex)
+        {
+            seats.Clear();
+            RenderSeatMap(null);
+
+            MessageBox.Show(
+                "Không thể tải sơ đồ ghế:\n" + ex.Message,
+                "Lỗi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
+    }
+
+    // 11. HIỂN THỊ SƠ ĐỒ GHẾ
     private void RenderSeatMap(Room? room)
     {
         seatMapHost.Controls.Clear();
@@ -891,7 +785,7 @@ public partial class RoomManagementUC : UserControl
 
         if (room == null)
         {
-            Label empty = new Label
+            Label empty = new()
             {
                 Text = "Không có phòng chiếu để hiển thị.",
                 ForeColor = Color.White,
@@ -904,8 +798,7 @@ public partial class RoomManagementUC : UserControl
             return;
         }
 
-        // Tạo bảng sơ đồ ghế
-        TableLayoutPanel grid = new TableLayoutPanel
+        TableLayoutPanel grid = new()
         {
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -915,7 +808,6 @@ public partial class RoomManagementUC : UserControl
             Padding = new Padding(5)
         };
 
-        // Cột đầu dùng để hiển thị tên hàng
         grid.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 35)
         );
@@ -938,8 +830,8 @@ public partial class RoomManagementUC : UserControl
             );
         }
 
-        // Màn hình chiếu
-        Label lblScreen = new Label
+        // MÀN HÌNH
+        Label lblScreen = new()
         {
             Text = "M À N  H Ì N H",
             BackColor = Color.FromArgb(51, 65, 85),
@@ -957,18 +849,12 @@ public partial class RoomManagementUC : UserControl
             room.TotalColumns
         );
 
-        int roomId = checked((int)room.Id);
-
-        List<Seat> roomSeats = seats
-            .Where(s => s.RoomId == roomId)
-            .ToList();
-
-        // Hiển thị từng hàng ghế
+        // HIỂN THỊ TỪNG HÀNG GHẾ
         for (int row = 0; row < room.TotalRows; row++)
         {
             string rowName = ((char)('A' + row)).ToString();
 
-            Label lblRow = new Label
+            Label lblRow = new()
             {
                 Text = rowName,
                 ForeColor = Color.White,
@@ -979,10 +865,9 @@ public partial class RoomManagementUC : UserControl
 
             grid.Controls.Add(lblRow, 0, row + 1);
 
-            // Hiển thị từng ghế trong hàng
             for (int col = 0; col < room.TotalColumns; col++)
             {
-                Seat? seat = roomSeats.FirstOrDefault(
+                Seat? seat = seats.FirstOrDefault(
                     s => s.RowIndex == row &&
                          s.ColumnIndex == col
                 );
@@ -992,7 +877,7 @@ public partial class RoomManagementUC : UserControl
 
                 Seat currentSeat = seat;
 
-                Button seatButton = new Button
+                Button seatButton = new()
                 {
                     Text = seat.SeatNumber,
                     Size = new Size(44, 34),
@@ -1015,18 +900,16 @@ public partial class RoomManagementUC : UserControl
 
                 seatButton.Click += (s, e) =>
                 {
-                    // Ghi nhận ghế được chọn
                     selectedSeatId = currentSeat.Id;
 
-                    // Vẽ lại sơ đồ ghế
                     RenderSeatMap(room);
 
-                    // Hiển thị thông tin ghế
                     lblSeatInfo.Text =
                         $"Ghế: {currentSeat.SeatNumber}  |  " +
                         $"Loại: {GetSeatTypeText(currentSeat.Type)}  |  " +
                         $"Hệ số giá: {currentSeat.PriceMultiplier}";
                 };
+
                 grid.Controls.Add(
                     seatButton,
                     col + 1,
@@ -1038,10 +921,7 @@ public partial class RoomManagementUC : UserControl
         seatMapHost.Controls.Add(grid);
     }
 
-    // =========================================
-    // 15. LẤY MÀU THEO LOẠI GHẾ
-    // =========================================
-
+    // 12. LẤY MÀU THEO LOẠI GHẾ
     private Color GetSeatColor(SeatType type)
     {
         return type switch
@@ -1059,10 +939,7 @@ public partial class RoomManagementUC : UserControl
         };
     }
 
-
-    // 16. LẤY TÊN LOẠI GHẾ
-
-
+    // 13. LẤY TÊN LOẠI GHẾ
     private string GetSeatTypeText(SeatType type)
     {
         return type switch
@@ -1074,10 +951,7 @@ public partial class RoomManagementUC : UserControl
         };
     }
 
-  
-    // 17. LẤY HỆ SỐ GIÁ GHẾ
-  
-
+    // 14. LẤY HỆ SỐ GIÁ GHẾ
     private decimal GetMultiplier(SeatType type)
     {
         return type switch
@@ -1089,15 +963,44 @@ public partial class RoomManagementUC : UserControl
         };
     }
 
+    // 15. TẠO GHẾ CHO PHÒNG
+    private List<Seat> CreateSeatsForRoom(Room room)
+    {
+        List<Seat> newSeats = new();
 
-    // 18. ÁP DỤNG LOẠI GHẾ
+        for (int row = 0; row < room.TotalRows; row++)
+        {
+            for (int col = 0; col < room.TotalColumns; col++)
+            {
+                SeatType type = SeatType.Standard;
 
+                newSeats.Add(new Seat
+                {
+                    RoomId = checked((int)room.Id),
 
+                    SeatNumber =
+                        $"{(char)('A' + row)}{col + 1}",
+
+                    RowIndex = row,
+                    ColumnIndex = col,
+
+                    Type = type,
+
+                    PriceMultiplier = GetMultiplier(type)
+                });
+            }
+        }
+
+        return newSeats;
+    }
+
+    // 16. ÁP DỤNG LOẠI GHẾ VÀ LƯU SQLITE
     private void BtnApplySeatType_Click(
         object? sender,
         EventArgs e)
     {
-        if (!selectedSeatId.HasValue)
+        if (!selectedSeatId.HasValue ||
+            !selectedRoomId.HasValue)
         {
             MessageBox.Show(
                 "Vui lòng chọn một ghế trước!",
@@ -1124,25 +1027,56 @@ public partial class RoomManagementUC : UserControl
             _ => SeatType.Standard
         };
 
+        SeatType oldType = selectedSeat.Type;
+        decimal oldMultiplier = selectedSeat.PriceMultiplier;
+
         selectedSeat.Type = newType;
         selectedSeat.PriceMultiplier = GetMultiplier(newType);
 
-        Room? room = rooms.FirstOrDefault(
-            r => r.Id == selectedRoomId
-        );
+        try
+        {
+            if (!_roomRepository.UpdateSeat(selectedSeat))
+            {
+                throw new InvalidOperationException(
+                    "Không tìm thấy ghế cần cập nhật trong database."
+                );
+            }
 
-        MessageBox.Show(
-            $"Đã đổi ghế {selectedSeat.SeatNumber} " +
-            $"sang {GetSeatTypeText(newType)}!"
-        );
+            Room? room = rooms.FirstOrDefault(
+                r => r.Id == selectedRoomId.Value
+            );
 
-        RenderSeatMap(room);
+            RenderSeatMap(room);
+
+            lblSeatInfo.Text =
+                $"Ghế: {selectedSeat.SeatNumber}  |  " +
+                $"Loại: {GetSeatTypeText(newType)}  |  " +
+                $"Hệ số giá: {selectedSeat.PriceMultiplier}";
+
+            MessageBox.Show(
+                "Đã cập nhật loại ghế và lưu vào SQLite!",
+                "Thành công",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            selectedSeat.Type = oldType;
+            selectedSeat.PriceMultiplier = oldMultiplier;
+
+            MessageBox.Show(
+                "Không thể cập nhật loại ghế:\n" + ex.Message,
+                "Lỗi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+
+            LoadRoomData(selectedRoomId);
+        }
     }
 
-
-    // 19. NÚT THÊM PHÒNG
-
-
+    // 17. THÊM PHÒNG
     private void BtnAdd_Click(object? sender, EventArgs e)
     {
         using RoomEditorDialog dialog = new RoomEditorDialog();
@@ -1150,49 +1084,65 @@ public partial class RoomManagementUC : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
-        // Kiểm tra tên phòng trùng
-        bool exists = rooms.Any(
-            r => r.Name.Equals(
-                dialog.RoomName,
-                StringComparison.OrdinalIgnoreCase
-            )
-        );
-
-        if (exists)
+        try
         {
-            MessageBox.Show("Tên phòng đã tồn tại!");
-            return;
+            if (_roomRepository.ExistsByName(dialog.RoomName))
+            {
+                MessageBox.Show(
+                    "Tên phòng đã tồn tại!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            Room newRoom = new()
+            {
+                Name = dialog.RoomName,
+                TotalRows = dialog.Rows,
+                TotalColumns = dialog.Columns,
+                TotalSeats = dialog.Rows * dialog.Columns
+            };
+
+            List<Seat> newSeats = CreateSeatsForRoom(newRoom);
+
+            // Thêm phòng và ghế bằng một transaction
+            long newRoomId = _roomRepository.Add(
+                newRoom,
+                newSeats
+            );
+
+            MessageBox.Show(
+                "Thêm phòng và sơ đồ ghế thành công!",
+                "Thành công",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+
+            LoadRoomData(newRoomId);
         }
-
-        long newId = rooms.Count == 0
-            ? 1
-            : rooms.Max(r => r.Id) + 1;
-
-        Room newRoom = new Room
+        catch (Exception ex)
         {
-            Id = newId,
-            Name = dialog.RoomName,
-            TotalRows = dialog.Rows,
-            TotalColumns = dialog.Columns,
-            TotalSeats = dialog.Rows * dialog.Columns
-        };
-
-        rooms.Add(newRoom);
-
-        CreateSeatsForRoom(newRoom);
-
-        RefreshRoomTable(newRoom.Id);
-
-        MessageBox.Show("Thêm phòng thành công!");
+            MessageBox.Show(
+                "Không thể thêm phòng:\n" + ex.Message,
+                "Lỗi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 
-    // 20. NÚT SỬA PHÒNG
-
+    // 18. SỬA PHÒNG
     private void BtnEdit_Click(object? sender, EventArgs e)
     {
         if (!selectedRoomId.HasValue)
         {
-            MessageBox.Show("Vui lòng chọn phòng cần sửa!");
+            MessageBox.Show(
+                "Vui lòng chọn phòng cần sửa!"
+            );
+
             return;
         }
 
@@ -1209,56 +1159,81 @@ public partial class RoomManagementUC : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
-        // Kiểm tra tên phòng trùng với phòng khác
-        bool duplicated = rooms.Any(r =>
-            r.Id != room.Id &&
-            r.Name.Equals(
+        try
+        {
+            if (_roomRepository.ExistsByName(
                 dialog.RoomName,
-                StringComparison.OrdinalIgnoreCase
-            )
-        );
+                room.Id))
+            {
+                MessageBox.Show(
+                    "Tên phòng đã được sử dụng!"
+                );
 
-        if (duplicated)
-        {
-            MessageBox.Show("Tên phòng đã được sử dụng!");
-            return;
+                return;
+            }
+
+            bool dimensionsChanged =
+                room.TotalRows != dialog.Rows ||
+                room.TotalColumns != dialog.Columns;
+
+            // Tạo đối tượng cập nhật riêng
+            Room updatedRoom = new()
+            {
+                Id = room.Id,
+                Name = dialog.RoomName,
+                TotalRows = dialog.Rows,
+                TotalColumns = dialog.Columns,
+                TotalSeats = dialog.Rows * dialog.Columns
+            };
+
+            List<Seat> updatedSeats = dimensionsChanged
+                ? CreateSeatsForRoom(updatedRoom)
+                : seats;
+
+            bool success = _roomRepository.Update(
+                updatedRoom,
+                updatedSeats,
+                dimensionsChanged
+            );
+
+            if (!success)
+            {
+                throw new InvalidOperationException(
+                    "Không tìm thấy phòng cần cập nhật."
+                );
+            }
+
+            MessageBox.Show(
+                "Cập nhật phòng thành công!",
+                "Thành công",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+
+            LoadRoomData(updatedRoom.Id);
         }
-
-        bool dimensionsChanged =
-            room.TotalRows != dialog.Rows ||
-            room.TotalColumns != dialog.Columns;
-
-        room.Name = dialog.RoomName;
-        room.TotalRows = dialog.Rows;
-        room.TotalColumns = dialog.Columns;
-        room.TotalSeats = dialog.Rows * dialog.Columns;
-
-        // Nếu thay đổi kích thước thì tạo lại sơ đồ ghế
-        if (dimensionsChanged)
+        catch (Exception ex)
         {
-            int roomId = checked((int)room.Id);
+            MessageBox.Show(
+                "Không thể cập nhật phòng:\n" + ex.Message,
+                "Lỗi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
 
-            seats.RemoveAll(s => s.RoomId == roomId);
-
-            selectedSeatId = null;
-
-            CreateSeatsForRoom(room);
+            LoadRoomData(room.Id);
         }
-
-        RefreshRoomTable(room.Id);
-
-        MessageBox.Show("Cập nhật phòng thành công!");
     }
 
-   
-    // 21. NÚT XÓA PHÒNG
- 
-
+    // 19. XÓA PHÒNG
     private void BtnDelete_Click(object? sender, EventArgs e)
     {
         if (!selectedRoomId.HasValue)
         {
-            MessageBox.Show("Vui lòng chọn phòng cần xóa!");
+            MessageBox.Show(
+                "Vui lòng chọn phòng cần xóa!"
+            );
+
             return;
         }
 
@@ -1279,25 +1254,46 @@ public partial class RoomManagementUC : UserControl
         if (confirm != DialogResult.Yes)
             return;
 
-        int roomId = checked((int)room.Id);
+        try
+        {
+            bool success = _roomRepository.Delete(room.Id);
 
-        rooms.Remove(room);
+            if (!success)
+            {
+                throw new InvalidOperationException(
+                    "Không tìm thấy phòng cần xóa."
+                );
+            }
 
-        seats.RemoveAll(s => s.RoomId == roomId);
+            selectedRoomId = null;
+            selectedSeatId = null;
 
-        selectedRoomId = null;
-        selectedSeatId = null;
+            MessageBox.Show(
+                "Xóa phòng thành công!",
+                "Thành công",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
 
-        RefreshRoomTable();
+            LoadRoomData();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể xóa phòng.\n" +
+                "Phòng có thể đang được sử dụng trong lịch chiếu.\n\n" +
+                ex.Message,
+                "Lỗi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
 
-        MessageBox.Show("Xóa phòng thành công!");
+            LoadRoomData(room.Id);
+        }
     }
 }
 
-
-// 22. FORM THÊM / SỬA PHÒNG CHIẾU
-
-
+// 20. FORM THÊM / SỬA PHÒNG CHIẾU
 internal sealed class RoomEditorDialog : Form
 {
     private TextBox txtName = null!;
@@ -1352,7 +1348,7 @@ internal sealed class RoomEditorDialog : Form
 
     private void BuildDialogInterface()
     {
-        Label lblTitle = new Label
+        Label lblTitle = new()
         {
             Text = "THÔNG TIN PHÒNG CHIẾU",
             Font = new Font("Segoe UI", 16, FontStyle.Bold),
@@ -1424,7 +1420,10 @@ internal sealed class RoomEditorDialog : Form
         {
             if (string.IsNullOrWhiteSpace(txtName.Text))
             {
-                MessageBox.Show("Vui lòng nhập tên phòng!");
+                MessageBox.Show(
+                    "Vui lòng nhập tên phòng!"
+                );
+
                 txtName.Focus();
                 return;
             }
@@ -1469,7 +1468,7 @@ internal sealed class RoomEditorDialog : Form
         string text,
         Color color)
     {
-        Button button = new Button
+        Button button = new()
         {
             Text = text,
             Size = new Size(85, 38),

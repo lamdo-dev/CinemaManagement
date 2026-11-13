@@ -9,8 +9,9 @@ static class Program
     [STAThread]
     static void Main()
     {
-        DatabaseInitializer.Initialize();
         ApplicationConfiguration.Initialize();
+
+        DatabaseInitializer.Initialize();
 
         // Khởi động vào Form Đăng nhập trước
         Application.Run(new LoginForm());

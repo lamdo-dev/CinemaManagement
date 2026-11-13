@@ -6,23 +6,29 @@ using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
+using CinemaManagement.Repositories;
 
 namespace CinemaManagement.UserControls.Admin;
 
 public partial class ShowtimeManagementUC : UserControl
 {
-    // 1. DỮ LIỆU VÀ CÁC THÀNH PHẦN GIAO DIỆN
+    // 1. REPOSITORY VÀ DỮ LIỆU
+
+    private readonly MovieRepository _movieRepository = new();
+    private readonly RoomRepository _roomRepository = new();
+    private readonly ShowtimeRepository _showtimeRepository = new();
 
     private readonly List<Movie> _movies = new();
     private readonly List<Room> _rooms = new();
     private readonly List<Showtime> _showtimes = new();
 
-    // Lưu định dạng 2D/3D tạm thời vì Model Showtime
-    // hiện tại chưa có thuộc tính Format.
+    // Bảng Showtimes hiện chưa có cột Format.
+    // Tạm thời lưu định dạng 2D/3D trong bộ nhớ.
     private readonly Dictionary<int, string> _formats = new();
 
-    private int _nextShowtimeId = 1;
     private int? _editingShowtimeId;
+
+    // 2. CÁC THÀNH PHẦN GIAO DIỆN
 
     private DataGridView _dgvShowtimes = null!;
 
@@ -60,9 +66,8 @@ public partial class ShowtimeManagementUC : UserControl
 
     private readonly Color _textColor =
         Color.FromArgb(226, 232, 240);
-    
-    // 2. CONSTRUCTOR
 
+    // 3. CONSTRUCTOR
 
     public ShowtimeManagementUC()
     {
@@ -73,7 +78,8 @@ public partial class ShowtimeManagementUC : UserControl
 
         BuildInterface();
 
-        LoadSampleData();
+        // Lấy dữ liệu thật từ SQLite.
+        LoadDatabaseData();
 
         LoadComboBoxes();
 
@@ -83,7 +89,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 3. XÂY DỰNG GIAO DIỆN
+    // 4. XÂY DỰNG GIAO DIỆN
     // =========================================
 
     private void BuildInterface()
@@ -122,6 +128,7 @@ public partial class ShowtimeManagementUC : UserControl
             new RowStyle(SizeType.Absolute, 32));
 
         // HEADER
+
         Panel headerPanel = new Panel
         {
             Dock = DockStyle.Fill,
@@ -186,7 +193,6 @@ public partial class ShowtimeManagementUC : UserControl
             out _lblRooms
         );
 
-        // Khoảng cách giữa các thẻ
         cardTotal.Margin = new Padding(0, 5, 10, 5);
         cardToday.Margin = new Padding(5, 5, 5, 5);
         cardRooms.Margin = new Padding(10, 5, 0, 5);
@@ -194,7 +200,6 @@ public partial class ShowtimeManagementUC : UserControl
         statisticsPanel.Controls.Add(cardTotal, 0, 0);
         statisticsPanel.Controls.Add(cardToday, 1, 0);
         statisticsPanel.Controls.Add(cardRooms, 2, 0);
-
 
         // TÌM KIẾM VÀ LỌC
 
@@ -233,7 +238,6 @@ public partial class ShowtimeManagementUC : UserControl
         filterPanel.Controls.Add(lblFilterDate);
         filterPanel.Controls.Add(_dtpFilterDate);
 
-        
         // FORM THÔNG TIN SUẤT CHIẾU
 
         Panel editorPanel = new Panel
@@ -243,7 +247,6 @@ public partial class ShowtimeManagementUC : UserControl
             Padding = new Padding(12)
         };
 
-        // Tiêu đề
         Label lblEditorTitle = new Label
         {
             Text = "THÔNG TIN SUẤT CHIẾU",
@@ -254,6 +257,7 @@ public partial class ShowtimeManagementUC : UserControl
         };
 
         // Bố cục nhập liệu: 4 cột x 2 hàng
+
         TableLayoutPanel fieldsPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -264,23 +268,22 @@ public partial class ShowtimeManagementUC : UserControl
             Margin = new Padding(0)
         };
 
-        // Chia đều 4 cột
         for (int i = 0; i < 4; i++)
         {
             fieldsPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 25));
         }
 
-        // Chia đều 2 hàng
         fieldsPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 50));
 
         fieldsPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 50));
-        
+
         // HÀNG 1
 
         // Phim
+
         _cboMovie = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -291,6 +294,7 @@ public partial class ShowtimeManagementUC : UserControl
             CreateEditorField("Phim:", _cboMovie, 230), 0, 0);
 
         // Phòng chiếu
+
         _cboRoom = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -301,6 +305,7 @@ public partial class ShowtimeManagementUC : UserControl
             CreateEditorField("Phòng chiếu:", _cboRoom, 180), 1, 0);
 
         // Ngày chiếu
+
         _dtpDate = new DateTimePicker
         {
             Format = DateTimePickerFormat.Custom,
@@ -313,6 +318,7 @@ public partial class ShowtimeManagementUC : UserControl
             CreateEditorField("Ngày chiếu:", _dtpDate, 150), 2, 0);
 
         // Giờ bắt đầu
+
         _dtpStartTime = new DateTimePicker
         {
             Format = DateTimePickerFormat.Custom,
@@ -324,10 +330,11 @@ public partial class ShowtimeManagementUC : UserControl
 
         fieldsPanel.Controls.Add(
             CreateEditorField("Giờ bắt đầu:", _dtpStartTime, 130), 3, 0);
-        
+
         // HÀNG 2
 
         // Định dạng
+
         _cboFormat = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -346,6 +353,7 @@ public partial class ShowtimeManagementUC : UserControl
             CreateEditorField("Định dạng:", _cboFormat, 130), 0, 1);
 
         // Giá vé
+
         _numPrice = new NumericUpDown
         {
             Minimum = 0,
@@ -360,6 +368,7 @@ public partial class ShowtimeManagementUC : UserControl
             CreateEditorField("Giá vé (VNĐ):", _numPrice, 150), 1, 1);
 
         // Giờ kết thúc dự kiến
+
         _lblEndPreview = new Label
         {
             Text = "--:--",
@@ -375,6 +384,7 @@ public partial class ShowtimeManagementUC : UserControl
                 180), 2, 1);
 
         // Trạng thái kiểm tra lịch
+
         Label lblScheduleInfo = new Label
         {
             Text = "Tự động kiểm tra trùng lịch khi lưu",
@@ -389,7 +399,7 @@ public partial class ShowtimeManagementUC : UserControl
                 "Kiểm tra lịch:",
                 lblScheduleInfo,
                 220), 3, 1);
-        
+
         // CÁC NÚT CHỨC NĂNG
 
         FlowLayoutPanel actionPanel = new FlowLayoutPanel
@@ -426,10 +436,11 @@ public partial class ShowtimeManagementUC : UserControl
         actionPanel.Controls.Add(_btnSave);
 
         // Ghép các khu vực
+
         editorPanel.Controls.Add(fieldsPanel);
         editorPanel.Controls.Add(actionPanel);
         editorPanel.Controls.Add(lblEditorTitle);
-        
+
         // BẢNG DANH SÁCH SUẤT CHIẾU
 
         _dgvShowtimes = new DataGridView
@@ -473,21 +484,16 @@ public partial class ShowtimeManagementUC : UserControl
             new Font("Segoe UI", 9);
 
         _dgvShowtimes.RowTemplate.Height = 38;
-        // Màu xen kẽ giữa các dòng
+
         _dgvShowtimes.AlternatingRowsDefaultCellStyle.BackColor =
             Color.FromArgb(37, 49, 68);
 
-        // Không tự thêm dòng mới
         _dgvShowtimes.AllowUserToAddRows = false;
-
-        // Tiêu đề bảng
         _dgvShowtimes.ColumnHeadersHeight = 44;
 
-        // Tự động co giãn theo nội dung cột
         _dgvShowtimes.AutoSizeColumnsMode =
             DataGridViewAutoSizeColumnsMode.Fill;
 
-        // Căn giữa nội dung theo chiều dọc
         _dgvShowtimes.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleLeft;
 
@@ -502,7 +508,6 @@ public partial class ShowtimeManagementUC : UserControl
 
         // CHÂN TRANG
 
-
         _lblResult = new Label
         {
             Text = "Tổng số suất chiếu: 0",
@@ -511,7 +516,6 @@ public partial class ShowtimeManagementUC : UserControl
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
         };
-
 
         // GHÉP GIAO DIỆN
 
@@ -523,7 +527,7 @@ public partial class ShowtimeManagementUC : UserControl
         mainLayout.Controls.Add(_lblResult, 0, 5);
 
         Controls.Add(mainLayout);
-        
+
         // GẮN SỰ KIỆN
 
         _txtSearch.TextChanged += (s, e) =>
@@ -538,14 +542,16 @@ public partial class ShowtimeManagementUC : UserControl
         _dtpStartTime.ValueChanged += (s, e) =>
             UpdateEndPreview();
 
+        _dtpDate.ValueChanged += (s, e) =>
+            UpdateEndPreview();
+
         _btnSave.Click += BtnSave_Click;
         _btnEdit.Click += BtnEdit_Click;
         _btnCancel.Click += BtnCancel_Click;
         _btnDelete.Click += BtnDelete_Click;
     }
 
-
-    // 4. TẠO LABEL
+    // 5. TẠO LABEL
 
     private Label CreateLabel(string text, int marginRight)
     {
@@ -558,10 +564,9 @@ public partial class ShowtimeManagementUC : UserControl
             Margin = new Padding(3, 8, marginRight, 0)
         };
     }
-    
-    // 5. TẠO Ô NHẬP LIỆU CÓ TIÊU ĐỀ
 
-    
+    // 6. TẠO Ô NHẬP LIỆU CÓ TIÊU ĐỀ
+
     private Panel CreateEditorField(
         string title,
         Control input,
@@ -595,8 +600,7 @@ public partial class ShowtimeManagementUC : UserControl
         return field;
     }
 
-    
-    // 6. TẠO NÚT
+    // 7. TẠO NÚT
 
     private Button CreateButton(string text, Color color)
     {
@@ -616,10 +620,9 @@ public partial class ShowtimeManagementUC : UserControl
 
         return button;
     }
-    
-    // 7. TẠO THẺ THỐNG KÊ
 
-       
+    // 8. TẠO THẺ THỐNG KÊ
+
     private Panel CreateStatisticCard(
         string title,
         Color cardAccentColor,
@@ -633,6 +636,7 @@ public partial class ShowtimeManagementUC : UserControl
         };
 
         // Thanh màu bên trái
+
         Panel accentBar = new Panel
         {
             Width = 5,
@@ -641,6 +645,7 @@ public partial class ShowtimeManagementUC : UserControl
         };
 
         // Tiêu đề
+
         Label lblTitle = new Label
         {
             Text = title,
@@ -651,6 +656,7 @@ public partial class ShowtimeManagementUC : UserControl
         };
 
         // Số liệu
+
         valueLabel = new Label
         {
             Text = "0",
@@ -661,6 +667,7 @@ public partial class ShowtimeManagementUC : UserControl
         };
 
         // Mô tả
+
         string description = title switch
         {
             "TỔNG SUẤT CHIẾU" =>
@@ -678,7 +685,6 @@ public partial class ShowtimeManagementUC : UserControl
         Label lblDescription = new Label
         {
             Text = description,
-
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(203, 213, 225),
             AutoSize = false,
@@ -688,6 +694,7 @@ public partial class ShowtimeManagementUC : UserControl
         };
 
         // Biểu tượng
+
         Color iconBackground = Color.FromArgb(
             (30 + cardAccentColor.R) / 2,
             (41 + cardAccentColor.G) / 2,
@@ -721,6 +728,7 @@ public partial class ShowtimeManagementUC : UserControl
         iconPanel.Controls.Add(lblIcon);
 
         // Căn giữa biểu tượng theo chiều dọc
+
         void UpdateIconPosition()
         {
             accentBar.Height = card.ClientSize.Height;
@@ -730,7 +738,6 @@ public partial class ShowtimeManagementUC : UserControl
                 (card.ClientSize.Height - iconPanel.Height) / 2
             );
 
-            // Điều chỉnh chiều rộng mô tả
             lblDescription.Width = Math.Max(
                 150,
                 card.ClientSize.Width - 110
@@ -740,6 +747,7 @@ public partial class ShowtimeManagementUC : UserControl
         card.Resize += (s, e) => UpdateIconPosition();
 
         // Thêm thành phần
+
         card.Controls.Add(lblTitle);
         card.Controls.Add(valueLabel);
         card.Controls.Add(lblDescription);
@@ -749,13 +757,16 @@ public partial class ShowtimeManagementUC : UserControl
         UpdateIconPosition();
 
         // Viền thẻ
+
         card.Paint += (s, e) =>
         {
             using Pen pen = new Pen(
                 Color.FromArgb(51, 65, 85));
 
             e.Graphics.DrawRectangle(
-                pen, 0, 0,
+                pen,
+                0,
+                0,
                 card.Width - 1,
                 card.Height - 1
             );
@@ -763,145 +774,51 @@ public partial class ShowtimeManagementUC : UserControl
 
         return card;
     }
-   
-    // 8. DỮ LIỆU MẪU
 
-    private void LoadSampleData()
+    // =========================================
+    // 9. TẢI DỮ LIỆU TỪ SQLITE
+    // =========================================
+
+    private void LoadDatabaseData()
     {
-        _movies.Clear();
-        _rooms.Clear();
-        _showtimes.Clear();
-        _formats.Clear();
-
-        _movies.AddRange(new[]
+        try
         {
-            new Movie
-            {
-                Id = 1,
-                Title = "Avengers: Endgame",
-                DurationMinutes = 181,
-                Genre = "Hành động",
-                Director = "Anthony Russo",
-                ReleaseDate = DateTime.Today.AddDays(-10),
-                Status = MovieStatus.Showing
-            },
+            _movies.Clear();
+            _rooms.Clear();
+            _showtimes.Clear();
 
-            new Movie
-            {
-                Id = 2,
-                Title = "Inside Out 2",
-                DurationMinutes = 96,
-                Genre = "Hoạt hình",
-                Director = "Kelsey Mann",
-                ReleaseDate = DateTime.Today.AddDays(-5),
-                Status = MovieStatus.Showing
-            },
+            // Lấy phim từ bảng Movies.
+            _movies.AddRange(_movieRepository.GetAll());
 
-            new Movie
+            // Lấy phòng từ bảng Rooms.
+            _rooms.AddRange(_roomRepository.GetAll());
+
+            // Lấy suất chiếu từ bảng Showtimes.
+            _showtimes.AddRange(_showtimeRepository.GetAll());
+
+            // Database chưa có cột Format.
+            // Tạm thời hiển thị 2D cho các suất chiếu đã lưu.
+            _formats.Clear();
+
+            foreach (Showtime showtime in _showtimes)
             {
-                Id = 3,
-                Title = "The Batman",
-                DurationMinutes = 176,
-                Genre = "Hành động",
-                Director = "Matt Reeves",
-                ReleaseDate = DateTime.Today.AddDays(30),
-                Status = MovieStatus.ComingSoon
+                _formats[showtime.Id] = "2D";
             }
-        });
-
-        _rooms.AddRange(new[]
+        }
+        catch (Exception ex)
         {
-            new Room
-            {
-                Id = 1,
-                Name = "Phòng 01",
-                TotalRows = 6,
-                TotalColumns = 8,
-                TotalSeats = 48
-            },
-
-            new Room
-            {
-                Id = 2,
-                Name = "Phòng 02",
-                TotalRows = 6,
-                TotalColumns = 10,
-                TotalSeats = 60
-            },
-
-            new Room
-            {
-                Id = 3,
-                Name = "Phòng 03",
-                TotalRows = 8,
-                TotalColumns = 10,
-                TotalSeats = 80
-            },
-
-            new Room
-            {
-                Id = 4,
-                Name = "Phòng IMAX",
-                TotalRows = 10,
-                TotalColumns = 12,
-                TotalSeats = 120
-            }
-        });
-
-        // Tạo 3 suất chiếu mẫu
-        AddSampleShowtime(1, 1, 9, 0, 75000, "2D");
-        AddSampleShowtime(2, 1, 13, 0, 85000, "2D");
-        AddSampleShowtime(3, 2, 10, 0, 100000, "3D");
-
-        // Suất chiếu phim sắp chiếu
-        AddSampleShowtime(
-            3, 3, 16, 0, 120000, "3D",
-            DateTime.Today.AddDays(30)
-        );
-
-        _nextShowtimeId = 5;
+            MessageBox.Show(
+                "Không thể tải dữ liệu từ database.\n\n" + ex.Message,
+                "Lỗi tải dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
-    
-    // 9. TẠO SUẤT CHIẾU MẪU
 
-
-    private void AddSampleShowtime(
-        int movieId,
-        int roomId,
-        int hour,
-        int minute,
-        decimal price,
-        string format,
-        DateTime? date = null)
-    {
-        Movie? movie = _movies.FirstOrDefault(
-            m => m.Id == movieId
-        );
-
-        if (movie == null)
-            return;
-
-        DateTime start = (date ?? DateTime.Today)
-            .Date
-            .AddHours(hour)
-            .AddMinutes(minute);
-
-        Showtime showtime = new Showtime
-        {
-            Id = _nextShowtimeId++,
-            MovieId = movieId,
-            RoomId = roomId,
-            StartTime = start,
-            EndTime = start.AddMinutes(movie.DurationMinutes),
-            BasePrice = price
-        };
-
-        _showtimes.Add(showtime);
-        _formats[showtime.Id] = format;
-    }
-    
+    // =========================================
     // 10. ĐỔ DỮ LIỆU VÀO COMBOBOX
-
+    // =========================================
 
     private void LoadComboBoxes()
     {
@@ -928,8 +845,10 @@ public partial class ShowtimeManagementUC : UserControl
         if (_cboRoom.Items.Count > 0)
             _cboRoom.SelectedIndex = 0;
     }
-    
+
+    // =========================================
     // 11. CẬP NHẬT GIỜ KẾT THÚC DỰ KIẾN
+    // =========================================
 
     private void UpdateEndPreview()
     {
@@ -951,8 +870,9 @@ public partial class ShowtimeManagementUC : UserControl
             end.ToString("dd/MM/yyyy HH:mm");
     }
 
-    
+    // =========================================
     // 12. KIỂM TRA TRÙNG LỊCH PHÒNG
+    // =========================================
 
     private Showtime? FindScheduleConflict(
         int roomId,
@@ -966,8 +886,10 @@ public partial class ShowtimeManagementUC : UserControl
             end > existing.StartTime
         );
     }
-    
+
+    // =========================================
     // 13. LÀM MỚI BẢNG SUẤT CHIẾU
+    // =========================================
 
     private void RefreshShowtimeTable()
     {
@@ -1035,8 +957,10 @@ public partial class ShowtimeManagementUC : UserControl
         _lblResult.Text =
             $"Đang hiển thị {result.Count} / {_showtimes.Count} suất chiếu";
     }
-    
+
+    // =========================================
     // 14. CẬP NHẬT THỐNG KÊ
+    // =========================================
 
     private void UpdateStatistics()
     {
@@ -1048,8 +972,10 @@ public partial class ShowtimeManagementUC : UserControl
 
         _lblRooms.Text = _rooms.Count.ToString();
     }
-    
+
+    // =========================================
     // 15. TẠO HOẶC CẬP NHẬT SUẤT CHIẾU
+    // =========================================
 
     private void BtnSave_Click(object? sender, EventArgs e)
     {
@@ -1082,82 +1008,144 @@ public partial class ShowtimeManagementUC : UserControl
             movie.DurationMinutes
         );
 
-        // Chuyển ID phòng từ long sang int theo Model Showtime
-        int roomId = checked((int)room.Id);
+        int roomId;
 
-        // Kiểm tra trùng lịch trong cùng phòng
-        Showtime? conflict = FindScheduleConflict(
-            roomId,
-            start,
-            end
-        );
-
-        if (conflict != null)
+        try
+        {
+            // Room.Id là long, còn Showtime.RoomId là int.
+            roomId = checked((int)room.Id);
+        }
+        catch (OverflowException)
         {
             MessageBox.Show(
-                $"Phòng {room.Name} đã có suất chiếu trùng lịch!\n\n" +
-                $"Thời gian đang bị trùng: " +
-                $"{conflict.StartTime:dd/MM/yyyy HH:mm} - " +
-                $"{conflict.EndTime:HH:mm}\n\n" +
-                "Vui lòng chọn phòng hoặc thời gian khác.",
-                "Trùng lịch chiếu",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning
+                "Mã phòng chiếu vượt quá giới hạn cho phép."
             );
-
             return;
         }
 
-        string format = _cboFormat.SelectedItem?.ToString() ?? "2D";
-
-        if (_editingShowtimeId.HasValue)
+        try
         {
-            // CẬP NHẬT SUẤT CHIẾU
-            Showtime? current = _showtimes.FirstOrDefault(
-                s => s.Id == _editingShowtimeId.Value
+            // Lấy dữ liệu mới nhất từ SQLite trước khi kiểm tra.
+            _showtimes.Clear();
+            _showtimes.AddRange(_showtimeRepository.GetAll());
+
+            // Kiểm tra trùng lịch trong cùng phòng.
+            Showtime? conflict = FindScheduleConflict(
+                roomId,
+                start,
+                end
             );
 
-            if (current == null)
+            if (conflict != null)
             {
-                MessageBox.Show("Không tìm thấy suất chiếu!");
-                ResetEditor();
+                MessageBox.Show(
+                    $"Phòng {room.Name} đã có suất chiếu trùng lịch!\n\n" +
+                    $"Thời gian bị trùng: " +
+                    $"{conflict.StartTime:dd/MM/yyyy HH:mm} - " +
+                    $"{conflict.EndTime:dd/MM/yyyy HH:mm}",
+                    "Trùng lịch chiếu",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                RefreshShowtimeTable();
                 return;
             }
 
-            current.MovieId = movie.Id;
-            current.RoomId = roomId;
-            current.StartTime = start;
-            current.EndTime = end;
-            current.BasePrice = _numPrice.Value;
+            string format =
+                _cboFormat.SelectedItem?.ToString() ?? "2D";
 
-            _formats[current.Id] = format;
-
-            MessageBox.Show("Cập nhật suất chiếu thành công!");
-        }
-        else
-        {
-            // TẠO SUẤT CHIẾU MỚI
-            Showtime newShowtime = new Showtime
+            if (_editingShowtimeId.HasValue)
             {
-                Id = _nextShowtimeId++,
-                MovieId = movie.Id,
-                RoomId = roomId,
-                StartTime = start,
-                EndTime = end,
-                BasePrice = _numPrice.Value
-            };
+                // CẬP NHẬT SUẤT CHIẾU
 
-            _showtimes.Add(newShowtime);
-            _formats[newShowtime.Id] = format;
+                Showtime? current = _showtimes.FirstOrDefault(
+                    s => s.Id == _editingShowtimeId.Value
+                );
 
-            MessageBox.Show("Tạo suất chiếu thành công!");
+                if (current == null)
+                {
+                    MessageBox.Show("Không tìm thấy suất chiếu!");
+
+                    ResetEditor();
+                    RefreshShowtimeTable();
+
+                    return;
+                }
+
+                current.MovieId = movie.Id;
+                current.RoomId = roomId;
+                current.StartTime = start;
+                current.EndTime = end;
+                current.BasePrice = _numPrice.Value;
+
+                bool updated = _showtimeRepository.Update(current);
+
+                if (!updated)
+                {
+                    MessageBox.Show(
+                        "Không thể cập nhật suất chiếu!"
+                    );
+                    return;
+                }
+
+                _formats[current.Id] = format;
+
+                MessageBox.Show(
+                    "Cập nhật suất chiếu thành công!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            else
+            {
+                // TẠO SUẤT CHIẾU MỚI
+
+                Showtime newShowtime = new Showtime
+                {
+                    MovieId = movie.Id,
+                    RoomId = roomId,
+                    StartTime = start,
+                    EndTime = end,
+                    BasePrice = _numPrice.Value
+                };
+
+                int newId = _showtimeRepository.Add(newShowtime);
+
+                _formats[newId] = format;
+
+                MessageBox.Show(
+                    "Tạo suất chiếu thành công!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+
+            // Tải lại dữ liệu từ SQLite.
+            LoadDatabaseData();
+
+            LoadComboBoxes();
+
+            RefreshShowtimeTable();
+
+            ResetEditor();
         }
-
-        RefreshShowtimeTable();
-        ResetEditor();
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể lưu suất chiếu vào database.\n\n" + ex.Message,
+                "Lỗi lưu dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
-    
+
+    // =========================================
     // 16. CHỌN SUẤT CHIẾU ĐỂ SỬA
+    // =========================================
 
     private void BtnEdit_Click(object? sender, EventArgs e)
     {
@@ -1188,7 +1176,9 @@ public partial class ShowtimeManagementUC : UserControl
 
         if (movie == null || room == null)
         {
-            MessageBox.Show("Không tìm thấy phim hoặc phòng chiếu!");
+            MessageBox.Show(
+                "Không tìm thấy phim hoặc phòng chiếu!"
+            );
             return;
         }
 
@@ -1222,8 +1212,10 @@ public partial class ShowtimeManagementUC : UserControl
 
         UpdateEndPreview();
     }
-    
+
+    // =========================================
     // 17. HỦY CHẾ ĐỘ CHỈNH SỬA
+    // =========================================
 
     private void BtnCancel_Click(object? sender, EventArgs e)
     {
@@ -1253,8 +1245,10 @@ public partial class ShowtimeManagementUC : UserControl
 
         UpdateEndPreview();
     }
-    
+
+    // =========================================
     // 18. XÓA SUẤT CHIẾU
+    // =========================================
 
     private void BtnDelete_Click(object? sender, EventArgs e)
     {
@@ -1268,13 +1262,6 @@ public partial class ShowtimeManagementUC : UserControl
             _dgvShowtimes.SelectedRows[0].Cells["Id"].Value
         );
 
-        Showtime? showtime = _showtimes.FirstOrDefault(
-            s => s.Id == id
-        );
-
-        if (showtime == null)
-            return;
-
         DialogResult confirm = MessageBox.Show(
             "Bạn có chắc chắn muốn xóa suất chiếu này?",
             "Xác nhận xóa",
@@ -1285,14 +1272,42 @@ public partial class ShowtimeManagementUC : UserControl
         if (confirm != DialogResult.Yes)
             return;
 
-        _showtimes.Remove(showtime);
-        _formats.Remove(id);
+        try
+        {
+            bool deleted = _showtimeRepository.Delete(id);
 
-        if (_editingShowtimeId == id)
-            ResetEditor();
+            if (!deleted)
+            {
+                MessageBox.Show(
+                    "Không tìm thấy suất chiếu để xóa!"
+                );
+                return;
+            }
 
-        RefreshShowtimeTable();
+            _formats.Remove(id);
 
-        MessageBox.Show("Xóa suất chiếu thành công!");
+            if (_editingShowtimeId == id)
+                ResetEditor();
+
+            LoadDatabaseData();
+
+            RefreshShowtimeTable();
+
+            MessageBox.Show(
+                "Xóa suất chiếu thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể xóa suất chiếu.\n\n" + ex.Message,
+                "Lỗi xóa dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 }

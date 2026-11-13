@@ -4,16 +4,18 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 using CinemaManagement.Dialogs;
+using CinemaManagement.Repositories;
 
 namespace CinemaManagement.UserControls.Admin;
 
 public partial class MovieManagementUC : UserControl
 {
-    // Danh sách phim mẫu
-    private List<Movie> movies = new();
+    // Repository kết nối và thao tác với bảng Movies
+    private readonly MovieRepository _movieRepository = new();
 
     // Các thành phần giao diện
     private DataGridView dgvMovies = null!;
@@ -47,7 +49,8 @@ public partial class MovieManagementUC : UserControl
         Padding = new Padding(10);
 
         BuildInterface();
-        LoadSampleData();
+
+        // Tải dữ liệu phim từ SQLite
         LoadMovieData();
     }
 
@@ -238,12 +241,14 @@ public partial class MovieManagementUC : UserControl
         Controls.Add(lblDescription);
         Controls.Add(lblTitle);
 
-        // Sự kiện
+        // Sự kiện tìm kiếm
         txtSearch.TextChanged += (s, e) => LoadMovieData();
 
+        // Sự kiện lọc trạng thái
         cboStatus.SelectedIndexChanged +=
             (s, e) => LoadMovieData();
 
+        // Sự kiện các nút chức năng
         btnAdd.Click += BtnAdd_Click;
         btnEdit.Click += BtnEdit_Click;
         btnDelete.Click += BtnDelete_Click;
@@ -271,78 +276,29 @@ public partial class MovieManagementUC : UserControl
 
         return button;
     }
-    
-    // 3. DỮ LIỆU PHIM MẪU
-   
-    private void LoadSampleData()
-    {
-        movies = new List<Movie>
-        {
-            new Movie
-            {
-                Id = 1,
-                Title = "Avengers: Endgame",
-                Genre = "Hành động",
-                DurationMinutes = 181,
-                Director = "Anthony Russo",
-                ReleaseDate = new DateTime(2026, 10, 10),
-                Status = MovieStatus.Showing
-            },
 
-            new Movie
-            {
-                Id = 2,
-                Title = "Inside Out 2",
-                Genre = "Hoạt hình",
-                DurationMinutes = 96,
-                Director = "Kelsey Mann",
-                ReleaseDate = new DateTime(2026, 10, 15),
-                Status = MovieStatus.Showing
-            },
+    // =====================================
+    // 3. HIỂN THỊ DANH SÁCH PHIM TỪ DATABASE
+    // =====================================
 
-            new Movie
-            {
-                Id = 3,
-                Title = "The Batman",
-                Genre = "Hành động",
-                DurationMinutes = 176,
-                Director = "Matt Reeves",
-                ReleaseDate = new DateTime(2026, 12, 20),
-                Status = MovieStatus.ComingSoon
-            },
-
-            new Movie
-            {
-                Id = 4,
-                Title = "Frozen 2",
-                Genre = "Hoạt hình",
-                DurationMinutes = 103,
-                Director = "Jennifer Lee",
-                ReleaseDate = new DateTime(2025, 5, 10),
-                Status = MovieStatus.Ended
-            }
-        };
-    }
-
-  
-    // 4. HIỂN THỊ DANH SÁCH PHIM
- 
     private void LoadMovieData()
     {
-        dgvMovies.Rows.Clear();
-
-        string keyword = txtSearch.Text.Trim()
-            .ToLowerInvariant();
-
-        string selectedStatus =
-            cboStatus.SelectedItem?.ToString() ?? "Tất cả";
-
-        var result = movies.Where(movie =>
+        try
         {
-            bool matchName =
-                movie.Title.ToLowerInvariant().Contains(keyword);
+            dgvMovies.Rows.Clear();
 
-            bool matchStatus = selectedStatus switch
+            string keyword = txtSearch.Text.Trim();
+
+            string selectedStatus =
+                cboStatus.SelectedItem?.ToString() ?? "Tất cả";
+
+            // Lấy dữ liệu từ SQLite
+            List<Movie> result = string.IsNullOrWhiteSpace(keyword)
+                ? _movieRepository.GetAll()
+                : _movieRepository.Search(keyword);
+
+            // Lọc phim theo trạng thái
+            result = result.Where(movie => selectedStatus switch
             {
                 "Đang chiếu" =>
                     movie.Status == MovieStatus.Showing,
@@ -354,31 +310,41 @@ public partial class MovieManagementUC : UserControl
                     movie.Status == MovieStatus.Ended,
 
                 _ => true
-            };
 
-            return matchName && matchStatus;
+            }).ToList();
 
-        }).ToList();
+            // Hiển thị dữ liệu lên DataGridView
+            foreach (Movie movie in result)
+            {
+                dgvMovies.Rows.Add(
+                    movie.Id,
+                    movie.Title,
+                    movie.Genre,
+                    movie.DurationMinutes + " phút",
+                    movie.Director,
+                    movie.ReleaseDate.ToString("dd/MM/yyyy"),
+                    GetStatusText(movie.Status)
+                );
+            }
 
-        foreach (Movie movie in result)
+            lblTotal.Text = $"Tổng số phim: {result.Count}";
+        }
+        catch (Exception ex)
         {
-            dgvMovies.Rows.Add(
-                movie.Id,
-                movie.Title,
-                movie.Genre,
-                movie.DurationMinutes + " phút",
-                movie.Director,
-                movie.ReleaseDate.ToString("dd/MM/yyyy"),
-                GetStatusText(movie.Status)
+            MessageBox.Show(
+                "Không thể tải danh sách phim từ database.\n\n" +
+                ex.Message,
+                "Lỗi tải dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
             );
         }
-
-        lblTotal.Text = $"Tổng số phim: {result.Count}";
     }
 
-   
-    // 5. HIỂN THỊ TRẠNG THÁI TIẾNG VIỆT
-  
+    // =====================================
+    // 4. HIỂN THỊ TRẠNG THÁI TIẾNG VIỆT
+    // =====================================
+
     private string GetStatusText(MovieStatus status)
     {
         return status switch
@@ -390,129 +356,208 @@ public partial class MovieManagementUC : UserControl
         };
     }
 
-   
-    // 6. NÚT THÊM PHIM
-  
+    // =====================================
+    // 5. NÚT THÊM PHIM
+    // =====================================
 
-    
     private void BtnAdd_Click(object? sender, EventArgs e)
     {
-        using MovieEditDialog dialog = new MovieEditDialog();
-
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+        try
         {
-            // Lấy thông tin phim vừa nhập
-            Movie newMovie = dialog.MovieData;
+            using MovieEditDialog dialog = new MovieEditDialog();
 
-            // Tự động tạo mã phim
-            newMovie.Id = movies.Count == 0
-                ? 1
-                : movies.Max(m => m.Id) + 1;
-
-            // Thêm vào danh sách
-            movies.Add(newMovie);
-
-            // Cập nhật bảng
-            LoadMovieData();
-
-            MessageBox.Show(
-                "Thêm phim thành công!",
-                "Thông báo",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information
-            );
-        }
-    }
-
-
-    
-    // 7. NÚT SỬA PHIM
-    
-
-   
-    private void BtnEdit_Click(object? sender, EventArgs e)
-    {
-        // Kiểm tra đã chọn phim chưa
-        if (dgvMovies.SelectedRows.Count == 0)
-        {
-            MessageBox.Show("Vui lòng chọn phim cần sửa!");
-            return;
-        }
-
-        // Lấy mã phim được chọn
-        int id = Convert.ToInt32(
-            dgvMovies.SelectedRows[0].Cells["Id"].Value
-        );
-
-        // Tìm phim trong danh sách
-        Movie? selectedMovie = movies.FirstOrDefault(
-            m => m.Id == id
-        );
-
-        if (selectedMovie == null)
-        {
-            MessageBox.Show("Không tìm thấy phim!");
-            return;
-        }
-
-        // Mở cửa sổ chỉnh sửa
-        using MovieEditDialog dialog =
-            new MovieEditDialog(selectedMovie);
-
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            // Tìm vị trí phim cũ
-            int index = movies.FindIndex(m => m.Id == id);
-
-            if (index >= 0)
+            if (dialog.ShowDialog(this) == DialogResult.OK)
             {
-                // Cập nhật phim
-                movies[index] = dialog.MovieData;
+                // Lấy thông tin phim từ Dialog
+                Movie newMovie = dialog.MovieData;
 
-                // Làm mới bảng
+                // Thêm phim vào database
+                int newId = _movieRepository.Add(newMovie);
+
+                // Cập nhật lại danh sách
                 LoadMovieData();
 
                 MessageBox.Show(
-                    "Cập nhật phim thành công!",
+                    $"Thêm phim thành công!\nMã phim: {newId}",
                     "Thông báo",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information
                 );
             }
         }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể thêm phim vào database.\n\n" +
+                ex.Message,
+                "Lỗi thêm phim",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 
+    // =====================================
+    // 6. NÚT SỬA PHIM
+    // =====================================
 
-   
-    // 8. NÚT XÓA PHIM
-    
+    private void BtnEdit_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            // Kiểm tra đã chọn phim chưa
+            if (dgvMovies.SelectedRows.Count == 0)
+            {
+                MessageBox.Show(
+                    "Vui lòng chọn phim cần sửa!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            // Lấy mã phim được chọn
+            int id = Convert.ToInt32(
+                dgvMovies.SelectedRows[0].Cells["Id"].Value
+            );
+
+            // Lấy thông tin phim từ database
+            Movie? selectedMovie = _movieRepository.GetById(id);
+
+            if (selectedMovie == null)
+            {
+                MessageBox.Show(
+                    "Không tìm thấy phim!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                LoadMovieData();
+                return;
+            }
+
+            // Mở cửa sổ chỉnh sửa
+            using MovieEditDialog dialog =
+                new MovieEditDialog(selectedMovie);
+
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                // Đảm bảo giữ nguyên mã phim
+                dialog.MovieData.Id = id;
+
+                // Cập nhật database
+                bool updated = _movieRepository.Update(dialog.MovieData);
+
+                if (updated)
+                {
+                    LoadMovieData();
+
+                    MessageBox.Show(
+                        "Cập nhật phim thành công!",
+                        "Thông báo",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "Không có dữ liệu phim nào được cập nhật.",
+                        "Thông báo",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể cập nhật phim.\n\n" +
+                ex.Message,
+                "Lỗi cập nhật",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
+    }
+
+    // =====================================
+    // 7. NÚT XÓA PHIM
+    // =====================================
 
     private void BtnDelete_Click(object? sender, EventArgs e)
     {
-        if (dgvMovies.SelectedRows.Count == 0)
+        try
         {
-            MessageBox.Show("Vui lòng chọn phim cần xóa!");
-            return;
+            // Kiểm tra đã chọn phim chưa
+            if (dgvMovies.SelectedRows.Count == 0)
+            {
+                MessageBox.Show(
+                    "Vui lòng chọn phim cần xóa!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            // Lấy mã phim được chọn
+            int id = Convert.ToInt32(
+                dgvMovies.SelectedRows[0].Cells["Id"].Value
+            );
+
+            // Xác nhận xóa
+            DialogResult confirm = MessageBox.Show(
+                "Bạn có chắc chắn muốn xóa phim này?",
+                "Xác nhận xóa",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question
+            );
+
+            if (confirm != DialogResult.Yes)
+            {
+                return;
+            }
+
+            // Xóa phim trong database
+            bool deleted = _movieRepository.Delete(id);
+
+            if (deleted)
+            {
+                LoadMovieData();
+
+                MessageBox.Show(
+                    "Xóa phim thành công!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            else
+            {
+                MessageBox.Show(
+                    "Không tìm thấy phim cần xóa.",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+            }
         }
-
-        int id = Convert.ToInt32(
-            dgvMovies.SelectedRows[0].Cells["Id"].Value
-        );
-
-        DialogResult confirm = MessageBox.Show(
-            "Bạn có chắc chắn muốn xóa phim này?",
-            "Xác nhận xóa",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question
-        );
-
-        if (confirm == DialogResult.Yes)
+        catch (Exception ex)
         {
-            movies.RemoveAll(movie => movie.Id == id);
-
-            LoadMovieData();
-
-            MessageBox.Show("Xóa phim thành công!");
+            MessageBox.Show(
+                "Không thể xóa phim.\n\n" +
+                "Có thể phim đang được sử dụng trong lịch chiếu.\n\n" +
+                ex.Message,
+                "Lỗi xóa phim",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
         }
     }
 }

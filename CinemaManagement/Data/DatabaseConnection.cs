@@ -1,6 +1,14 @@
-﻿namespace CinemaManagement.Data;
+﻿using Microsoft.Data.Sqlite;
 
-public class DatabaseConnection
+namespace CinemaManagement.Data;
+
+public static class DatabaseConnection
 {
-    
+    private const string ConnectionString =
+        "Data Source=cinema.db;Foreign Keys=True";
+
+    public static SqliteConnection GetConnection()
+    {
+        return new SqliteConnection(ConnectionString);
+    }
 }
