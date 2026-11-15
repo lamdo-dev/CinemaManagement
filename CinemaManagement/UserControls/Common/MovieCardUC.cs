@@ -2,14 +2,17 @@
 
 using System;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Models.Enums;
 
 public partial class MovieCardUC : UserControl
 {
     private PictureBox picPoster = null!;
     private Label lblTitle = null!;
     private Label lblSubInfo = null!;
+    private Label lblStatusBadge = null!;
     private Button btnBookNow = null!;
     private Panel pnlCard = null!;
 
@@ -37,11 +40,10 @@ public partial class MovieCardUC : UserControl
         this.Margin = new Padding(12);
         this.BackColor = Color.Transparent;
 
-        // Container Card
         pnlCard = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(30, 30, 46), // Dark Cinema Card Background
+            BackColor = Color.FromArgb(30, 30, 46),
             Cursor = Cursors.Hand
         };
 
@@ -50,11 +52,25 @@ public partial class MovieCardUC : UserControl
         {
             Size = new Size(185, 225),
             Location = new Point(0, 0),
-            SizeMode = PictureBoxSizeMode.StretchImage,
+            SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(45, 45, 60),
             Cursor = Cursors.Hand
         };
         picPoster.Paint += PicPoster_PaintPlaceholder;
+
+        // Nhãn trạng thái góc trên poster
+        lblStatusBadge = new Label
+        {
+            Location = new Point(8, 8),
+            AutoSize = true,
+            Padding = new Padding(6, 2, 6, 2),
+            Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+            ForeColor = Color.White,
+            BackColor = Color.FromArgb(229, 9, 20),
+            Text = "ĐANG CHIẾU",
+            Visible = false
+        };
+        picPoster.Controls.Add(lblStatusBadge);
 
         // Tên Phim
         lblTitle = new Label
@@ -68,7 +84,7 @@ public partial class MovieCardUC : UserControl
             Cursor = Cursors.Hand
         };
 
-        // Phụ đề (Năm chiếu / Thể loại / Thời lượng)
+        // Phụ đề (Năm chiếu • Thể loại • Thời lượng)
         lblSubInfo = new Label
         {
             Location = new Point(6, 255),
@@ -101,7 +117,7 @@ public partial class MovieCardUC : UserControl
             }
         };
 
-        // Gắn các sự kiện click xem chi tiết phim
+        // Sự kiện click xem chi tiết phim
         pnlCard.Click += OnCardClicked;
         picPoster.Click += OnCardClicked;
         lblTitle.Click += OnCardClicked;
@@ -139,12 +155,49 @@ public partial class MovieCardUC : UserControl
     {
         MovieData = movie;
         lblTitle.Text = movie.Title;
-        lblSubInfo.Text = $"{movie.ReleaseDate.Year} • {movie.Genre} ({movie.DurationMinutes}p)";
 
-        // Tải ảnh poster nếu đường dẫn tồn tại
-        if (!string.IsNullOrEmpty(movie.PosterUrl) && System.IO.File.Exists(movie.PosterUrl))
+        string genreDisplay = string.IsNullOrWhiteSpace(movie.Genre) ? "Chưa phân loại" : movie.Genre;
+        lblSubInfo.Text = $"{movie.ReleaseDate.Year} • {genreDisplay} ({movie.DurationMinutes}p)";
+
+        if (movie.Status == MovieStatus.ComingSoon)
         {
-            try { picPoster.Image = Image.FromFile(movie.PosterUrl); } catch { }
+            lblStatusBadge.Text = "SẮP CHIẾU";
+            lblStatusBadge.BackColor = Color.FromArgb(217, 119, 6);
+            lblStatusBadge.Visible = true;
+
+            btnBookNow.Text = "🕒 Xem chi tiết";
+            btnBookNow.BackColor = Color.FromArgb(71, 85, 105);
+        }
+        else
+        {
+            lblStatusBadge.Visible = false;
+            btnBookNow.Text = "🎟 Đặt vé ngay";
+            btnBookNow.BackColor = Color.FromArgb(229, 9, 20);
+        }
+
+        // Giải phóng ảnh cũ nếu có
+        if (picPoster.Image != null)
+        {
+            var oldImg = picPoster.Image;
+            picPoster.Image = null;
+            oldImg.Dispose();
+        }
+
+        // Tải ảnh từ file nội bộ bằng MemoryStream để không khóa file trên ổ đĩa
+        if (!string.IsNullOrWhiteSpace(movie.PosterUrl) && File.Exists(movie.PosterUrl))
+        {
+            try
+            {
+                byte[] imageBytes = File.ReadAllBytes(movie.PosterUrl);
+                using var ms = new MemoryStream(imageBytes);
+                using var tempImage = Image.FromStream(ms);
+                picPoster.Image = new Bitmap(tempImage);
+                picPoster.SizeMode = PictureBoxSizeMode.StretchImage;
+            }
+            catch
+            {
+                picPoster.Image = null;
+            }
         }
     }
 
