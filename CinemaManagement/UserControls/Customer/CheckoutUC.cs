@@ -1,29 +1,41 @@
-﻿
-namespace CinemaManagement.UserControls.Customer;
+﻿namespace CinemaManagement.UserControls.Customer;
 
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
-using System.IO;
 using CinemaManagement.Models;
 
 public partial class CheckoutUC : UserControl
 {
     // =========================================================
-    // 1. THEME
+    // 1. THEME & PAYMENT ENUM
     // =========================================================
+
+    private enum PaymentMethodType
+    {
+        Card,
+        BankQr,
+        MoMo,
+        Counter
+    }
 
     private readonly Color ColorBg = Color.FromArgb(14, 15, 22);
     private readonly Color ColorCard = Color.FromArgb(24, 25, 36);
     private readonly Color ColorGold = Color.FromArgb(245, 197, 24);
+    private readonly Color ColorGoldHover = Color.FromArgb(255, 214, 65);
+    private readonly Color ColorMoMo = Color.FromArgb(165, 0, 100);
+    private readonly Color ColorMoMoHover = Color.FromArgb(195, 15, 122);
     private readonly Color ColorTextMuted = Color.FromArgb(150, 150, 170);
     private readonly Color ColorInputBg = Color.FromArgb(34, 35, 48);
 
     private readonly CultureInfo ViCulture = new("vi-VN");
+    private PaymentMethodType _selectedPaymentMethod = PaymentMethodType.Card;
 
     // =========================================================
     // 2. BOOKING DATA
@@ -45,12 +57,14 @@ public partial class CheckoutUC : UserControl
     private decimal totalAmount;
 
     // =========================================================
-    // 3. UI CONTROLS
+    // 3. UI CONTROLS & ANIMATION
     // =========================================================
 
     private Panel pnlHeader = null!;
     private Button btnBack = null!;
+    private Panel pnlStepper = null!;
 
+    private TableLayoutPanel tlpMainGrid = null!;
     private Panel pnlLeftSummary = null!;
     private Panel pnlCenterPayment = null!;
     private Panel pnlRightTicketPreview = null!;
@@ -67,12 +81,41 @@ public partial class CheckoutUC : UserControl
     private Label lblDiscountVal = null!;
     private Label lblFinalTotal = null!;
 
-    // Payment
+    // Payment Method Grid & Sliding Indicator Animation
+    private TableLayoutPanel tlpMethodGrid = null!;
+    private Button btnMethodCard = null!;
+    private Button btnMethodBankQR = null!;
+    private Button btnMethodMoMo = null!;
+    private Button btnMethodCounter = null!;
+
+    private Panel pnlAnimTrack = null!;
+    private Panel pnlAnimIndicator = null!;
+    private System.Windows.Forms.Timer _animTimer = null!;
+    private int _targetIndicatorX;
+    private int _targetIndicatorW;
+    private Color _targetIndicatorColor;
+
+    // Payment Dynamic Panels
+    private Panel pnlCardSection = null!;
+    private Panel pnlQrSection = null!;
+    private Panel pnlCounterSection = null!;
+
+    // Card Controls
     private TextBox txtCardName = null!;
     private TextBox txtCardNumber = null!;
     private TextBox txtExpiry = null!;
     private TextBox txtCVV = null!;
 
+    // QR & MoMo Controls
+    private Label lblQrHeader = null!;
+    private PictureBox picQrCode = null!;
+    private Label lblQrAmount = null!;
+    private Label lblQrNote = null!;
+
+    // Counter Controls
+    private TextBox txtCounterPhone = null!;
+
+    // Common Checkout Footer
     private CheckBox chkTerms = null!;
     private Button btnPayNow = null!;
 
@@ -94,16 +137,28 @@ public partial class CheckoutUC : UserControl
     // 5. CONSTRUCTOR
     // =========================================================
 
+
     public CheckoutUC()
     {
-        InitializeComponents();
-    }
+        SetStyle(ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint |
+                 ControlStyles.ResizeRedraw, true);
 
+        InitializeComponents();
+        SetupAnimationTimer();
+        SelectPaymentMethod(PaymentMethodType.Card, animate: false);
+
+        this.Disposed += (s, e) =>
+        {
+            _animTimer?.Stop();
+            _animTimer?.Dispose();
+        };
+    }
     // =========================================================
     // 6. SET BOOKING CONTEXT
     // =========================================================
 
-    
     public void SetBookingContext(BookingContext context)
     {
         if (context == null)
@@ -146,7 +201,6 @@ public partial class CheckoutUC : UserControl
 
         btnPayNow.Enabled = true;
     }
-
 
     // =========================================================
     // 7. OLD METHOD - KEEP COMPATIBILITY
@@ -211,16 +265,17 @@ public partial class CheckoutUC : UserControl
     }
 
     // =========================================================
-    // 8. INITIALIZE UI
+    // 8. INITIALIZE RESPONSIVE UI
     // =========================================================
 
     private void InitializeComponents()
     {
         Dock = DockStyle.Fill;
         BackColor = ColorBg;
+        AutoScroll = true;
 
         // -----------------------------------------------------
-        // HEADER
+        // HEADER (Tự căn giữa Stepper trên mọi độ rộng màn hình)
         // -----------------------------------------------------
 
         pnlHeader = new Panel
@@ -237,19 +292,20 @@ public partial class CheckoutUC : UserControl
             ForeColor = Color.White,
             BackColor = Color.FromArgb(35, 36, 50),
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(100, 32),
-            Location = new Point(20, 14),
+            Size = new Size(105, 34),
+            Location = new Point(20, 13),
             Cursor = Cursors.Hand
         };
-
         btnBack.FlatAppearance.BorderSize = 0;
-        btnBack.Click += (s, e) =>
-            OnBackClicked?.Invoke(this, EventArgs.Empty);
+        btnBack.MouseEnter += (s, e) => btnBack.BackColor = Color.FromArgb(52, 54, 74);
+        btnBack.MouseLeave += (s, e) => btnBack.BackColor = Color.FromArgb(35, 36, 50);
+        btnBack.Click += (s, e) => OnBackClicked?.Invoke(this, EventArgs.Empty);
 
-        Panel pnlStepper = new Panel
+        pnlStepper = new Panel
         {
-            Size = new Size(500, 40),
-            Location = new Point(350, 10)
+            Size = new Size(420, 40),
+            Location = new Point(350, 10),
+            BackColor = Color.Transparent
         };
 
         Label lblStep1 = new Label
@@ -302,6 +358,28 @@ public partial class CheckoutUC : UserControl
 
         pnlHeader.Controls.Add(btnBack);
         pnlHeader.Controls.Add(pnlStepper);
+        pnlHeader.Resize += (s, e) =>
+        {
+            int centerX = Math.Max(140, (pnlHeader.ClientSize.Width - pnlStepper.Width) / 2);
+            pnlStepper.Location = new Point(centerX, 10);
+        };
+
+        // -----------------------------------------------------
+        // MAIN 3-COLUMN RESPONSIVE GRID (29% - 42% - 29%)
+        // -----------------------------------------------------
+
+        tlpMainGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(16, 14, 16, 16),
+            BackColor = ColorBg
+        };
+        tlpMainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 29F));
+        tlpMainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
+        tlpMainGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 29F));
+        tlpMainGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         // -----------------------------------------------------
         // LEFT COLUMN - ORDER SUMMARY
@@ -309,10 +387,10 @@ public partial class CheckoutUC : UserControl
 
         pnlLeftSummary = new Panel
         {
-            Location = new Point(20, 75),
-            Size = new Size(340, 640),
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 8, 0),
             BackColor = ColorCard,
-            Padding = new Padding(15)
+            Padding = new Padding(16)
         };
 
         Label lblSummaryHeader = new Label
@@ -320,75 +398,89 @@ public partial class CheckoutUC : UserControl
             Text = "Tóm Tắt Đơn Hàng",
             Font = new Font("Segoe UI", 12, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(15, 15),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 32
         };
+
+        TableLayoutPanel tlpCouponRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 36,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0, 4, 0, 0)
+        };
+        tlpCouponRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68F));
+        tlpCouponRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
+        tlpCouponRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         txtCoupon = new TextBox
         {
-            Location = new Point(15, 50),
-            Size = new Size(200, 32),
+            Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 10),
             BackColor = ColorInputBg,
             ForeColor = Color.White,
-            PlaceholderText = "Nhập mã giảm giá..."
+            Margin = new Padding(0, 2, 6, 0),
+            PlaceholderText = "Mã giảm giá..."
         };
 
         btnApplyCoupon = new Button
         {
             Text = "Áp dụng",
-            Location = new Point(222, 49),
-            Size = new Size(100, 32),
+            Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
             BackColor = ColorGold,
             ForeColor = Color.Black,
             FlatStyle = FlatStyle.Flat,
+            Margin = new Padding(0, 1, 0, 1),
             Cursor = Cursors.Hand
         };
-
         btnApplyCoupon.FlatAppearance.BorderSize = 0;
+        btnApplyCoupon.MouseEnter += (s, e) => btnApplyCoupon.BackColor = ColorGoldHover;
+        btnApplyCoupon.MouseLeave += (s, e) => btnApplyCoupon.BackColor = ColorGold;
         btnApplyCoupon.Click += BtnApplyCoupon_Click;
+
+        tlpCouponRow.Controls.Add(txtCoupon, 0, 0);
+        tlpCouponRow.Controls.Add(btnApplyCoupon, 1, 0);
 
         lblCouponMsg = new Label
         {
             Text = "",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = Color.LightGreen,
-            Location = new Point(15, 87),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 24,
+            TextAlign = ContentAlignment.MiddleLeft
         };
 
-        int startY = 120;
+        Panel pnlSummaryRows = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(0, 8, 0, 0)
+        };
 
-        lblTicketPriceInfo = AddSummaryRow(
-            pnlLeftSummary, "Giá vé trung bình:", "0 đ", ref startY);
-
-        lblQtyInfo = AddSummaryRow(
-            pnlLeftSummary, "Số lượng vé:", "0 vé", ref startY);
-
-        lblTicketSubTotal = AddSummaryRow(
-            pnlLeftSummary, "Tổng tiền vé:", "0 đ", ref startY);
-
-        lblFoodSubTotal = AddSummaryRow(
-            pnlLeftSummary, "Bắp nước & Combo:", "0 đ", ref startY);
-
-        lblDiscountVal = AddSummaryRow(
-            pnlLeftSummary, "Giảm giá Voucher:", "-0 đ",
-            ref startY, Color.OrangeRed);
+        int startY = 8;
+        lblTicketPriceInfo = AddSummaryRow(pnlSummaryRows, "Giá vé trung bình:", "0 đ", ref startY);
+        lblQtyInfo = AddSummaryRow(pnlSummaryRows, "Số lượng vé:", "0 vé", ref startY);
+        lblTicketSubTotal = AddSummaryRow(pnlSummaryRows, "Tổng tiền vé:", "0 đ", ref startY);
+        lblFoodSubTotal = AddSummaryRow(pnlSummaryRows, "Bắp nước & Combo:", "0 đ", ref startY);
+        lblDiscountVal = AddSummaryRow(pnlSummaryRows, "Giảm giá Voucher:", "-0 đ", ref startY, Color.OrangeRed);
 
         Panel divider = new Panel
         {
-            Location = new Point(15, startY + 10),
-            Size = new Size(310, 1),
+            Location = new Point(0, startY + 10),
+            Height = 1,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            Width = pnlSummaryRows.Width,
             BackColor = Color.FromArgb(60, 60, 80)
         };
 
         Label lblFinalLabel = new Label
         {
             Text = "TỔNG THÀNH TIỀN:",
-            Font = new Font("Segoe UI", 11, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(15, startY + 25),
+            Location = new Point(0, startY + 24),
             AutoSize = true
         };
 
@@ -397,31 +489,32 @@ public partial class CheckoutUC : UserControl
             Text = "0 đ",
             Font = new Font("Segoe UI", 16, FontStyle.Bold),
             ForeColor = ColorGold,
-            Location = new Point(15, startY + 50),
+            Location = new Point(0, startY + 48),
             AutoSize = true
         };
 
-        pnlLeftSummary.Controls.AddRange(new Control[]
+        pnlSummaryRows.Controls.AddRange(new Control[]
         {
-            lblSummaryHeader,
-            txtCoupon,
-            btnApplyCoupon,
-            lblCouponMsg,
             divider,
             lblFinalLabel,
             lblFinalTotal
         });
 
+        pnlLeftSummary.Controls.Add(pnlSummaryRows);
+        pnlLeftSummary.Controls.Add(lblCouponMsg);
+        pnlLeftSummary.Controls.Add(tlpCouponRow);
+        pnlLeftSummary.Controls.Add(lblSummaryHeader);
+
         // -----------------------------------------------------
-        // CENTER COLUMN - PAYMENT
+        // CENTER COLUMN - PAYMENT (LƯỚI 2x2 CHỐNG KHUẤT + ANIMATION)
         // -----------------------------------------------------
 
         pnlCenterPayment = new Panel
         {
-            Location = new Point(380, 75),
-            Size = new Size(420, 640),
+            Dock = DockStyle.Fill,
+            Margin = new Padding(8, 0, 8, 0),
             BackColor = ColorCard,
-            Padding = new Padding(20)
+            Padding = new Padding(16)
         };
 
         Label lblPaymentHeader = new Label
@@ -429,110 +522,75 @@ public partial class CheckoutUC : UserControl
             Text = "Phương Thức Thanh Toán",
             Font = new Font("Segoe UI", 12, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(20, 15),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 32
         };
 
-        FlowLayoutPanel flpMethods = new FlowLayoutPanel
+        // Lưới 2 hàng x 2 cột chia đều 50%-50% chiều ngang -> Không bao giờ tràn ra ngoài!
+        tlpMethodGrid = new TableLayoutPanel
         {
-            Location = new Point(20, 50),
-            Size = new Size(380, 45)
+            Dock = DockStyle.Top,
+            Height = 84,
+            ColumnCount = 2,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        tlpMethodGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpMethodGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpMethodGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        tlpMethodGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+
+        btnMethodCard = CreateMethodButton("💳 Thẻ Quốc Tế / ATM", true, new Padding(0, 0, 4, 4));
+        btnMethodCard.Click += (s, e) => SelectPaymentMethod(PaymentMethodType.Card);
+
+        btnMethodBankQR = CreateMethodButton("🏦 QR Pay Ngân Hàng", false, new Padding(4, 0, 0, 4));
+        btnMethodBankQR.Click += (s, e) => SelectPaymentMethod(PaymentMethodType.BankQr);
+
+        btnMethodMoMo = CreateMethodButton("🟣 Ví Điện Tử MoMo", false, new Padding(0, 4, 4, 0));
+        btnMethodMoMo.Click += (s, e) => SelectPaymentMethod(PaymentMethodType.MoMo);
+
+        btnMethodCounter = CreateMethodButton("🏪 Thanh Toán Tại Quầy", false, new Padding(4, 4, 0, 0));
+        btnMethodCounter.Click += (s, e) => SelectPaymentMethod(PaymentMethodType.Counter);
+
+        tlpMethodGrid.Controls.Add(btnMethodCard, 0, 0);
+        tlpMethodGrid.Controls.Add(btnMethodBankQR, 1, 0);
+        tlpMethodGrid.Controls.Add(btnMethodMoMo, 0, 1);
+        tlpMethodGrid.Controls.Add(btnMethodCounter, 1, 1);
+
+        // Thanh trượt Animation báo hiệu phương thức đang chọn
+        pnlAnimTrack = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 4,
+            BackColor = Color.FromArgb(36, 38, 52),
+            Margin = new Padding(0, 6, 0, 8)
         };
 
-        Button btnMethodCard = CreateMethodButton(
-            "💳 Thẻ Quốc Tế / ATM", true);
-
-        Button btnMethodQR = CreateMethodButton(
-            "📱 Quét Mã QR", false);
-
-        flpMethods.Controls.AddRange(new Control[]
+        pnlAnimIndicator = new Panel
         {
-            btnMethodCard, btnMethodQR
-        });
+            Height = 4,
+            Width = 100,
+            Location = new Point(0, 0),
+            BackColor = ColorGold
+        };
+        pnlAnimTrack.Controls.Add(pnlAnimIndicator);
+        pnlAnimTrack.Resize += (s, e) => UpdateIndicatorTarget(animate: false);
 
-        Panel pnlCardForm = new Panel
+        // Khung thân thanh toán co giãn tự động
+        Panel pnlPaymentBody = new Panel
         {
-            Location = new Point(20, 105),
-            Size = new Size(380, 440),
+            Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(20, 21, 30),
-            Padding = new Padding(15)
+            Padding = new Padding(14)
         };
 
-        Label lblName = new Label
+        // Footer nút xác nhận luôn ghim dưới cùng khung thanh toán
+        Panel pnlPaymentFooter = new Panel
         {
-            Text = "Tên chủ thẻ",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = ColorTextMuted,
-            Location = new Point(15, 15),
-            AutoSize = true
-        };
-
-        txtCardName = new TextBox
-        {
-            Location = new Point(15, 38),
-            Size = new Size(350, 30),
-            Font = new Font("Segoe UI", 10),
-            BackColor = ColorInputBg,
-            ForeColor = Color.White,
-            PlaceholderText = "Nhập tên chủ thẻ"
-        };
-
-        Label lblCardNum = new Label
-        {
-            Text = "Số thẻ thanh toán",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = ColorTextMuted,
-            Location = new Point(15, 80),
-            AutoSize = true
-        };
-
-        txtCardNumber = new TextBox
-        {
-            Location = new Point(15, 103),
-            Size = new Size(350, 30),
-            Font = new Font("Segoe UI", 10),
-            BackColor = ColorInputBg,
-            ForeColor = Color.White,
-            PlaceholderText = "Nhập số thẻ"
-        };
-
-        Label lblExp = new Label
-        {
-            Text = "Ngày hết hạn (MM/YY)",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = ColorTextMuted,
-            Location = new Point(15, 145),
-            AutoSize = true
-        };
-
-        txtExpiry = new TextBox
-        {
-            Location = new Point(15, 168),
-            Size = new Size(160, 30),
-            Font = new Font("Segoe UI", 10),
-            BackColor = ColorInputBg,
-            ForeColor = Color.White,
-            PlaceholderText = "MM/YY"
-        };
-
-        Label lblCVV = new Label
-        {
-            Text = "Mã CVV / CVC",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = ColorTextMuted,
-            Location = new Point(205, 145),
-            AutoSize = true
-        };
-
-        txtCVV = new TextBox
-        {
-            Location = new Point(205, 168),
-            Size = new Size(160, 30),
-            Font = new Font("Segoe UI", 10),
-            BackColor = ColorInputBg,
-            ForeColor = Color.White,
-            PlaceholderText = "CVV",
-            PasswordChar = '*'
+            Dock = DockStyle.Bottom,
+            Height = 96,
+            BackColor = Color.Transparent
         };
 
         chkTerms = new CheckBox
@@ -540,57 +598,303 @@ public partial class CheckoutUC : UserControl
             Text = "Tôi đồng ý với Quy định & Điều khoản đặt vé rạp phim.",
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = ColorTextMuted,
-            Location = new Point(15, 230),
-            Size = new Size(350, 40),
+            Dock = DockStyle.Top,
+            Height = 36,
             Checked = false
         };
 
         btnPayNow = new Button
         {
-            Text = "🔒 THANH TOÁN NGAY",
-            Font = new Font("Segoe UI", 12, FontStyle.Bold),
+            Text = "🔒 THANH TOÁN THẺ NGAY",
+            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
             ForeColor = Color.Black,
             BackColor = ColorGold,
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(350, 48),
-            Location = new Point(15, 290),
+            Dock = DockStyle.Bottom,
+            Height = 46,
             Cursor = Cursors.Hand
         };
-
         btnPayNow.FlatAppearance.BorderSize = 0;
+        btnPayNow.MouseEnter += (s, e) =>
+        {
+            btnPayNow.BackColor = _selectedPaymentMethod == PaymentMethodType.MoMo ? ColorMoMoHover : ColorGoldHover;
+        };
+        btnPayNow.MouseLeave += (s, e) =>
+        {
+            btnPayNow.BackColor = _selectedPaymentMethod == PaymentMethodType.MoMo ? ColorMoMo : ColorGold;
+        };
         btnPayNow.Click += BtnPayNow_Click;
 
-        pnlCardForm.Controls.AddRange(new Control[]
+        pnlPaymentFooter.Controls.Add(btnPayNow);
+        pnlPaymentFooter.Controls.Add(chkTerms);
+
+        // Vùng chứa nội dung thay đổi theo phương thức
+        Panel pnlMethodContentHost = new Panel
         {
-            lblName,
-            txtCardName,
-            lblCardNum,
-            txtCardNumber,
-            lblExp,
-            txtExpiry,
-            lblCVV,
-            txtCVV,
-            chkTerms,
-            btnPayNow
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            AutoScroll = true
+        };
+
+        // --- 1. PANEL THẺ QUỐC TẾ / ATM ---
+        pnlCardSection = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent
+        };
+
+        Label lblName = new Label
+        {
+            Text = "Tên chủ thẻ",
+            Font = new Font("Segoe UI", 9),
+            ForeColor = ColorTextMuted,
+            Location = new Point(0, 6),
+            AutoSize = true
+        };
+
+        txtCardName = new TextBox
+        {
+            Location = new Point(0, 28),
+            Width = 340,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            Font = new Font("Segoe UI", 10),
+            BackColor = ColorInputBg,
+            ForeColor = Color.White,
+            PlaceholderText = "VD: NGUYEN VAN A"
+        };
+
+        Label lblCardNum = new Label
+        {
+            Text = "Số thẻ thanh toán",
+            Font = new Font("Segoe UI", 9),
+            ForeColor = ColorTextMuted,
+            Location = new Point(0, 68),
+            AutoSize = true
+        };
+
+        txtCardNumber = new TextBox
+        {
+            Location = new Point(0, 90),
+            Width = 340,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            Font = new Font("Segoe UI", 10),
+            BackColor = ColorInputBg,
+            ForeColor = Color.White,
+            PlaceholderText = "Nhập 16 số trên thẻ"
+        };
+
+        TableLayoutPanel tlpCardSubRow = new TableLayoutPanel
+        {
+            Location = new Point(0, 130),
+            Width = 340,
+            Height = 58,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            ColumnCount = 2,
+            RowCount = 2
+        };
+        tlpCardSubRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpCardSubRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tlpCardSubRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
+        tlpCardSubRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+
+        Label lblExp = new Label
+        {
+            Text = "Ngày hết hạn (MM/YY)",
+            Font = new Font("Segoe UI", 8.8f),
+            ForeColor = ColorTextMuted,
+            Dock = DockStyle.Fill
+        };
+
+        Label lblCVV = new Label
+        {
+            Text = "Mã CVV / CVC",
+            Font = new Font("Segoe UI", 8.8f),
+            ForeColor = ColorTextMuted,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(8, 0, 0, 0)
+        };
+
+        txtExpiry = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 10),
+            BackColor = ColorInputBg,
+            ForeColor = Color.White,
+            Margin = new Padding(0, 0, 8, 0),
+            PlaceholderText = "MM/YY"
+        };
+
+        txtCVV = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 10),
+            BackColor = ColorInputBg,
+            ForeColor = Color.White,
+            Margin = new Padding(8, 0, 0, 0),
+            PlaceholderText = "CVV",
+            PasswordChar = '*'
+        };
+
+        tlpCardSubRow.Controls.Add(lblExp, 0, 0);
+        tlpCardSubRow.Controls.Add(lblCVV, 1, 0);
+        tlpCardSubRow.Controls.Add(txtExpiry, 0, 1);
+        tlpCardSubRow.Controls.Add(txtCVV, 1, 1);
+
+        Label lblCardHint = new Label
+        {
+            Text = "✓ Hỗ trợ Visa, Mastercard, JCB và thẻ ATM nội địa Napas.",
+            Font = new Font("Segoe UI", 8.5f),
+            ForeColor = Color.FromArgb(120, 200, 140),
+            Location = new Point(0, 198),
+            Width = 340,
+            Height = 36,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        };
+
+        pnlCardSection.Controls.AddRange(new Control[]
+        {
+            lblName, txtCardName,
+            lblCardNum, txtCardNumber,
+            tlpCardSubRow,
+            lblCardHint
         });
 
-        pnlCenterPayment.Controls.AddRange(new Control[]
+        // --- 2. PANEL QR PAY NGÂN HÀNG & VÍ MOMO ---
+        pnlQrSection = new Panel
         {
-            lblPaymentHeader,
-            flpMethods,
-            pnlCardForm
-        });
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            Visible = false
+        };
+
+        lblQrHeader = new Label
+        {
+            Text = "QUÉT MÃ VIETQR - TẤT CẢ NGÂN HÀNG",
+            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = ColorGold,
+            Dock = DockStyle.Top,
+            Height = 26,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        Panel pnlQrCenterWrap = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 166,
+            BackColor = Color.Transparent
+        };
+
+        picQrCode = new PictureBox
+        {
+            Size = new Size(156, 156),
+            BackColor = Color.White,
+            SizeMode = PictureBoxSizeMode.CenterImage
+        };
+        pnlQrCenterWrap.Controls.Add(picQrCode);
+        pnlQrCenterWrap.Resize += (s, e) =>
+        {
+            picQrCode.Location = new Point(
+                (pnlQrCenterWrap.ClientSize.Width - picQrCode.Width) / 2,
+                (pnlQrCenterWrap.ClientSize.Height - picQrCode.Height) / 2);
+        };
+
+        lblQrAmount = new Label
+        {
+            Text = "Số tiền thanh toán: 0 đ",
+            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+            ForeColor = Color.White,
+            Dock = DockStyle.Top,
+            Height = 26,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        lblQrNote = new Label
+        {
+            Text = "Mở ứng dụng Ngân hàng bất kỳ để quét mã thanh toán tự động.",
+            Font = new Font("Segoe UI", 8.3f),
+            ForeColor = ColorTextMuted,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.TopCenter
+        };
+
+        pnlQrSection.Controls.Add(lblQrNote);
+        pnlQrSection.Controls.Add(lblQrAmount);
+        pnlQrSection.Controls.Add(pnlQrCenterWrap);
+        pnlQrSection.Controls.Add(lblQrHeader);
+
+        // --- 3. PANEL THANH TOÁN TẠI QUẦY ---
+        pnlCounterSection = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            Visible = false
+        };
+
+        Label lblCounterTitle = new Label
+        {
+            Text = "🏪 ĐẶT GIỮ CHỖ & THANH TOÁN TẠI QUẦY",
+            Font = new Font("Segoe UI", 9.8f, FontStyle.Bold),
+            ForeColor = ColorGold,
+            Dock = DockStyle.Top,
+            Height = 28
+        };
+
+        Label lblCounterDesc = new Label
+        {
+            Text = "• Hệ thống sẽ xuất mã đặt vé giữ ghế ngay sau khi xác nhận.\n" +
+                   "• Quý khách vui lòng đến quầy vé rạp Cineworld thanh toán bằng Tiền mặt / Thẻ / QR trước giờ chiếu ít nhất 30 phút.\n" +
+                   "• Quá thời gian giữ chỗ, ghế sẽ tự động mở lại cho khách khác.",
+            Font = new Font("Segoe UI", 8.8f),
+            ForeColor = Color.FromArgb(215, 220, 235),
+            Dock = DockStyle.Top,
+            Height = 115
+        };
+
+        Label lblCounterPhone = new Label
+        {
+            Text = "Số điện thoại nhận mã giữ vé tại quầy *",
+            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            ForeColor = ColorTextMuted,
+            Dock = DockStyle.Top,
+            Height = 24
+        };
+
+        txtCounterPhone = new TextBox
+        {
+            Dock = DockStyle.Top,
+            Font = new Font("Segoe UI", 10.5f),
+            BackColor = ColorInputBg,
+            ForeColor = Color.White,
+            PlaceholderText = "Nhập số điện thoại của bạn (VD: 0901234567)"
+        };
+
+        pnlCounterSection.Controls.Add(txtCounterPhone);
+        pnlCounterSection.Controls.Add(lblCounterPhone);
+        pnlCounterSection.Controls.Add(lblCounterDesc);
+        pnlCounterSection.Controls.Add(lblCounterTitle);
+
+        pnlMethodContentHost.Controls.Add(pnlCardSection);
+        pnlMethodContentHost.Controls.Add(pnlQrSection);
+        pnlMethodContentHost.Controls.Add(pnlCounterSection);
+
+        pnlPaymentBody.Controls.Add(pnlMethodContentHost);
+        pnlPaymentBody.Controls.Add(pnlPaymentFooter);
+
+        pnlCenterPayment.Controls.Add(pnlPaymentBody);
+        pnlCenterPayment.Controls.Add(pnlAnimTrack);
+        pnlCenterPayment.Controls.Add(tlpMethodGrid);
+        pnlCenterPayment.Controls.Add(lblPaymentHeader);
 
         // -----------------------------------------------------
-        // RIGHT COLUMN - TICKET PREVIEW
+        // RIGHT COLUMN - TICKET PREVIEW (Co giãn chuẩn mọi màn hình)
         // -----------------------------------------------------
 
         pnlRightTicketPreview = new Panel
         {
-            Location = new Point(820, 75),
-            Size = new Size(340, 640),
+            Dock = DockStyle.Fill,
+            Margin = new Padding(8, 0, 0, 0),
             BackColor = ColorCard,
-            Padding = new Padding(15)
+            Padding = new Padding(16)
         };
 
         Label lblPreviewHeader = new Label
@@ -598,128 +902,323 @@ public partial class CheckoutUC : UserControl
             Text = "Xem Trước Vé Điện Tử",
             Font = new Font("Segoe UI", 12, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(15, 15),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 32
         };
 
         Panel pnlTicketPass = new Panel
         {
-            Location = new Point(15, 50),
-            Size = new Size(310, 560),
+            Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(245, 230, 180),
-            Padding = new Padding(15)
-        };
-
-        picPreviewPoster = new PictureBox
-        {
-            Location = new Point(15, 15),
-            Size = new Size(280, 260),
-            SizeMode = PictureBoxSizeMode.StretchImage,
-            BackColor = Color.FromArgb(40, 40, 50)
-        };
-
-        lblPreviewMovieTitle = new Label
-        {
-            Text = "TÊN PHIM",
-            Font = new Font("Segoe UI", 13, FontStyle.Bold),
-            ForeColor = Color.Black,
-            Location = new Point(15, 285),
-            Size = new Size(280, 30),
-            AutoEllipsis = true
-        };
-
-        lblPreviewDateTime = new Label
-        {
-            Text = "Ngày: --/--/---- | Giờ: --:--",
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = Color.FromArgb(60, 60, 60),
-            Location = new Point(15, 320),
-            Size = new Size(280, 22)
-        };
-
-        lblPreviewVenueSeats = new Label
-        {
-            Text = "Ghế: Chưa chọn",
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = Color.Black,
-            Location = new Point(15, 345),
-            Size = new Size(280, 25)
-        };
-
-        lblPreviewPrice = new Label
-        {
-            Text = "Tổng: 0 đ",
-            Font = new Font("Segoe UI", 12, FontStyle.Bold),
-            ForeColor = Color.DarkRed,
-            Location = new Point(15, 375),
-            Size = new Size(280, 30)
+            Padding = new Padding(14)
         };
 
         Panel pnlBarcodeMock = new Panel
         {
-            Location = new Point(15, 420),
-            Size = new Size(280, 65),
+            Dock = DockStyle.Bottom,
+            Height = 62,
             BackColor = Color.White
         };
 
         Label lblBarcodeText = new Label
         {
             Text = "||||||||||||||||||||||||||||||||||||||\n*CINEMA-TICKET*",
-            Font = new Font("Consolas", 11, FontStyle.Bold),
+            Font = new Font("Consolas", 10.5f, FontStyle.Bold),
             ForeColor = Color.Black,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter
         };
-
         pnlBarcodeMock.Controls.Add(lblBarcodeText);
 
-        pnlTicketPass.Controls.AddRange(new Control[]
+        Panel pnlTicketMeta = new Panel
         {
-            picPreviewPoster,
-            lblPreviewMovieTitle,
-            lblPreviewDateTime,
-            lblPreviewVenueSeats,
-            lblPreviewPrice,
-            pnlBarcodeMock
-        });
+            Dock = DockStyle.Bottom,
+            Height = 122,
+            Padding = new Padding(0, 8, 0, 4),
+            BackColor = Color.Transparent
+        };
 
-        pnlRightTicketPreview.Controls.AddRange(new Control[]
+        lblPreviewMovieTitle = new Label
         {
-            lblPreviewHeader,
-            pnlTicketPass
-        });
+            Text = "TÊN PHIM",
+            Font = new Font("Segoe UI", 12.5f, FontStyle.Bold),
+            ForeColor = Color.Black,
+            Dock = DockStyle.Top,
+            Height = 28,
+            AutoEllipsis = true
+        };
+
+        lblPreviewDateTime = new Label
+        {
+            Text = "Ngày: --/--/---- | Giờ: --:--",
+            Font = new Font("Segoe UI", 9.2f),
+            ForeColor = Color.FromArgb(60, 60, 60),
+            Dock = DockStyle.Top,
+            Height = 22
+        };
+
+        lblPreviewVenueSeats = new Label
+        {
+            Text = "Ghế: Chưa chọn",
+            Font = new Font("Segoe UI", 9.8f, FontStyle.Bold),
+            ForeColor = Color.Black,
+            Dock = DockStyle.Top,
+            Height = 24,
+            AutoEllipsis = true
+        };
+
+        lblPreviewPrice = new Label
+        {
+            Text = "Tổng: 0 đ",
+            Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
+            ForeColor = Color.DarkRed,
+            Dock = DockStyle.Top,
+            Height = 28
+        };
+
+        pnlTicketMeta.Controls.Add(lblPreviewPrice);
+        pnlTicketMeta.Controls.Add(lblPreviewVenueSeats);
+        pnlTicketMeta.Controls.Add(lblPreviewDateTime);
+        pnlTicketMeta.Controls.Add(lblPreviewMovieTitle);
+
+        picPreviewPoster = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.FromArgb(40, 40, 50)
+        };
+
+        pnlTicketPass.Controls.Add(picPreviewPoster);
+        pnlTicketPass.Controls.Add(pnlTicketMeta);
+        pnlTicketPass.Controls.Add(pnlBarcodeMock);
+
+        pnlRightTicketPreview.Controls.Add(pnlTicketPass);
+        pnlRightTicketPreview.Controls.Add(lblPreviewHeader);
 
         // -----------------------------------------------------
         // ADD TO FORM
         // -----------------------------------------------------
 
-        Controls.Add(pnlRightTicketPreview);
-        Controls.Add(pnlCenterPayment);
-        Controls.Add(pnlLeftSummary);
+        tlpMainGrid.Controls.Add(pnlLeftSummary, 0, 0);
+        tlpMainGrid.Controls.Add(pnlCenterPayment, 1, 0);
+        tlpMainGrid.Controls.Add(pnlRightTicketPreview, 2, 0);
+
+        Controls.Add(tlpMainGrid);
         Controls.Add(pnlHeader);
     }
 
     // =========================================================
-    // 9. CREATE PAYMENT METHOD BUTTON
+    // 9. CREATE, ANIMATION & SWITCH PAYMENT METHODS
     // =========================================================
 
-    private Button CreateMethodButton(string text, bool isActive)
+    private void SetupAnimationTimer()
+    {
+        _animTimer = new System.Windows.Forms.Timer
+        {
+            Interval = 15 // ~60 FPS mượt mà
+        };
+        _animTimer.Tick += (s, e) =>
+        {
+            if (pnlAnimIndicator == null) return;
+
+            int dx = _targetIndicatorX - pnlAnimIndicator.Left;
+            int dw = _targetIndicatorW - pnlAnimIndicator.Width;
+
+            if (Math.Abs(dx) <= 2 && Math.Abs(dw) <= 2)
+            {
+                pnlAnimIndicator.Left = _targetIndicatorX;
+                pnlAnimIndicator.Width = _targetIndicatorW;
+                pnlAnimIndicator.BackColor = _targetIndicatorColor;
+                _animTimer.Stop();
+                return;
+            }
+
+            pnlAnimIndicator.Left += (int)Math.Ceiling(dx * 0.32);
+            pnlAnimIndicator.Width += (int)Math.Ceiling(dw * 0.32);
+            pnlAnimIndicator.BackColor = _targetIndicatorColor;
+        };
+    }
+
+    private Button CreateMethodButton(string text, bool isActive, Padding margin)
     {
         Button btn = new Button
         {
             Text = text,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
             ForeColor = isActive ? Color.Black : Color.White,
             BackColor = isActive ? ColorGold : ColorInputBg,
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(180, 36),
-            Margin = new Padding(0, 0, 10, 0),
+            Dock = DockStyle.Fill,
+            Margin = margin,
+            AutoEllipsis = true,
             Cursor = Cursors.Hand
         };
 
         btn.FlatAppearance.BorderSize = 0;
-
         return btn;
+    }
+
+    private void SetButtonActiveState(Button btn, bool active, Color? customActiveBg = null, Color? customActiveFg = null)
+    {
+        if (active)
+        {
+            btn.BackColor = customActiveBg ?? ColorGold;
+            btn.ForeColor = customActiveFg ?? Color.Black;
+        }
+        else
+        {
+            btn.BackColor = ColorInputBg;
+            btn.ForeColor = Color.White;
+        }
+    }
+
+    private void UpdateIndicatorTarget(bool animate)
+    {
+        if (pnlAnimTrack == null || pnlAnimIndicator == null) return;
+
+        int halfWidth = pnlAnimTrack.ClientSize.Width / 2;
+        bool isRightCol = _selectedPaymentMethod == PaymentMethodType.BankQr ||
+                          _selectedPaymentMethod == PaymentMethodType.Counter;
+
+        _targetIndicatorX = isRightCol ? halfWidth : 0;
+        _targetIndicatorW = Math.Max(40, halfWidth);
+        _targetIndicatorColor = _selectedPaymentMethod == PaymentMethodType.MoMo ? ColorMoMo : ColorGold;
+
+        if (!animate)
+        {
+            pnlAnimIndicator.Left = _targetIndicatorX;
+            pnlAnimIndicator.Width = _targetIndicatorW;
+            pnlAnimIndicator.BackColor = _targetIndicatorColor;
+        }
+        else
+        {
+            _animTimer.Start();
+        }
+    }
+
+    private void SelectPaymentMethod(PaymentMethodType method, bool animate = true)
+    {
+        _selectedPaymentMethod = method;
+
+        SetButtonActiveState(btnMethodCard, method == PaymentMethodType.Card);
+        SetButtonActiveState(btnMethodBankQR, method == PaymentMethodType.BankQr);
+        SetButtonActiveState(btnMethodMoMo, method == PaymentMethodType.MoMo, ColorMoMo, Color.White);
+        SetButtonActiveState(btnMethodCounter, method == PaymentMethodType.Counter);
+
+        UpdateIndicatorTarget(animate);
+
+        pnlCardSection.Visible = false;
+        pnlQrSection.Visible = false;
+        pnlCounterSection.Visible = false;
+
+        switch (method)
+        {
+            case PaymentMethodType.Card:
+                pnlCardSection.Visible = true;
+                btnPayNow.BackColor = ColorGold;
+                btnPayNow.ForeColor = Color.Black;
+                btnPayNow.Text = "🔒 THANH TOÁN THẺ NGAY";
+                break;
+
+            case PaymentMethodType.BankQr:
+                pnlQrSection.Visible = true;
+                lblQrHeader.Text = "🏦 QUÉT MÃ VIETQR (TẤT CẢ NGÂN HÀNG)";
+                lblQrHeader.ForeColor = ColorGold;
+                lblQrNote.Text = "Hỗ trợ tất cả ngân hàng: Vietcombank, MB, Techcombank,\nACB, BIDV, VietinBank, TPBank, VPBank...\nNội dung CK: CINEWORLD VE PHIM";
+                btnPayNow.BackColor = ColorGold;
+                btnPayNow.ForeColor = Color.Black;
+                btnPayNow.Text = "✓ XÁC NHẬN ĐÃ CHUYỂN KHOẢN QR";
+                RefreshQrPreviewImage(Color.Black);
+                break;
+
+            case PaymentMethodType.MoMo:
+                pnlQrSection.Visible = true;
+                lblQrHeader.Text = "🟣 QUÉT MÃ VÍ ĐIỆN TỬ MOMO";
+                lblQrHeader.ForeColor = Color.FromArgb(255, 110, 190);
+                lblQrNote.Text = "Mở ứng dụng Ví MoMo -> Chọn 'Quét Mã'\nNgười nhận: RẠP CHIẾU PHIM CINEWORLD (0909.888.999)\nTự động điền đúng số tiền cần thanh toán.";
+                btnPayNow.BackColor = ColorMoMo;
+                btnPayNow.ForeColor = Color.White;
+                btnPayNow.Text = "🟣 XÁC NHẬN THANH TOÁN MOMO";
+                RefreshQrPreviewImage(ColorMoMo);
+                break;
+
+            case PaymentMethodType.Counter:
+                pnlCounterSection.Visible = true;
+                btnPayNow.BackColor = ColorGold;
+                btnPayNow.ForeColor = Color.Black;
+                btnPayNow.Text = "🏪 XÁC NHẬN ĐẶT VÉ TẠI QUẦY";
+                break;
+        }
+    }
+
+    private void RefreshQrPreviewImage(Color qrColor)
+    {
+        if (picQrCode == null) return;
+
+        var oldImg = picQrCode.Image;
+        picQrCode.Image = GenerateStyledQrBitmap(144, qrColor, $"{_selectedPaymentMethod}_{totalAmount}");
+        oldImg?.Dispose();
+    }
+
+    private Bitmap GenerateStyledQrBitmap(int size, Color moduleColor, string seedText)
+    {
+        Bitmap bmp = new Bitmap(size, size);
+        using Graphics g = Graphics.FromImage(bmp);
+        g.Clear(Color.White);
+        g.SmoothingMode = SmoothingMode.None;
+
+        int gridCount = 21;
+        int cellSize = size / gridCount;
+        int offset = (size - gridCount * cellSize) / 2;
+
+        using Brush darkBrush = new SolidBrush(moduleColor);
+        using Brush whiteBrush = new SolidBrush(Color.White);
+
+        int hash = seedText.GetHashCode();
+        Random rnd = new Random(hash);
+
+        for (int r = 0; r < gridCount; r++)
+        {
+            for (int c = 0; c < gridCount; c++)
+            {
+                bool isFinderZone =
+                    (r < 7 && c < 7) ||
+                    (r < 7 && c >= gridCount - 7) ||
+                    (r >= gridCount - 7 && c < 7);
+
+                if (isFinderZone) continue;
+
+                if (rnd.Next(0, 100) < 48)
+                {
+                    g.FillRectangle(darkBrush, offset + c * cellSize, offset + r * cellSize, cellSize, cellSize);
+                }
+            }
+        }
+
+        void DrawFinderPattern(int startRow, int startCol)
+        {
+            g.FillRectangle(darkBrush, offset + startCol * cellSize, offset + startRow * cellSize, 7 * cellSize, 7 * cellSize);
+            g.FillRectangle(whiteBrush, offset + (startCol + 1) * cellSize, offset + (startRow + 1) * cellSize, 5 * cellSize, 5 * cellSize);
+            g.FillRectangle(darkBrush, offset + (startCol + 2) * cellSize, offset + (startRow + 2) * cellSize, 3 * cellSize, 3 * cellSize);
+        }
+
+        DrawFinderPattern(0, 0);
+        DrawFinderPattern(0, gridCount - 7);
+        DrawFinderPattern(gridCount - 7, 0);
+
+        return bmp;
+    }
+
+    private string GetPaymentMethodDisplayName()
+    {
+        return _selectedPaymentMethod switch
+        {
+            PaymentMethodType.Card => "Thẻ Quốc Tế / ATM",
+            PaymentMethodType.BankQr => "QR Pay Ngân Hàng (VietQR)",
+            PaymentMethodType.MoMo => "Ví Điện Tử MoMo",
+            PaymentMethodType.Counter => "Thanh toán tại quầy",
+            _ => "Thanh toán mô phỏng"
+        };
     }
 
     // =========================================================
@@ -738,7 +1237,7 @@ public partial class CheckoutUC : UserControl
             Text = labelText,
             Font = new Font("Segoe UI", 9),
             ForeColor = ColorTextMuted,
-            Location = new Point(15, yPos),
+            Location = new Point(0, yPos),
             AutoSize = true
         };
 
@@ -747,8 +1246,9 @@ public partial class CheckoutUC : UserControl
             Text = valueText,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = valColor ?? Color.White,
-            Location = new Point(180, yPos),
-            Size = new Size(145, 20),
+            Location = new Point(parent.Width - 150, yPos),
+            Size = new Size(150, 20),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
             TextAlign = ContentAlignment.MiddleRight
         };
 
@@ -766,7 +1266,6 @@ public partial class CheckoutUC : UserControl
 
     private void CalculateTotal()
     {
-        // Tính tổng tiền vé và bắp nước
         totalAmount =
             ticketSubTotal +
             foodSubTotal -
@@ -805,8 +1304,16 @@ public partial class CheckoutUC : UserControl
         lblDiscountVal.Text =
             $"-{discountAmount.ToString("N0", ViCulture)} đ";
 
-        lblFinalTotal.Text =
-            $"{totalAmount.ToString("N0", ViCulture)} đ";
+        string formattedFinalTotal = $"{totalAmount.ToString("N0", ViCulture)} đ";
+        lblFinalTotal.Text = formattedFinalTotal;
+
+        if (lblQrAmount != null)
+            lblQrAmount.Text = $"Số tiền thanh toán: {formattedFinalTotal}";
+
+        if (_selectedPaymentMethod == PaymentMethodType.BankQr)
+            RefreshQrPreviewImage(Color.Black);
+        else if (_selectedPaymentMethod == PaymentMethodType.MoMo)
+            RefreshQrPreviewImage(ColorMoMo);
 
         // Movie
         lblPreviewMovieTitle.Text =
@@ -858,7 +1365,7 @@ public partial class CheckoutUC : UserControl
 
         // Total
         lblPreviewPrice.Text =
-            $"Tổng tiền: {totalAmount.ToString("N0", ViCulture)} đ";
+            $"Tổng tiền: {formattedFinalTotal}";
     }
 
     // =========================================================
@@ -913,138 +1420,154 @@ public partial class CheckoutUC : UserControl
     // =========================================================
 
     private void BtnPayNow_Click(object? sender, EventArgs e)
+    {
+        if (btnPayNow == null || !btnPayNow.Enabled)
+            return;
+
+        if (MovieData == null)
         {
-            if (btnPayNow == null || !btnPayNow.Enabled)
-                return;
+            ShowWarning("Không tìm thấy thông tin phim.");
+            return;
+        }
 
-            // Kiểm tra thông tin phim
-            if (MovieData == null)
+        if (ShowtimeData == null)
+        {
+            ShowWarning("Không tìm thấy thông tin suất chiếu.");
+            return;
+        }
+
+        if (SelectedSeats == null || SelectedSeats.Count == 0)
+        {
+            ShowWarning("Vui lòng chọn ít nhất một ghế.");
+            return;
+        }
+
+        if (_bookingContext != null)
+        {
+            if (!_bookingContext.CanCheckout)
             {
-                ShowWarning("Không tìm thấy thông tin phim.");
+                ShowWarning("Thông tin đặt vé không hợp lệ.");
                 return;
             }
 
-            // Kiểm tra suất chiếu
-            if (ShowtimeData == null)
-            {
-                ShowWarning("Không tìm thấy thông tin suất chiếu.");
-                return;
-            }
-
-            // Kiểm tra ghế
-            if (SelectedSeats == null || SelectedSeats.Count == 0)
-            {
-                ShowWarning("Vui lòng chọn ít nhất một ghế.");
-                return;
-            }
-
-            // Kiểm tra BookingContext
-            if (_bookingContext != null)
-            {
-                if (!_bookingContext.CanCheckout)
-                {
-                    ShowWarning("Thông tin đặt vé không hợp lệ.");
-                    return;
-                }
-
-                // Kiểm tra dữ liệu màn hình có khớp context không
-                if (_bookingContext.Movie?.Id != MovieData.Id ||
-                    _bookingContext.Showtime?.Id != ShowtimeData.Id ||
-                    !_bookingContext.Seats.SequenceEqual(SelectedSeats))
-                {
-                    ShowWarning(
-                        "Dữ liệu đặt vé đã thay đổi. " +
-                        "Vui lòng quay lại kiểm tra thông tin.");
-
-                    return;
-                }
-
-                // Lấy lại số tiền chính xác từ context
-                ticketSubTotal = _bookingContext.TicketAmount;
-                foodSubTotal = _bookingContext.FoodAmount;
-            }
-
-            // Kiểm tra điều khoản
-            if (!chkTerms.Checked)
+            if (_bookingContext.Movie?.Id != MovieData.Id ||
+                _bookingContext.Showtime?.Id != ShowtimeData.Id ||
+                !_bookingContext.Seats.SequenceEqual(SelectedSeats))
             {
                 ShowWarning(
-                    "Vui lòng tích chọn đồng ý với Điều khoản sử dụng.");
+                    "Dữ liệu đặt vé đã thay đổi. " +
+                    "Vui lòng quay lại kiểm tra thông tin.");
 
                 return;
             }
 
-            // Kiểm tra tiền vé
-            if (ticketSubTotal <= 0)
+            ticketSubTotal = _bookingContext.TicketAmount;
+            foodSubTotal = _bookingContext.FoodAmount;
+        }
+
+        if (_selectedPaymentMethod == PaymentMethodType.Card)
+        {
+            if (string.IsNullOrWhiteSpace(txtCardName.Text) ||
+                string.IsNullOrWhiteSpace(txtCardNumber.Text) ||
+                string.IsNullOrWhiteSpace(txtExpiry.Text) ||
+                string.IsNullOrWhiteSpace(txtCVV.Text))
             {
-                ShowWarning("Tổng tiền vé không hợp lệ.");
+                ShowWarning("Vui lòng nhập đầy đủ thông tin Thẻ Quốc Tế / ATM.");
                 return;
-            }
-
-            // Tính lại tổng tiền trước khi thanh toán
-            CalculateTotal();
-            UpdateUIWithData();
-
-            if (totalAmount <= 0)
-            {
-                ShowWarning("Tổng tiền thanh toán không hợp lệ.");
-                return;
-            }
-
-            // Xác nhận thanh toán mô phỏng
-            DialogResult confirm = MessageBox.Show(
-                $"Bạn xác nhận thanh toán đơn hàng?\n\n" +
-                $"Phim: {MovieData.Title}\n" +
-                $"Số ghế: {SelectedSeats.Count}\n" +
-                $"Ghế: {string.Join(", ", SelectedSeats)}\n" +
-                $"Tiền vé: {ticketSubTotal.ToString("N0", ViCulture)} đ\n" +
-                $"Bắp nước: {foodSubTotal.ToString("N0", ViCulture)} đ\n" +
-                $"Giảm giá: {discountAmount.ToString("N0", ViCulture)} đ\n" +
-                $"Tổng tiền: {totalAmount.ToString("N0", ViCulture)} đ\n\n" +
-                "Đây là giao dịch mô phỏng.",
-                "Xác nhận thanh toán",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-
-            if (confirm != DialogResult.Yes)
-                return;
-
-            btnPayNow.Enabled = false;
-
-            try
-            {
-                string bookingCode =
-                    $"BK{DateTime.Now:yyyyMMddHHmmssfff}";
-
-                var result = new BookingResultEventArgs
-                {
-                    BookingCode = bookingCode,
-                    Movie = MovieData,
-                    Showtime = ShowtimeData,
-                    Seats = SelectedSeats.ToList(),
-
-                    FoodCart = new Dictionary<int, (
-                        string Name,
-                        decimal Price,
-                        int Qty,
-                        string ImgPath)>(FoodCart),
-
-                    TotalAmount = totalAmount,
-                    BookingTime = DateTime.Now,
-                    Channel = "Online",
-                    PaymentMethod = "Thanh toán mô phỏng"
-                };
-
-                // Thông báo MainForm xử lý kết quả
-                OnPaymentCompleted?.Invoke(this, result);
-            }
-            catch (Exception ex)
-            {
-                btnPayNow.Enabled = true;
-
-                ShowWarning(
-                    "Không thể hoàn tất quá trình đặt vé:\n" + ex.Message);
             }
         }
+        else if (_selectedPaymentMethod == PaymentMethodType.Counter)
+        {
+            string phone = txtCounterPhone.Text.Trim();
+            if (string.IsNullOrWhiteSpace(phone) || phone.Length < 9)
+            {
+                ShowWarning("Vui lòng nhập số điện thoại hợp lệ để nhận mã giữ vé tại quầy.");
+                txtCounterPhone.Focus();
+                return;
+            }
+        }
+
+        if (!chkTerms.Checked)
+        {
+            ShowWarning("Vui lòng tích chọn đồng ý với Điều khoản sử dụng.");
+            return;
+        }
+
+        if (ticketSubTotal <= 0)
+        {
+            ShowWarning("Tổng tiền vé không hợp lệ.");
+            return;
+        }
+
+        CalculateTotal();
+        UpdateUIWithData();
+
+        if (totalAmount <= 0)
+        {
+            ShowWarning("Tổng tiền thanh toán không hợp lệ.");
+            return;
+        }
+
+        string methodDisplayName = GetPaymentMethodDisplayName();
+        string actionPrompt = _selectedPaymentMethod == PaymentMethodType.Counter
+            ? "Bạn xác nhận đặt giữ vé và thanh toán trực tiếp tại quầy?"
+            : "Bạn xác nhận hoàn tất thanh toán đơn hàng?";
+
+        DialogResult confirm = MessageBox.Show(
+            $"{actionPrompt}\n\n" +
+            $"Phim: {MovieData.Title}\n" +
+            $"Số ghế: {SelectedSeats.Count} ({string.Join(", ", SelectedSeats)})\n" +
+            $"Tiền vé: {ticketSubTotal.ToString("N0", ViCulture)} đ\n" +
+            $"Bắp nước: {foodSubTotal.ToString("N0", ViCulture)} đ\n" +
+            $"Giảm giá: {discountAmount.ToString("N0", ViCulture)} đ\n" +
+            $"Tổng tiền: {totalAmount.ToString("N0", ViCulture)} đ\n" +
+            $"Phương thức: {methodDisplayName}",
+            "Xác nhận giao dịch",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (confirm != DialogResult.Yes)
+            return;
+
+        btnPayNow.Enabled = false;
+
+        try
+        {
+            string bookingCode =
+                $"BK{DateTime.Now:yyyyMMddHHmmssfff}";
+
+            var result = new BookingResultEventArgs
+            {
+                BookingCode = bookingCode,
+                Movie = MovieData,
+                Showtime = ShowtimeData,
+                Seats = SelectedSeats.ToList(),
+
+                FoodCart = new Dictionary<int, (
+                    string Name,
+                    decimal Price,
+                    int Qty,
+                    string ImgPath)>(FoodCart),
+
+                TotalAmount = totalAmount,
+                BookingTime = DateTime.Now,
+                Channel = _selectedPaymentMethod == PaymentMethodType.Counter ? "Tại quầy (Đặt trước)" : "Online",
+                PaymentMethod = methodDisplayName,
+                CustomerName = _selectedPaymentMethod == PaymentMethodType.Card
+                    ? txtCardName.Text.Trim()
+                    : (_selectedPaymentMethod == PaymentMethodType.Counter ? $"SĐT: {txtCounterPhone.Text.Trim()}" : string.Empty)
+            };
+
+            OnPaymentCompleted?.Invoke(this, result);
+        }
+        catch (Exception ex)
+        {
+            btnPayNow.Enabled = true;
+
+            ShowWarning(
+                "Không thể hoàn tất quá trình đặt vé:\n" + ex.Message);
+        }
+    }
 
     // =========================================================
     // 15. WARNING MESSAGE
@@ -1058,9 +1581,6 @@ public partial class CheckoutUC : UserControl
             MessageBoxButtons.OK,
             MessageBoxIcon.Warning);
     }
-    
-    
-  
 }
 
 // =============================================================
