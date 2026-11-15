@@ -52,33 +52,6 @@
       <Compile Update="UserControls\Common\MovieCardUC.cs">
         <SubType>UserControl</SubType>
       </Compile>
-      <Compile Update="UserControls\Customer\HomeUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\MovieDetailUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\ShowtimeUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\SeatSelectionUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\FoodSelectionUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\CheckoutUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\TicketUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\ProfileUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Customer\MembershipUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
       <Compile Update="UserControls\Staff\POSUC.cs">
         <SubType>UserControl</SubType>
       </Compile>

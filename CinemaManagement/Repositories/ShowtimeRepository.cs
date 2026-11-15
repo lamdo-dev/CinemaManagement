@@ -1,6 +1,6 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Dapper;
 using CinemaManagement.Data;
 using CinemaManagement.Models;
@@ -9,7 +9,7 @@ namespace CinemaManagement.Repositories;
 
 public class ShowtimeRepository
 {
-    // Lấy toàn bộ danh sách suất chiếu
+    // Lấy toàn bộ suất chiếu
     public List<Showtime> GetAll()
     {
         using var connection = DatabaseConnection.GetConnection();
@@ -21,7 +21,8 @@ public class ShowtimeRepository
                 RoomId,
                 StartTime,
                 EndTime,
-                BasePrice
+                BasePrice,
+                Format
             FROM Showtimes
             ORDER BY StartTime ASC;
         ";
@@ -41,7 +42,8 @@ public class ShowtimeRepository
                 RoomId,
                 StartTime,
                 EndTime,
-                BasePrice
+                BasePrice,
+                Format
             FROM Showtimes
             WHERE Id = @Id;
         ";
@@ -64,7 +66,8 @@ public class ShowtimeRepository
                 RoomId,
                 StartTime,
                 EndTime,
-                BasePrice
+                BasePrice,
+                Format
             FROM Showtimes
             WHERE RoomId = @RoomId
             ORDER BY StartTime ASC;
@@ -88,7 +91,8 @@ public class ShowtimeRepository
                 RoomId,
                 StartTime,
                 EndTime,
-                BasePrice
+                BasePrice,
+                Format
             FROM Showtimes
             WHERE MovieId = @MovieId
             ORDER BY StartTime ASC;
@@ -103,6 +107,8 @@ public class ShowtimeRepository
     // Thêm suất chiếu
     public int Add(Showtime showtime)
     {
+        ValidateShowtime(showtime);
+
         using var connection = DatabaseConnection.GetConnection();
         connection.Open();
 
@@ -113,7 +119,8 @@ public class ShowtimeRepository
                 RoomId,
                 StartTime,
                 EndTime,
-                BasePrice
+                BasePrice,
+                Format
             )
             VALUES
             (
@@ -121,7 +128,8 @@ public class ShowtimeRepository
                 @RoomId,
                 @StartTime,
                 @EndTime,
-                @BasePrice
+                @BasePrice,
+                @Format
             );
 
             SELECT last_insert_rowid();
@@ -135,11 +143,13 @@ public class ShowtimeRepository
                 showtime.RoomId,
                 StartTime = showtime.StartTime.ToString("yyyy-MM-dd HH:mm:ss"),
                 EndTime = showtime.EndTime.ToString("yyyy-MM-dd HH:mm:ss"),
-                showtime.BasePrice
+                showtime.BasePrice,
+                Format = NormalizeFormat(showtime.Format)
             }
         );
 
         showtime.Id = newId;
+        showtime.Format = NormalizeFormat(showtime.Format);
 
         return newId;
     }
@@ -147,6 +157,8 @@ public class ShowtimeRepository
     // Cập nhật suất chiếu
     public bool Update(Showtime showtime)
     {
+        ValidateShowtime(showtime);
+
         using var connection = DatabaseConnection.GetConnection();
 
         const string sql = @"
@@ -156,7 +168,8 @@ public class ShowtimeRepository
                 RoomId = @RoomId,
                 StartTime = @StartTime,
                 EndTime = @EndTime,
-                BasePrice = @BasePrice
+                BasePrice = @BasePrice,
+                Format = @Format
             WHERE Id = @Id;
         ";
 
@@ -169,7 +182,8 @@ public class ShowtimeRepository
                 showtime.RoomId,
                 StartTime = showtime.StartTime.ToString("yyyy-MM-dd HH:mm:ss"),
                 EndTime = showtime.EndTime.ToString("yyyy-MM-dd HH:mm:ss"),
-                showtime.BasePrice
+                showtime.BasePrice,
+                Format = NormalizeFormat(showtime.Format)
             }
         );
 
@@ -201,6 +215,11 @@ public class ShowtimeRepository
         DateTime endTime,
         int? excludeShowtimeId = null)
     {
+        if (endTime <= startTime)
+            throw new ArgumentException(
+                "Giờ kết thúc phải sau giờ bắt đầu."
+            );
+
         using var connection = DatabaseConnection.GetConnection();
 
         const string sql = @"
@@ -251,5 +270,45 @@ public class ShowtimeRepository
             sql,
             new { Date = date.ToString("yyyy-MM-dd") }
         );
+    }
+
+    // Chuẩn hóa định dạng
+    private static string NormalizeFormat(string? format)
+    {
+        string normalized = (format ?? "2D")
+            .Trim()
+            .ToUpperInvariant();
+
+        if (normalized != "2D" && normalized != "3D")
+            throw new ArgumentException(
+                "Định dạng phim chỉ được phép là 2D hoặc 3D."
+            );
+
+        return normalized;
+    }
+
+    // Kiểm tra dữ liệu trước khi ghi
+    private static void ValidateShowtime(Showtime showtime)
+    {
+        if (showtime == null)
+            throw new ArgumentNullException(nameof(showtime));
+
+        if (showtime.MovieId <= 0)
+            throw new ArgumentException("Phim không hợp lệ.");
+
+        if (showtime.RoomId <= 0)
+            throw new ArgumentException("Phòng chiếu không hợp lệ.");
+
+        if (showtime.EndTime <= showtime.StartTime)
+            throw new ArgumentException(
+                "Giờ kết thúc phải sau giờ bắt đầu."
+            );
+
+        if (showtime.BasePrice < 0)
+            throw new ArgumentException(
+                "Giá vé không được nhỏ hơn 0."
+            );
+
+        NormalizeFormat(showtime.Format);
     }
 }

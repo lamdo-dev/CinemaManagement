@@ -952,17 +952,16 @@ public partial class RoomManagementUC : UserControl
     }
 
     // 14. LẤY HỆ SỐ GIÁ GHẾ
-    private decimal GetMultiplier(SeatType type)
+    private double GetMultiplier(SeatType type)
     {
         return type switch
         {
-            SeatType.Standard => 1.0m,
-            SeatType.VIP => 1.2m,
-            SeatType.Couple => 2.0m,
-            _ => 1.0m
+            SeatType.Standard => 1.0,
+            SeatType.VIP => 1.2,
+            SeatType.Couple => 2.0,
+            _ => 1.0
         };
     }
-
     // 15. TẠO GHẾ CHO PHÒNG
     private List<Seat> CreateSeatsForRoom(Room room)
     {
@@ -1028,7 +1027,7 @@ public partial class RoomManagementUC : UserControl
         };
 
         SeatType oldType = selectedSeat.Type;
-        decimal oldMultiplier = selectedSeat.PriceMultiplier;
+        double oldMultiplier = selectedSeat.PriceMultiplier;
 
         selectedSeat.Type = newType;
         selectedSeat.PriceMultiplier = GetMultiplier(newType);

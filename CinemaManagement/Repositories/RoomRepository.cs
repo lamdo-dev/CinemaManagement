@@ -54,30 +54,32 @@ public class RoomRepository
     }
 
     // 3. Lấy danh sách ghế của một phòng
+    
     public List<Seat> GetSeatsByRoomId(long roomId)
     {
         using var connection = DatabaseConnection.GetConnection();
         connection.Open();
 
         const string sql = @"
-            SELECT
-                Id,
-                RoomId,
-                SeatNumber,
-                RowIndex,
-                ColumnIndex,
-                Type,
-                PriceMultiplier
-            FROM Seats
-            WHERE RoomId = @RoomId
-            ORDER BY RowIndex, ColumnIndex;
-        ";
+        SELECT
+            Id,
+            RoomId,
+            SeatNumber,
+            RowIndex,
+            ColumnIndex,
+            Type,
+            CAST(PriceMultiplier AS REAL) AS PriceMultiplier
+        FROM Seats
+        WHERE RoomId = @RoomId
+        ORDER BY RowIndex, ColumnIndex;
+    ";
 
         return connection.Query<Seat>(
             sql,
             new { RoomId = roomId }
         ).ToList();
     }
+
 
     // 4. Thêm phòng và toàn bộ ghế trong một transaction
     public long Add(Room room, IEnumerable<Seat> roomSeats)

@@ -7,6 +7,8 @@ using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
 using CinemaManagement.UserControls.Common;
+using CinemaManagement.Models.Enums;
+using CinemaManagement.Repositories;
 
 public partial class HomeUC : UserControl
 {
@@ -17,6 +19,8 @@ public partial class HomeUC : UserControl
 
     private List<Movie> _allMovies = new();
     private string? _selectedGenreFilter;
+    
+    private readonly MovieRepository _movieRepository = new();    
 
     // Sự kiện chuyển màn hình sang Chi tiết Phim (MovieDetailUC)
     public event EventHandler<Movie>? OnMovieClicked;
@@ -27,7 +31,7 @@ public partial class HomeUC : UserControl
     public HomeUC()
     {
         InitializeComponents();
-        LoadDummyData(); // Tải dữ liệu phim mẫu hiển thị demo
+        LoadMovieData();
     }
 
     private void InitializeComponents()
@@ -217,77 +221,41 @@ public partial class HomeUC : UserControl
         };
         btn.FlatAppearance.BorderSize = 0;
         return btn;
+        
     }
 
     // Tải dữ liệu giả lập để hiển thị thử giao diện
-    private void LoadDummyData()
+    
+    private void LoadMovieData()
     {
-        _allMovies = new List<Movie>
+        try
         {
-            new Movie
-            {
-                Id = 1,
-                Title = "Die Hard",
-                Genre = "Action",
-                Director = "John McTiernan",
-                DurationMinutes = 132,
-                ReleaseDate = new DateTime(1988, 7, 15),
-                Description = "Sĩ quan cảnh sát New York John McClane một mình đối đầu với nhóm khủng bố chiếm giữ tòa nhà Nakatomi Plaza vào đêm Giáng Sinh."
-            },
-            new Movie
-            {
-                Id = 2,
-                Title = "Grease",
-                Genre = "Musical",
-                Director = "Randal Kleiser",
-                DurationMinutes = 110,
-                ReleaseDate = new DateTime(1978, 6, 16),
-                Description = "Chuyện tình mùa hè đầy âm nhạc và vũ đạo sôi động giữa chàng trai Danny Zuko và cô nàng Sandy Olsson."
-            },
-            new Movie
-            {
-                Id = 3,
-                Title = "La La Land",
-                Genre = "Romance",
-                Director = "Damien Chazelle",
-                DurationMinutes = 128,
-                ReleaseDate = new DateTime(2016, 12, 9),
-                Description = "Một nghệ sĩ dương cầm nhạc Jazz và một nữ diễn viên đầy tham vọng đem lòng yêu nhau khi cùng theo đuổi ước mơ tại Los Angeles."
-            },
-            new Movie
-            {
-                Id = 4,
-                Title = "Avatar: The Way of Water",
-                Genre = "Sci-Fi",
-                Director = "James Cameron",
-                DurationMinutes = 192,
-                ReleaseDate = new DateTime(2022, 12, 16),
-                Description = "Jake Sully và Ney'tiri phải rời bỏ quê hương và khám phá các vùng biển của Pandora để bảo vệ gia đình trước mối đe dọa mới."
-            },
-            new Movie
-            {
-                Id = 5,
-                Title = "Oppenheimer",
-                Genre = "Drama",
-                Director = "Christopher Nolan",
-                DurationMinutes = 180,
-                ReleaseDate = new DateTime(2023, 7, 21),
-                Description = "Câu chuyện kịch tính về nhà vật lý J. Robert Oppenheimer và vai trò dẫn dắt Dự án Manhattan chế tạo bom nguyên tử."
-            },
-            new Movie
-            {
-                Id = 6,
-                Title = "Spider-Man: Across The Spider-Verse",
-                Genre = "Action",
-                Director = "Joaquim Dos Santos",
-                DurationMinutes = 140,
-                ReleaseDate = new DateTime(2023, 6, 2),
-                Description = "Miles Morales du hành qua Đa vũ trụ và gặp gỡ Đội quân Người Nhện bảo vệ sự tồn tại của mọi thế giới."
-            }
-        };
+            // Lấy danh sách phim mới nhất từ SQLite
+            List<Movie> movies = _movieRepository.GetAll();
 
-        DisplayMovies(_allMovies);
+            // Customer chỉ xem phim đang chiếu và sắp chiếu
+            _allMovies = movies
+                .Where(movie =>
+                    movie.Status == MovieStatus.Showing ||
+                    movie.Status == MovieStatus.ComingSoon)
+                .ToList();
+
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            _allMovies.Clear();
+            flpMovieGrid.Controls.Clear();
+
+            MessageBox.Show(
+                "Không thể tải danh sách phim từ hệ thống.\n\n" +
+                ex.Message,
+                "Lỗi tải phim",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
+
 
     private void DisplayMovies(List<Movie> movies)
     {
@@ -340,4 +308,12 @@ public partial class HomeUC : UserControl
     {
         ApplyFilter();
     }
-}
+
+
+    public void RefreshMovies()
+    {
+        LoadMovieData();
+    }
+
+} 
+
