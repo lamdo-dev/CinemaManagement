@@ -1,22 +1,19 @@
-﻿using System;
+﻿namespace CinemaManagement.UserControls.Admin;
+
+using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Dialogs;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
-using Dapper;
-using Microsoft.Data.Sqlite;
-
-namespace CinemaManagement.UserControls.Admin;
+using CinemaManagement.Repositories;
 
 public partial class MovieManagementUC : UserControl
 {
-    private const string ConnectionString = "Data Source=cinema.db";
-
-    private List<Movie> movies = new();
+    private readonly MovieRepository _movieRepository = new();
+    private List<Movie> _allMovies = new();
 
     private DataGridView dgvMovies = null!;
     private TextBox txtSearch = null!;
@@ -39,10 +36,10 @@ public partial class MovieManagementUC : UserControl
 
         Dock = DockStyle.Fill;
         BackColor = backgroundColor;
-        Padding = new Padding(10);
+        Padding = new Padding(15);
 
         BuildInterface();
-        LoadMoviesFromDatabase();
+        LoadMovieData();
     }
 
     // =====================================
@@ -51,31 +48,42 @@ public partial class MovieManagementUC : UserControl
 
     private void BuildInterface()
     {
+        // Khu vực tiêu đề (Dock Top để không bị thanh lọc đè lên)
+        Panel headerPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 75,
+            BackColor = backgroundColor
+        };
+
         Label lblTitle = new Label
         {
             Text = "QUẢN LÝ PHIM",
             Font = new Font("Segoe UI", 22, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
-            Location = new Point(10, 10)
+            Location = new Point(0, 0)
         };
 
         Label lblDescription = new Label
         {
-            Text = "Quản lý danh sách phim trong hệ thống rạp chiếu (Dữ liệu lưu trực tiếp vào cinema.db)",
+            Text = "Quản lý danh sách phim trong hệ thống rạp chiếu",
             Font = new Font("Segoe UI", 10),
             ForeColor = Color.FromArgb(148, 163, 184),
             AutoSize = true,
-            Location = new Point(12, 52)
+            Location = new Point(2, 44)
         };
 
+        headerPanel.Controls.Add(lblTitle);
+        headerPanel.Controls.Add(lblDescription);
+
+        // Khu vực tìm kiếm & lọc trạng thái
         Panel filterPanel = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 75,
+            Height = 70,
             BackColor = panelColor,
-            Padding = new Padding(15),
-            Margin = new Padding(0, 15, 0, 10)
+            Padding = new Padding(15)
         };
 
         Label lblSearch = new Label
@@ -83,15 +91,15 @@ public partial class MovieManagementUC : UserControl
             Text = "Tìm kiếm phim:",
             ForeColor = textColor,
             AutoSize = true,
-            Location = new Point(15, 27)
+            Location = new Point(15, 24)
         };
 
         txtSearch = new TextBox
         {
-            Location = new Point(145, 21),
-            Size = new Size(250, 30),
+            Location = new Point(135, 20),
+            Size = new Size(260, 30),
             Font = new Font("Segoe UI", 10),
-            PlaceholderText = "Nhập tên phim hoặc thể loại..."
+            PlaceholderText = "Tên phim, thể loại, đạo diễn..."
         };
 
         Label lblStatus = new Label
@@ -99,12 +107,12 @@ public partial class MovieManagementUC : UserControl
             Text = "Trạng thái:",
             ForeColor = textColor,
             AutoSize = true,
-            Location = new Point(425, 27)
+            Location = new Point(425, 24)
         };
 
         cboStatus = new ComboBox
         {
-            Location = new Point(515, 21),
+            Location = new Point(510, 20),
             Size = new Size(180, 30),
             Font = new Font("Segoe UI", 10),
             DropDownStyle = ComboBoxStyle.DropDownList
@@ -124,6 +132,7 @@ public partial class MovieManagementUC : UserControl
         filterPanel.Controls.Add(lblStatus);
         filterPanel.Controls.Add(cboStatus);
 
+        // Thanh nút chức năng
         btnAdd = CreateButton("+ Thêm phim", accentColor);
         btnEdit = CreateButton("Sửa phim", Color.FromArgb(217, 119, 6));
         btnDelete = CreateButton("Xóa phim", Color.FromArgb(220, 38, 38));
@@ -132,10 +141,10 @@ public partial class MovieManagementUC : UserControl
         FlowLayoutPanel buttonPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 55,
+            Height = 56,
             FlowDirection = FlowDirection.LeftToRight,
             BackColor = backgroundColor,
-            Padding = new Padding(0, 5, 0, 5),
+            Padding = new Padding(0, 9, 0, 9),
             WrapContents = false
         };
 
@@ -144,6 +153,7 @@ public partial class MovieManagementUC : UserControl
         buttonPanel.Controls.Add(btnDelete);
         buttonPanel.Controls.Add(btnReload);
 
+        // Bảng danh sách phim
         dgvMovies = new DataGridView
         {
             Dock = DockStyle.Fill,
@@ -182,6 +192,7 @@ public partial class MovieManagementUC : UserControl
         dgvMovies.Columns["Id"]!.FillWeight = 45;
         dgvMovies.Columns["Title"]!.FillWeight = 140;
 
+        // Chân trang
         lblTotal = new Label
         {
             Text = "Tổng số phim: 0",
@@ -192,20 +203,21 @@ public partial class MovieManagementUC : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
+        // Thứ tự Add chuẩn cho DockStyle
         Controls.Add(dgvMovies);
         Controls.Add(lblTotal);
         Controls.Add(buttonPanel);
         Controls.Add(filterPanel);
-        Controls.Add(lblDescription);
-        Controls.Add(lblTitle);
+        Controls.Add(headerPanel);
 
+        // Sự kiện
         txtSearch.TextChanged += (s, e) => RenderMovieGrid();
         cboStatus.SelectedIndexChanged += (s, e) => RenderMovieGrid();
 
         btnAdd.Click += BtnAdd_Click;
         btnEdit.Click += BtnEdit_Click;
         btnDelete.Click += BtnDelete_Click;
-        btnReload.Click += (s, e) => LoadMoviesFromDatabase();
+        btnReload.Click += (s, e) => LoadMovieData();
     }
 
     private Button CreateButton(string text, Color color)
@@ -226,131 +238,41 @@ public partial class MovieManagementUC : UserControl
     }
 
     // =====================================
-    // 2. ĐỒNG BỘ BẢNG & TẢI DỮ LIỆU TỪ SQLITE
+    // 2. TẢI & HIỂN THỊ DANH SÁCH PHIM
     // =====================================
 
-    private void EnsureMoviesTable(SqliteConnection connection)
-    {
-        connection.Execute(@"
-            CREATE TABLE IF NOT EXISTS Movies (
-                Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                Title TEXT NOT NULL,
-                Description TEXT,
-                DurationMinutes INTEGER NOT NULL DEFAULT 120,
-                Director TEXT,
-                Genre TEXT,
-                PosterUrl TEXT,
-                ReleaseDate TEXT,
-                Status INTEGER NOT NULL DEFAULT 0
-            );");
-
-        var existingCols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        using (var cmd = connection.CreateCommand())
-        {
-            cmd.CommandText = "PRAGMA table_info(\"Movies\");";
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
-            {
-                existingCols.Add(reader["name"]?.ToString() ?? string.Empty);
-            }
-        }
-
-        if (!existingCols.Contains("Description"))
-            connection.Execute("ALTER TABLE Movies ADD COLUMN Description TEXT;");
-        if (!existingCols.Contains("DurationMinutes"))
-            connection.Execute("ALTER TABLE Movies ADD COLUMN DurationMinutes INTEGER NOT NULL DEFAULT 120;");
-        if (!existingCols.Contains("Director"))
-            connection.Execute("ALTER TABLE Movies ADD COLUMN Director TEXT;");
-        if (!existingCols.Contains("Genre"))
-            connection.Execute("ALTER TABLE Movies ADD COLUMN Genre TEXT;");
-        if (!existingCols.Contains("PosterUrl"))
-            connection.Execute("ALTER TABLE Movies ADD COLUMN PosterUrl TEXT;");
-        if (!existingCols.Contains("ReleaseDate"))
-            connection.Execute("ALTER TABLE Movies ADD COLUMN ReleaseDate TEXT;");
-        if (!existingCols.Contains("Status"))
-            connection.Execute("ALTER TABLE Movies ADD COLUMN Status INTEGER NOT NULL DEFAULT 0;");
-    }
-
-    private void LoadMoviesFromDatabase()
+    private void LoadMovieData()
     {
         try
         {
-            using var connection = new SqliteConnection(ConnectionString);
-            connection.Open();
-
-            EnsureMoviesTable(connection);
-
-            var rows = connection.Query(@"
-                SELECT 
-                    rowid AS Id,
-                    COALESCE(Title, '') AS Title,
-                    COALESCE(Description, '') AS Description,
-                    COALESCE(DurationMinutes, 120) AS DurationMinutes,
-                    COALESCE(Director, '') AS Director,
-                    COALESCE(Genre, '') AS Genre,
-                    COALESCE(PosterUrl, '') AS PosterUrl,
-                    COALESCE(ReleaseDate, '') AS ReleaseDate,
-                    COALESCE(Status, 0) AS Status
-                FROM Movies
-                ORDER BY rowid DESC;").ToList();
-
-            movies = rows.Select(r => new Movie
-            {
-                Id = Convert.ToInt32(r.Id),
-                Title = (string)r.Title,
-                Description = (string)r.Description,
-                DurationMinutes = Convert.ToInt32(r.DurationMinutes),
-                Director = (string)r.Director,
-                Genre = (string)r.Genre,
-                PosterUrl = (string)r.PosterUrl,
-                ReleaseDate = ParseReleaseDate((string)r.ReleaseDate),
-                Status = (MovieStatus)Convert.ToInt32(r.Status)
-            }).ToList();
-
+            _allMovies = _movieRepository.GetAll();
             RenderMovieGrid();
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Lỗi khi tải danh sách phim từ cơ sở dữ liệu:\n{ex.Message}",
-                "Lỗi SQLite",
+                "Không thể tải danh sách phim từ database.\n\n" + ex.Message,
+                "Lỗi tải dữ liệu",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
         }
     }
 
-    private static DateTime ParseReleaseDate(string rawDate)
-    {
-        if (DateTime.TryParseExact(
-            rawDate,
-            new[] { "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "dd/MM/yyyy" },
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out DateTime parsedExact))
-        {
-            return parsedExact;
-        }
-
-        if (DateTime.TryParse(rawDate, out DateTime parsed))
-            return parsed;
-
-        return DateTime.Today;
-    }
-
     private void RenderMovieGrid()
     {
         dgvMovies.Rows.Clear();
 
-        string keyword = txtSearch.Text.Trim().ToLowerInvariant();
+        string keyword = txtSearch.Text.Trim();
         string selectedStatus = cboStatus.SelectedItem?.ToString() ?? "Tất cả";
 
-        var result = movies.Where(movie =>
+        var result = _allMovies.Where(movie =>
         {
-            bool matchName =
-                movie.Title.ToLowerInvariant().Contains(keyword) ||
-                movie.Genre.ToLowerInvariant().Contains(keyword) ||
-                movie.Director.ToLowerInvariant().Contains(keyword);
+            bool matchKeyword =
+                string.IsNullOrEmpty(keyword) ||
+                (movie.Title ?? string.Empty).Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                (movie.Genre ?? string.Empty).Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                (movie.Director ?? string.Empty).Contains(keyword, StringComparison.OrdinalIgnoreCase);
 
             bool matchStatus = selectedStatus switch
             {
@@ -360,12 +282,12 @@ public partial class MovieManagementUC : UserControl
                 _ => true
             };
 
-            return matchName && matchStatus;
+            return matchKeyword && matchStatus;
         }).ToList();
 
         foreach (Movie movie in result)
         {
-            int rowIndex = dgvMovies.Rows.Add(
+            dgvMovies.Rows.Add(
                 movie.Id,
                 movie.Title,
                 movie.Genre,
@@ -374,10 +296,9 @@ public partial class MovieManagementUC : UserControl
                 movie.ReleaseDate.ToString("dd/MM/yyyy"),
                 GetStatusText(movie.Status)
             );
-            dgvMovies.Rows[rowIndex].Tag = movie;
         }
 
-        lblTotal.Text = $"Tổng số phim: {result.Count} / {movies.Count}";
+        lblTotal.Text = $"Tổng số phim: {result.Count} / {_allMovies.Count}";
     }
 
     private string GetStatusText(MovieStatus status)
@@ -392,168 +313,167 @@ public partial class MovieManagementUC : UserControl
     }
 
     // =====================================
-    // 3. THÊM / SỬA / XÓA PHIM TRONG SQLITE
+    // 3. THÊM / SỬA / XÓA PHIM QUA REPOSITORY
     // =====================================
 
     private void BtnAdd_Click(object? sender, EventArgs e)
     {
-        using MovieEditDialog dialog = new MovieEditDialog();
-
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+        try
         {
-            Movie m = dialog.MovieData;
+            using MovieEditDialog dialog = new MovieEditDialog();
 
-            try
+            if (dialog.ShowDialog(this) == DialogResult.OK)
             {
-                using var connection = new SqliteConnection(ConnectionString);
-                connection.Open();
-
-                connection.Execute(@"
-                    INSERT INTO Movies 
-                        (Title, Description, DurationMinutes, Director, Genre, PosterUrl, ReleaseDate, Status)
-                    VALUES 
-                        (@Title, @Description, @DurationMinutes, @Director, @Genre, @PosterUrl, @ReleaseDate, @Status);",
-                    new
-                    {
-                        m.Title,
-                        m.Description,
-                        m.DurationMinutes,
-                        m.Director,
-                        m.Genre,
-                        m.PosterUrl,
-                        ReleaseDate = m.ReleaseDate.ToString("yyyy-MM-dd"),
-                        Status = (int)m.Status
-                    });
-
-                LoadMoviesFromDatabase();
+                int newId = _movieRepository.Add(dialog.MovieData);
+                LoadMovieData();
 
                 MessageBox.Show(
-                    "Thêm phim mới vào cơ sở dữ liệu thành công!",
+                    $"Thêm phim thành công!\nMã phim: {newId}",
                     "Thông báo",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information
                 );
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"Lỗi khi lưu phim mới:\n{ex.Message}",
-                    "Lỗi",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể thêm phim vào database.\n\n" + ex.Message,
+                "Lỗi thêm phim",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
         }
     }
 
     private void BtnEdit_Click(object? sender, EventArgs e)
     {
-        if (dgvMovies.SelectedRows.Count == 0)
+        try
         {
-            MessageBox.Show("Vui lòng chọn phim cần sửa!");
-            return;
-        }
-
-        if (dgvMovies.SelectedRows[0].Tag is not Movie selectedMovie)
-            return;
-
-        using MovieEditDialog dialog = new MovieEditDialog(selectedMovie);
-
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            Movie m = dialog.MovieData;
-
-            try
+            if (dgvMovies.SelectedRows.Count == 0)
             {
-                using var connection = new SqliteConnection(ConnectionString);
-                connection.Open();
-
-                connection.Execute(@"
-                    UPDATE Movies
-                    SET Title = @Title,
-                        Description = @Description,
-                        DurationMinutes = @DurationMinutes,
-                        Director = @Director,
-                        Genre = @Genre,
-                        PosterUrl = @PosterUrl,
-                        ReleaseDate = @ReleaseDate,
-                        Status = @Status
-                    WHERE rowid = @Id;",
-                    new
-                    {
-                        Id = selectedMovie.Id,
-                        m.Title,
-                        m.Description,
-                        m.DurationMinutes,
-                        m.Director,
-                        m.Genre,
-                        m.PosterUrl,
-                        ReleaseDate = m.ReleaseDate.ToString("yyyy-MM-dd"),
-                        Status = (int)m.Status
-                    });
-
-                LoadMoviesFromDatabase();
-
                 MessageBox.Show(
-                    "Cập nhật thông tin phim thành công!",
+                    "Vui lòng chọn phim cần sửa!",
                     "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Information
+                    MessageBoxIcon.Warning
                 );
+                return;
             }
-            catch (Exception ex)
+
+            int id = Convert.ToInt32(dgvMovies.SelectedRows[0].Cells["Id"].Value);
+            Movie? selectedMovie = _movieRepository.GetById(id);
+
+            if (selectedMovie == null)
             {
                 MessageBox.Show(
-                    $"Lỗi khi cập nhật phim:\n{ex.Message}",
-                    "Lỗi",
+                    "Không tìm thấy phim!",
+                    "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
+                    MessageBoxIcon.Warning
                 );
+                LoadMovieData();
+                return;
             }
+
+            using MovieEditDialog dialog = new MovieEditDialog(selectedMovie);
+
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                dialog.MovieData.Id = id;
+                bool updated = _movieRepository.Update(dialog.MovieData);
+
+                if (updated)
+                {
+                    LoadMovieData();
+                    MessageBox.Show(
+                        "Cập nhật phim thành công!",
+                        "Thông báo",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "Không có dữ liệu phim nào được cập nhật.",
+                        "Thông báo",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể cập nhật phim.\n\n" + ex.Message,
+                "Lỗi cập nhật",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
         }
     }
 
     private void BtnDelete_Click(object? sender, EventArgs e)
     {
-        if (dgvMovies.SelectedRows.Count == 0)
+        try
         {
-            MessageBox.Show("Vui lòng chọn phim cần xóa!");
-            return;
-        }
-
-        if (dgvMovies.SelectedRows[0].Tag is not Movie selectedMovie)
-            return;
-
-        DialogResult confirm = MessageBox.Show(
-            $"Bạn có chắc chắn muốn xóa phim '{selectedMovie.Title}' không?",
-            "Xác nhận xóa",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question
-        );
-
-        if (confirm == DialogResult.Yes)
-        {
-            try
-            {
-                using var connection = new SqliteConnection(ConnectionString);
-                connection.Open();
-
-                connection.Execute(
-                    "DELETE FROM Movies WHERE rowid = @Id;",
-                    new { Id = selectedMovie.Id });
-
-                LoadMoviesFromDatabase();
-                MessageBox.Show("Xóa phim thành công!");
-            }
-            catch (Exception ex)
+            if (dgvMovies.SelectedRows.Count == 0)
             {
                 MessageBox.Show(
-                    $"Lỗi khi xóa phim:\n{ex.Message}",
-                    "Lỗi",
+                    "Vui lòng chọn phim cần xóa!",
+                    "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
+                    MessageBoxIcon.Warning
+                );
+                return;
+            }
+
+            int id = Convert.ToInt32(dgvMovies.SelectedRows[0].Cells["Id"].Value);
+
+            DialogResult confirm = MessageBox.Show(
+                "Bạn có chắc chắn muốn xóa phim này?",
+                "Xác nhận xóa",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question
+            );
+
+            if (confirm != DialogResult.Yes)
+                return;
+
+            bool deleted = _movieRepository.Delete(id);
+
+            if (deleted)
+            {
+                LoadMovieData();
+                MessageBox.Show(
+                    "Xóa phim thành công!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
                 );
             }
+            else
+            {
+                MessageBox.Show(
+                    "Không tìm thấy phim cần xóa.",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể xóa phim.\n\n" +
+                "Có thể phim đang được sử dụng trong lịch chiếu.\n\n" +
+                ex.Message,
+                "Lỗi xóa phim",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
         }
     }
 }

@@ -9,6 +9,7 @@ using CinemaManagement.UserControls.Admin;
 using CinemaManagement.UserControls.Customer;
 using CinemaManagement.UserControls.Staff;
 using CinemaManagement.Utils;
+using CinemaManagement.Services;
 
 namespace CinemaManagement
 {
@@ -165,18 +166,30 @@ namespace CinemaManagement
                     () => SwitchView(
                         "⏰ Lịch chiếu rạp",
                         new ShowtimeManagementUC()));
-
+                AddNavButton(
+                    "💰 Quản lý Giá vé",
+                    () => SwitchView(
+                        "💰 Quản lý giá vé",
+                        new PricingUC()));
+                
                 AddNavButton(
                     "🍿 Quản lý Bắp nước",
                     () => SwitchView(
                         "🍿 Menu sản phẩm",
                         new FoodManagementUC()));
+                
+                AddNavButton(
+                    "🎟️ Quản lý Khuyến mãi",
+                    () => SwitchView(
+                        "🎟️ Quản lý chương trình khuyến mãi",
+                        new PromotionUC()));
 
                 AddNavButton(
                     "👥 Quản lý Người dùng",
                     () => SwitchView(
                         "👥 Tài khoản người dùng",
                         new UserManagementUC()));
+
             }
             
             // CUSTOMER MENU (Chỉ hiển thị cho Customer)
@@ -187,6 +200,12 @@ namespace CinemaManagement
                 AddNavButton(
                     "🏠 Trang chủ Phim",
                     OpenHomeView);
+                
+                AddNavButton(
+                    "🎁 Khuyến mãi",
+                    () => SwitchView(
+                        "🎁 Ưu đãi & Khuyến mãi",
+                        new PromotionListUC()));
 
                 AddNavButton(
                     "📅 Lịch chiếu",
@@ -555,6 +574,7 @@ namespace CinemaManagement
         // STEP 5: CHECKOUT
         // ---------------------------------------------------------
 
+        
         private void OpenCheckoutView()
         {
             if (!_bookingContext.CanCheckout)
@@ -593,23 +613,40 @@ namespace CinemaManagement
 
                 try
                 {
-                    // Chỉ ghi nhận đơn sau khi thanh toán thành công.
+                    // 1. Trừ tồn kho bắp nước trong SQLite
+                    FoodService foodService = new FoodService();
+
+                    foodService.DeductStockForOrder(
+                        _bookingContext.FoodCart
+                    );
+
+                    // 2. Ghi nhận đơn đặt vé
                     UserSession.AddBooking(result);
 
+                    // 3. Chuyển đến màn hình vé
                     OpenTicketView(result);
                 }
                 catch (InvalidOperationException ex)
                 {
                     MessageBox.Show(
                         ex.Message,
-                        "Không thể đặt vé",
+                        "Không thể hoàn tất đơn hàng",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        "Lỗi xử lý đơn hàng:\n" + ex.Message,
+                        "Lỗi",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
                 }
             };
 
             SwitchView("💳 Thanh toán", checkoutUC);
         }
+
 
         // ---------------------------------------------------------
         // STEP 6: TICKET

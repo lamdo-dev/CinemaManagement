@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Services;
 
 namespace CinemaManagement.UserControls.Customer
 {
@@ -24,6 +25,9 @@ namespace CinemaManagement.UserControls.Customer
 
         private BookingContext? _bookingContext;
 
+        // Service lấy dữ liệu sản phẩm từ SQLite
+        private readonly FoodService _foodService = new();
+
         private Panel pnlHeader = null!;
         private Button btnBack = null!;
         private FlowLayoutPanel flpFoodCatalog = null!;
@@ -31,7 +35,6 @@ namespace CinemaManagement.UserControls.Customer
         private FlowLayoutPanel flpCartItemList = null!;
         private Label lblTotalFoodPrice = null!;
 
-        // Hai nút điều hướng
         private Button btnContinue = null!;
         private Button btnSkipFood = null!;
 
@@ -72,7 +75,6 @@ namespace CinemaManagement.UserControls.Customer
             _bookingContext = bookingContext
                               ?? throw new ArgumentNullException(nameof(bookingContext));
 
-            // Nhận tổng tiền vé
             TicketTotalAmount = bookingContext.TicketAmount;
 
             // Khôi phục giỏ hàng đã lưu
@@ -83,7 +85,6 @@ namespace CinemaManagement.UserControls.Customer
                 string ImgPath
             )>(bookingContext.FoodCart);
 
-            // Cập nhật giao diện sản phẩm và giỏ hàng
             LoadFoodCatalog();
             UpdateCartSummaryUI();
         }
@@ -243,7 +244,6 @@ namespace CinemaManagement.UserControls.Customer
 
             // ==========================================
             // FOOTER GIỎ HÀNG
-            // Tăng chiều cao để chứa hai nút
             // ==========================================
             Panel pnlCartFooter = new Panel
             {
@@ -285,9 +285,7 @@ namespace CinemaManagement.UserControls.Customer
             btnContinue.FlatAppearance.BorderSize = 0;
             btnContinue.Click += BtnContinue_Click;
 
-            // ==========================================
-            // NÚT BỎ QUA BẮP NƯỚC
-            // ==========================================
+            // Nút bỏ qua bắp nước
             btnSkipFood = new Button
             {
                 Text = "BỎ QUA BẮP NƯỚC →",
@@ -301,19 +299,16 @@ namespace CinemaManagement.UserControls.Customer
             };
 
             btnSkipFood.FlatAppearance.BorderSize = 0;
-
             btnSkipFood.FlatAppearance.MouseOverBackColor =
                 Color.FromArgb(75, 77, 95);
 
             btnSkipFood.Click += BtnSkipFood_Click;
 
-            // Thêm các control vào Footer
             pnlCartFooter.Controls.Add(lblTotalLabel);
             pnlCartFooter.Controls.Add(lblTotalFoodPrice);
             pnlCartFooter.Controls.Add(btnContinue);
             pnlCartFooter.Controls.Add(btnSkipFood);
 
-            // Thêm các control vào giỏ hàng
             pnlCartSummary.Controls.Add(flpCartItemList);
             pnlCartSummary.Controls.Add(pnlCartHeader);
             pnlCartSummary.Controls.Add(pnlCartFooter);
@@ -335,55 +330,101 @@ namespace CinemaManagement.UserControls.Customer
         }
 
         // ==========================================
-        // TẢI DANH SÁCH SẢN PHẨM
+        // TẢI DANH SÁCH SẢN PHẨM TỪ SQLITE
         // ==========================================
         private void LoadFoodCatalog()
         {
             flpFoodCatalog.Controls.Clear();
 
-            var products = new List<(
-                int Id, string Name, decimal Price, string Desc
-            )>
+            try
             {
-                (1, "Coca Cola Regular 375ml", 35000m,
-                    "Nước ngọt có ga hương vị truyền thống mát lạnh."),
+                var products = _foodService.GetAll()
+                    .Where(p => p.IsActive && p.StockQuantity > 0)
+                    .ToList();
 
-                (2, "Sprite Regular 375ml", 35000m,
-                    "Nước giải khát hương chanh sảng khoái."),
+                // Loại bỏ sản phẩm không còn được bán hoặc hết hàng
+                var availableIds = products.Select(p => p.Id).ToHashSet();
 
-                (3, "Fanta Orange 375ml", 35000m,
-                    "Nước ngọt hương cam tươi mát."),
+                foreach (int id in cartItems.Keys
+                             .Where(id => !availableIds.Contains(id))
+                             .ToList())
+                {
+                    cartItems.Remove(id);
+                }
 
-                (4, "Bắp Rang Bơ Thơm Lừng L", 55000m,
-                    "Bắp rang bơ vàng óng, giòn rụm đậm vị."),
+                foreach (var product in products)
+                {
+                    int currentQty = cartItems.TryGetValue(
+                        product.Id,
+                        out var cartItem)
+                        ? cartItem.Qty
+                        : 0;
 
-                (5, "Bắp Rang Phô Mai L", 65000m,
-                    "Bắp rang phủ bột phô mai béo ngậy cực cuốn."),
+                    // Không khôi phục số lượng vượt tồn kho
+                    currentQty = Math.Min(currentQty, product.StockQuantity);
 
-                (6, "Combo Solo (1 Bắp L + 1 Nước L)", 85000m,
-                    "Tiết kiệm 10.000đ cho suất 1 người xem."),
+                    if (currentQty > 0)
+                    {
+                        cartItems[product.Id] = (
+                            product.Name,
+                            product.Price,
+                            currentQty,
+                            product.ImageUrl ?? string.Empty
+                        );
+                    }
+                    else
+                    {
+                        cartItems.Remove(product.Id);
+                    }
 
-                (7, "Combo Couple (1 Bắp L + 2 Nước L)", 115000m,
-                    "Trọn gói bắp nước hoàn hảo cho cặp đôi."),
+                    Panel card = CreateFoodCard(
+                        product.Id,
+                        product.Name,
+                        product.Price,
+                        product.Category,
+                        product.ImageUrl ?? string.Empty,
+                        product.StockQuantity,
+                        currentQty
+                    );
 
-                (8, "Combo Family (2 Bắp L + 3 Nước L)", 195000m,
-                    "Ưu đãi lớn dành cho nhóm bạn và gia đình.")
-            };
+                    flpFoodCatalog.Controls.Add(card);
+                }
 
-            foreach (var prod in products)
+                if (products.Count == 0)
+                {
+                    Label lblEmpty = new Label
+                    {
+                        Text = "Hiện chưa có sản phẩm bắp nước còn hàng.",
+                        ForeColor = ColorTextMuted,
+                        Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                        AutoSize = true,
+                        Margin = new Padding(20)
+                    };
+
+                    flpFoodCatalog.Controls.Add(lblEmpty);
+                }
+
+                SyncBookingContext();
+            }
+            catch (Exception ex)
             {
-                int currentQty = cartItems.ContainsKey(prod.Id)
-                    ? cartItems[prod.Id].Qty
-                    : 0;
+                Label lblError = new Label
+                {
+                    Text = "Không thể tải danh sách sản phẩm từ cơ sở dữ liệu.",
+                    ForeColor = Color.IndianRed,
+                    Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                    AutoSize = true,
+                    Margin = new Padding(20)
+                };
 
-                Panel card = CreateFoodCard(
-                    prod.Id,
-                    prod.Name,
-                    prod.Price,
-                    prod.Desc,
-                    currentQty);
+                flpFoodCatalog.Controls.Add(lblError);
 
-                flpFoodCatalog.Controls.Add(card);
+                MessageBox.Show(
+                    "Không thể tải danh sách sản phẩm từ cơ sở dữ liệu:\n" + ex.Message,
+                    "Lỗi tải sản phẩm",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
             }
         }
 
@@ -394,12 +435,14 @@ namespace CinemaManagement.UserControls.Customer
             int id,
             string name,
             decimal price,
-            string desc,
+            string category,
+            string imgPath,
+            int stockQuantity,
             int initialQty)
         {
             Panel card = new Panel
             {
-                Size = new Size(240, 290),
+                Size = new Size(240, 310),
                 BackColor = ColorCard,
                 Margin = new Padding(0, 0, 15, 15)
             };
@@ -412,6 +455,28 @@ namespace CinemaManagement.UserControls.Customer
                 BackColor = Color.FromArgb(20, 21, 30)
             };
 
+            // Hỗ trợ đường dẫn ảnh cục bộ
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(imgPath) &&
+                    System.IO.File.Exists(imgPath))
+                {
+                    using var stream = new System.IO.FileStream(
+                        imgPath,
+                        System.IO.FileMode.Open,
+                        System.IO.FileAccess.Read,
+                        System.IO.FileShare.ReadWrite
+                    );
+
+                    using var sourceImage = Image.FromStream(stream);
+                    picImg.Image = new Bitmap(sourceImage);
+                }
+            }
+            catch
+            {
+                // Không có ảnh hoặc ảnh lỗi thì vẫn hiển thị card
+            }
+
             Label lblName = new Label
             {
                 Text = name,
@@ -422,13 +487,14 @@ namespace CinemaManagement.UserControls.Customer
                 AutoEllipsis = true
             };
 
-            Label lblDesc = new Label
+            Label lblCategory = new Label
             {
-                Text = desc,
+                Text = category,
                 Font = new Font("Segoe UI", 8.5f),
                 ForeColor = ColorTextMuted,
                 Location = new Point(12, 162),
-                Size = new Size(216, 36)
+                Size = new Size(216, 20),
+                AutoEllipsis = true
             };
 
             Label lblPrice = new Label
@@ -436,7 +502,16 @@ namespace CinemaManagement.UserControls.Customer
                 Text = $"{price.ToString("N0", new CultureInfo("vi-VN"))} đ",
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 ForeColor = ColorGold,
-                Location = new Point(12, 210),
+                Location = new Point(12, 190),
+                AutoSize = true
+            };
+
+            Label lblStock = new Label
+            {
+                Text = $"Còn lại: {stockQuantity}",
+                Font = new Font("Segoe UI", 8),
+                ForeColor = ColorTextMuted,
+                Location = new Point(12, 218),
                 AutoSize = true
             };
 
@@ -448,7 +523,7 @@ namespace CinemaManagement.UserControls.Customer
                 BackColor = ColorControlBg,
                 FlatStyle = FlatStyle.Flat,
                 Size = new Size(32, 32),
-                Location = new Point(120, 245),
+                Location = new Point(120, 260),
                 Cursor = Cursors.Hand
             };
 
@@ -459,7 +534,7 @@ namespace CinemaManagement.UserControls.Customer
                 Text = initialQty.ToString(),
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = Color.White,
-                Location = new Point(154, 245),
+                Location = new Point(154, 260),
                 Size = new Size(36, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.FromArgb(20, 21, 30)
@@ -473,7 +548,7 @@ namespace CinemaManagement.UserControls.Customer
                 BackColor = ColorControlBg,
                 FlatStyle = FlatStyle.Flat,
                 Size = new Size(32, 32),
-                Location = new Point(192, 245),
+                Location = new Point(192, 260),
                 Cursor = Cursors.Hand
             };
 
@@ -484,32 +559,57 @@ namespace CinemaManagement.UserControls.Customer
             {
                 int qty = int.Parse(lblQty.Text);
 
-                if (qty > 0)
-                {
-                    qty--;
-                    lblQty.Text = qty.ToString();
+                if (qty <= 0)
+                    return;
 
-                    UpdateCartItem(id, name, price, qty, "");
-                }
+                qty--;
+                lblQty.Text = qty.ToString();
+
+                UpdateCartItem(
+                    id,
+                    name,
+                    price,
+                    qty,
+                    imgPath
+                );
             };
 
-            // Tăng số lượng
+            // Tăng số lượng và kiểm tra tồn kho
             btnPlus.Click += (s, e) =>
             {
                 int qty = int.Parse(lblQty.Text);
 
+                if (qty >= stockQuantity)
+                {
+                    MessageBox.Show(
+                        $"Sản phẩm chỉ còn {stockQuantity} trong kho.",
+                        "Thông báo tồn kho",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+
+                    return;
+                }
+
                 qty++;
                 lblQty.Text = qty.ToString();
 
-                UpdateCartItem(id, name, price, qty, "");
+                UpdateCartItem(
+                    id,
+                    name,
+                    price,
+                    qty,
+                    imgPath
+                );
             };
 
             card.Controls.AddRange(new Control[]
             {
                 picImg,
                 lblName,
-                lblDesc,
+                lblCategory,
                 lblPrice,
+                lblStock,
                 btnMinus,
                 lblQty,
                 btnPlus
@@ -519,7 +619,7 @@ namespace CinemaManagement.UserControls.Customer
         }
 
         // ==========================================
-        // CẬP NHẬT MỘT SẢN PHẨM
+        // CẬP NHẬT MỘT SẢN PHẨM TRONG GIỎ
         // ==========================================
         private void UpdateCartItem(
             int id,
@@ -624,38 +724,36 @@ namespace CinemaManagement.UserControls.Customer
         // ==========================================
         private void BtnContinue_Click(object? sender, EventArgs e)
         {
-            // Kiểm tra BookingContext
             if (_bookingContext == null)
             {
                 MessageBox.Show(
                     "Không tìm thấy thông tin đặt vé. Vui lòng thử lại.",
                     "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Warning
+                );
 
                 return;
             }
 
-            // Kiểm tra dữ liệu đặt ghế
             if (!_bookingContext.CanCheckout)
             {
                 MessageBox.Show(
                     "Vui lòng hoàn thành bước chọn phim, suất chiếu và ghế.",
                     "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Warning
+                );
 
                 return;
             }
 
-            // Tính tổng tiền bắp nước
             decimal totalFood = cartItems.Sum(
-                item => item.Value.Price * item.Value.Qty);
+                item => item.Value.Price * item.Value.Qty
+            );
 
-            // Đồng bộ giỏ hàng
             SyncBookingContext();
 
-            // Tạo bản sao giỏ hàng để gửi sang CheckoutUC
             var foodCartCopy = new Dictionary<int, (
                 string Name,
                 decimal Price,
@@ -663,10 +761,10 @@ namespace CinemaManagement.UserControls.Customer
                 string ImgPath
             )>(cartItems);
 
-            // Chuyển dữ liệu sang MainForm
             OnContinueToCheckout?.Invoke(
                 this,
-                (foodCartCopy, totalFood));
+                (foodCartCopy, totalFood)
+            );
         }
 
         // ==========================================
@@ -674,37 +772,34 @@ namespace CinemaManagement.UserControls.Customer
         // ==========================================
         private void BtnSkipFood_Click(object? sender, EventArgs e)
         {
-            // Kiểm tra BookingContext
             if (_bookingContext == null)
             {
                 MessageBox.Show(
                     "Không tìm thấy thông tin đặt vé. Vui lòng thử lại.",
                     "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Warning
+                );
 
                 return;
             }
 
-            // Kiểm tra thông tin đặt ghế
             if (!_bookingContext.CanCheckout)
             {
                 MessageBox.Show(
                     "Vui lòng hoàn thành bước chọn phim, suất chiếu và ghế trước khi thanh toán.",
                     "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Warning
+                );
 
                 return;
             }
 
-            // Xóa toàn bộ bắp nước trong giỏ hàng
             cartItems.Clear();
 
-            // Đồng bộ giỏ hàng rỗng vào BookingContext
             SyncBookingContext();
 
-            // Tạo giỏ hàng rỗng để chuyển sang CheckoutUC
             var emptyFoodCart = new Dictionary<int, (
                 string Name,
                 decimal Price,
@@ -712,11 +807,10 @@ namespace CinemaManagement.UserControls.Customer
                 string ImgPath
             )>();
 
-            // Chuyển thẳng đến thanh toán
-            // Tổng tiền bắp nước = 0 đồng
             OnContinueToCheckout?.Invoke(
                 this,
-                (emptyFoodCart, 0m));
+                (emptyFoodCart, 0m)
+            );
         }
     }
 }

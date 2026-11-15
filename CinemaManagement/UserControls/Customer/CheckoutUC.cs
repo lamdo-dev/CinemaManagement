@@ -10,6 +10,7 @@ using System.Linq;
 using System.Windows.Forms;
 using System.IO;
 using CinemaManagement.Models;
+using CinemaManagement.Services;    
 
 public partial class CheckoutUC : UserControl
 {
@@ -43,6 +44,8 @@ public partial class CheckoutUC : UserControl
     private decimal foodSubTotal;
     private decimal discountAmount;
     private decimal totalAmount;
+    private readonly PromotionService _promotionService = new();
+    private Promotion? _appliedPromotion;
 
     // =========================================================
     // 3. UI CONTROLS
@@ -136,7 +139,9 @@ public partial class CheckoutUC : UserControl
         ticketSubTotal = context.TicketAmount;
         foodSubTotal = context.FoodAmount;
 
+// Xóa voucher đã áp dụng từ đơn hàng trước
         discountAmount = 0m;
+        _appliedPromotion = null;
 
         txtCoupon.Clear();
         lblCouponMsg.Text = string.Empty;
@@ -865,48 +870,136 @@ public partial class CheckoutUC : UserControl
     // 13. APPLY COUPON
     // =========================================================
 
-    private void BtnApplyCoupon_Click(object? sender, EventArgs e)
-    {
-        string code = txtCoupon.Text.Trim().ToUpperInvariant();
-
-        if (code == "MYTICKET20" || code == "CINEMA2026")
+    
+        private void BtnApplyCoupon_Click(object? sender, EventArgs e)
         {
-            if (ticketSubTotal + foodSubTotal < 20000m)
-            {
-                discountAmount = 0m;
+            string code = txtCoupon.Text.Trim().ToUpperInvariant();
 
+            // Xóa trạng thái voucher cũ trước khi kiểm tra mã mới
+            _appliedPromotion = null;
+            discountAmount = 0m;
+
+            if (string.IsNullOrWhiteSpace(code))
+            {
                 lblCouponMsg.ForeColor = Color.OrangeRed;
-                lblCouponMsg.Text =
-                    "Đơn hàng chưa đủ điều kiện áp dụng mã.";
+                lblCouponMsg.Text = "Vui lòng nhập mã voucher.";
 
                 CalculateTotal();
                 UpdateUIWithData();
                 return;
             }
 
-            discountAmount = 20000m;
+            try
+            {
+                // Lấy danh sách voucher từ SQLite
+                Promotion? promotion = _promotionService.GetAll()
+                    .FirstOrDefault(p =>
+                        string.Equals(
+                            p.Code?.Trim(),
+                            code,
+                            StringComparison.OrdinalIgnoreCase));
 
-            lblCouponMsg.ForeColor = Color.LightGreen;
-            lblCouponMsg.Text =
-                "✓ Áp dụng mã giảm giá 20.000đ thành công!";
+                if (promotion == null)
+                {
+                    ShowCouponError("Mã voucher không tồn tại.");
+                    return;
+                }
+
+                // Kiểm tra trạng thái
+                if (!promotion.IsEnabled)
+                {
+                    ShowCouponError("Voucher hiện đã bị vô hiệu hóa.");
+                    return;
+                }
+
+                // Kiểm tra thời hạn
+                DateTime today = DateTime.Today;
+
+                if (today < promotion.StartDate.Date ||
+                    today > promotion.EndDate.Date)
+                {
+                    ShowCouponError("Voucher chưa đến thời gian áp dụng hoặc đã hết hạn.");
+                    return;
+                }
+
+                // Tổng giá trị đơn hàng trước giảm giá
+                decimal orderAmount = ticketSubTotal + foodSubTotal;
+
+                // Kiểm tra đơn hàng tối thiểu
+                if (orderAmount < promotion.MinimumOrder)
+                {
+                    ShowCouponError(
+                        $"Đơn hàng cần đạt tối thiểu " +
+                        $"{promotion.MinimumOrder.ToString("N0", ViCulture)} đ.");
+                    return;
+                }
+
+                // Tính tiền giảm
+                decimal calculatedDiscount;
+
+                if (promotion.DiscountType == "Phần trăm")
+                {
+                    calculatedDiscount =
+                        orderAmount * promotion.DiscountValue / 100m;
+
+                    // Áp dụng giới hạn giảm tối đa nếu có
+                    if (promotion.MaxDiscount > 0 &&
+                        calculatedDiscount > promotion.MaxDiscount)
+                    {
+                        calculatedDiscount = promotion.MaxDiscount;
+                    }
+                }
+                else if (promotion.DiscountType == "Số tiền")
+                {
+                    calculatedDiscount = promotion.DiscountValue;
+                }
+                else
+                {
+                    ShowCouponError("Loại giảm giá của voucher không hợp lệ.");
+                    return;
+                }
+
+                // Không giảm vượt quá tổng đơn hàng
+                calculatedDiscount = Math.Min(
+                    calculatedDiscount,
+                    orderAmount);
+
+                if (calculatedDiscount <= 0)
+                {
+                    ShowCouponError("Voucher không tạo ra giá trị giảm hợp lệ.");
+                    return;
+                }
+
+                // Lưu voucher đang áp dụng
+                _appliedPromotion = promotion;
+                discountAmount = calculatedDiscount;
+
+                lblCouponMsg.ForeColor = Color.LightGreen;
+                lblCouponMsg.Text =
+                    $"✓ Áp dụng {promotion.Code} thành công!";
+
+                CalculateTotal();
+                UpdateUIWithData();
+            }
+            catch (Exception ex)
+            {
+                ShowCouponError(
+                    "Không thể kiểm tra voucher:\n" + ex.Message);
+            }
         }
-        else if (string.IsNullOrWhiteSpace(code))
+
+        private void ShowCouponError(string message)
         {
-            discountAmount = 0m;
-            lblCouponMsg.Text = string.Empty;
-        }
-        else
-        {
+            _appliedPromotion = null;
             discountAmount = 0m;
 
             lblCouponMsg.ForeColor = Color.OrangeRed;
-            lblCouponMsg.Text =
-                "✕ Mã giảm giá không hợp lệ hoặc đã hết hạn.";
+            lblCouponMsg.Text = message;
+
+            CalculateTotal();
+            UpdateUIWithData();
         }
 
-        CalculateTotal();
-        UpdateUIWithData();
-    }
 
     // =========================================================
     // 14. PAYMENT
@@ -1029,6 +1122,8 @@ public partial class CheckoutUC : UserControl
                         string ImgPath)>(FoodCart),
 
                     TotalAmount = totalAmount,
+                    PromotionCode = _appliedPromotion?.Code ?? string.Empty,
+                    DiscountAmount = discountAmount,
                     BookingTime = DateTime.Now,
                     Channel = "Online",
                     PaymentMethod = "Thanh toán mô phỏng"
@@ -1081,6 +1176,9 @@ public class BookingResultEventArgs : EventArgs
         { get; set; } = new();
 
     public decimal TotalAmount { get; set; }
+    public string PromotionCode { get; set; } = string.Empty;
+
+    public decimal DiscountAmount { get; set; }
 
     public DateTime BookingTime { get; set; }
 

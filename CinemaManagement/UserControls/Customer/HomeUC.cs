@@ -3,18 +3,16 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
+using CinemaManagement.Repositories;
 using CinemaManagement.UserControls.Common;
-using Dapper;
-using Microsoft.Data.Sqlite;
 
 public partial class HomeUC : UserControl
 {
-    private const string ConnectionString = "Data Source=cinema.db";
+    private readonly MovieRepository _movieRepository = new();
 
     private Panel pnlSidebar = null!;
     private Panel pnlMainContent = null!;
@@ -30,7 +28,7 @@ public partial class HomeUC : UserControl
 
     private List<Movie> _allMovies = new();
     private string? _selectedGenreFilter;
-    private MovieStatus? _selectedStatusFilter = MovieStatus.Showing; // Mặc định hiện Phim đang chiếu
+    private MovieStatus? _selectedStatusFilter = MovieStatus.Showing;
 
     // Sự kiện chuyển màn hình sang Chi tiết Phim (MovieDetailUC)
     public event EventHandler<Movie>? OnMovieClicked;
@@ -41,14 +39,14 @@ public partial class HomeUC : UserControl
     public HomeUC()
     {
         InitializeComponents();
-        LoadMoviesFromDatabase();
+        RefreshMovies();
 
-        // Tự động làm mới dữ liệu mỗi khi người dùng quay lại màn hình Trang chủ
+        // Tự động làm mới dữ liệu khi quay lại màn hình Trang chủ
         this.VisibleChanged += (s, e) =>
         {
             if (this.Visible)
             {
-                LoadMoviesFromDatabase();
+                RefreshMovies();
             }
         };
     }
@@ -89,6 +87,7 @@ public partial class HomeUC : UserControl
             lblTitle.Text = "Phim Đang Chiếu";
             lblSubTitle.Text = "Chọn phim bạn yêu thích hoặc nhấn 'Đặt vé ngay' để chọn suất chiếu.";
             SetActiveSidebarButton(btnWatchNow);
+            BuildDynamicGenresList();
             ApplyFilter();
         };
 
@@ -97,8 +96,9 @@ public partial class HomeUC : UserControl
             _selectedStatusFilter = MovieStatus.ComingSoon;
             _selectedGenreFilter = null;
             lblTitle.Text = "Phim Sắp Chiếu";
-            lblSubTitle.Text = "Những bom tấn chuẩn bị ra mắt tại rạp trong thời gian tới.";
+            lblSubTitle.Text = "Những bộ phim chuẩn bị ra mắt tại rạp trong thời gian tới.";
             SetActiveSidebarButton(btnComingSoon);
+            BuildDynamicGenresList();
             ApplyFilter();
         };
 
@@ -109,12 +109,13 @@ public partial class HomeUC : UserControl
             lblTitle.Text = "Tất Cả Phim Tại Rạp";
             lblSubTitle.Text = "Toàn bộ danh sách phim đang chiếu và sắp khởi chiếu.";
             SetActiveSidebarButton(btnBrowseAll);
+            BuildDynamicGenresList();
             ApplyFilter();
         };
 
         Label lblGenresHeader = new Label
         {
-            Text = "Thể loại (Genres)",
+            Text = "Thể loại",
             Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(150, 150, 170),
             Location = new Point(15, 185),
@@ -124,7 +125,8 @@ public partial class HomeUC : UserControl
         pnlGenresList = new Panel
         {
             Location = new Point(15, 215),
-            Size = new Size(190, 340),
+            Size = new Size(190, 350),
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left,
             AutoScroll = true
         };
 
@@ -136,7 +138,7 @@ public partial class HomeUC : UserControl
         pnlSidebar.Controls.Add(lblLibraryHeader);
 
         // -------------------------------------------------------------
-        // 2. KHU VỰC NỘI DUNG CHÍNH BÊN PHẢI (MAIN CONTENT)
+        // 2. KHU VỰC NỘI DUNG CHÍNH BÊN PHẢI
         // -------------------------------------------------------------
         pnlMainContent = new Panel
         {
@@ -195,7 +197,7 @@ public partial class HomeUC : UserControl
             Cursor = Cursors.Hand
         };
         btnRefresh.FlatAppearance.BorderSize = 0;
-        btnRefresh.Click += (s, e) => LoadMoviesFromDatabase();
+        btnRefresh.Click += (s, e) => RefreshMovies();
 
         pnlSearchBox.Controls.Add(txtSearch);
         pnlSearchBox.Controls.Add(btnRefresh);
@@ -204,7 +206,6 @@ public partial class HomeUC : UserControl
         pnlHeader.Controls.Add(lblSubTitle);
         pnlHeader.Controls.Add(pnlSearchBox);
 
-        // Grid chứa các thẻ phim MovieCardUC
         flpMovieGrid = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -250,92 +251,35 @@ public partial class HomeUC : UserControl
     }
 
     // =============================================================
-    // 3. TẢI DỮ LIỆU PHIM THẬT TỪ SQLITE (cinema.db)
+    // 3. TẢI & LỌC DỮ LIỆU PHIM QUA MovieRepository
     // =============================================================
 
-    public void LoadMoviesFromDatabase()
+    public void RefreshMovies()
     {
         try
         {
-            using var connection = new SqliteConnection(ConnectionString);
-            connection.Open();
-
-            // Đảm bảo bảng Movies tồn tại nếu DB mới khởi tạo
-            connection.Execute(@"
-                CREATE TABLE IF NOT EXISTS Movies (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    Title TEXT NOT NULL,
-                    Description TEXT,
-                    DurationMinutes INTEGER NOT NULL DEFAULT 120,
-                    Director TEXT,
-                    Genre TEXT,
-                    PosterUrl TEXT,
-                    ReleaseDate TEXT,
-                    Status INTEGER NOT NULL DEFAULT 0
-                );");
-
-            var rows = connection.Query(@"
-                SELECT 
-                    rowid AS Id,
-                    COALESCE(Title, '') AS Title,
-                    COALESCE(Description, '') AS Description,
-                    COALESCE(DurationMinutes, 120) AS DurationMinutes,
-                    COALESCE(Director, '') AS Director,
-                    COALESCE(Genre, '') AS Genre,
-                    COALESCE(PosterUrl, '') AS PosterUrl,
-                    COALESCE(ReleaseDate, '') AS ReleaseDate,
-                    COALESCE(Status, 0) AS Status
-                FROM Movies
-                WHERE COALESCE(Status, 0) != @EndedStatus
-                ORDER BY rowid DESC;",
-                new { EndedStatus = (int)MovieStatus.Ended }).ToList();
-
-            _allMovies = rows.Select(r => new Movie
-            {
-                Id = Convert.ToInt32(r.Id),
-                Title = (string)r.Title,
-                Description = (string)r.Description,
-                DurationMinutes = Convert.ToInt32(r.DurationMinutes),
-                Director = (string)r.Director,
-                Genre = (string)r.Genre,
-                PosterUrl = (string)r.PosterUrl,
-                ReleaseDate = ParseReleaseDate((string)r.ReleaseDate),
-                Status = (MovieStatus)Convert.ToInt32(r.Status)
-            }).ToList();
+            // Khách hàng chỉ xem phim Đang chiếu hoặc Sắp chiếu
+            _allMovies = _movieRepository.GetAll()
+                .Where(m => m.Status == MovieStatus.Showing || m.Status == MovieStatus.ComingSoon)
+                .ToList();
 
             BuildDynamicGenresList();
             ApplyFilter();
         }
         catch (Exception ex)
         {
+            _allMovies.Clear();
+            flpMovieGrid.Controls.Clear();
+
             MessageBox.Show(
-                $"Không thể tải danh sách phim từ cơ sở dữ liệu:\n{ex.Message}",
-                "Lỗi kết nối dữ liệu",
+                "Không thể tải danh sách phim từ hệ thống.\n\n" + ex.Message,
+                "Lỗi tải phim",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
         }
     }
 
-    private static DateTime ParseReleaseDate(string rawDate)
-    {
-        if (DateTime.TryParseExact(
-            rawDate,
-            new[] { "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "dd/MM/yyyy" },
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out DateTime parsedExact))
-        {
-            return parsedExact;
-        }
-
-        if (DateTime.TryParse(rawDate, out DateTime parsed))
-            return parsed;
-
-        return DateTime.Today;
-    }
-
-    // Tự động lấy danh sách Thể loại từ các phim thật trong Database
     private void BuildDynamicGenresList()
     {
         pnlGenresList.Controls.Clear();
@@ -403,7 +347,7 @@ public partial class HomeUC : UserControl
             Label lblEmpty = new Label
             {
                 Text = _allMovies.Count == 0
-                    ? "🎬 Hiện chưa có phim nào trong cơ sở dữ liệu.\nVui lòng đăng nhập tài khoản Admin -> Quản lý Phim để thêm phim mới!"
+                    ? "🎬 Hiện chưa có phim nào trong hệ thống.\nVui lòng đăng nhập tài khoản Admin -> Quản lý Phim để thêm phim mới."
                     : "🔍 Không tìm thấy phim phù hợp với điều kiện lọc.",
                 Font = new Font("Segoe UI", 11.5f),
                 ForeColor = Color.FromArgb(160, 165, 190),

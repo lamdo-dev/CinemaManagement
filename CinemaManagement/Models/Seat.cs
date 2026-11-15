@@ -1,14 +1,23 @@
-﻿namespace CinemaManagement.Models;
+﻿using CinemaManagement.Models.Enums;
 
-using CinemaManagement.Models.Enums;
-
-public class Seat
+namespace CinemaManagement.Models
 {
-    public int Id { get; set; }
-    public int RoomId { get; set; }
-    public string SeatNumber { get; set; } = string.Empty; // Ví dụ: "A1", "B5"
-    public int RowIndex { get; set; }
-    public int ColumnIndex { get; set; }
-    public SeatType Type { get; set; } = SeatType.Standard;
-    public decimal PriceMultiplier { get; set; } = 1.0m; // Hệ số giá (Ghế VIP = 1.2, Ghế đôi = 2.0)
+    public class Seat
+    {
+        public int Id { get; set; }
+
+        public int RoomId { get; set; }
+
+        // Ví dụ: A1, B5
+        public string SeatNumber { get; set; } = string.Empty;
+
+        public int RowIndex { get; set; }
+
+        public int ColumnIndex { get; set; }
+
+        public SeatType Type { get; set; } = SeatType.Standard;
+
+        // Hệ số giá: Standard = 1.0, VIP = 1.2, Couple = 2.0
+        public double PriceMultiplier { get; set; } = 1.0;
+    }
 }

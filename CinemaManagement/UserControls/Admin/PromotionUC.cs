@@ -1,4 +1,11 @@
-﻿
+﻿using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Linq;
+using System.Windows.Forms;
+using CinemaManagement.Models;
+using CinemaManagement.Services;
+
 namespace CinemaManagement.UserControls.Admin;
 
 // =============================================
@@ -35,30 +42,21 @@ internal sealed record PromotionDisplayItem
 public partial class PromotionUC : UserControl
 {
     private readonly List<PromotionDisplayItem> _promotions = [];
+    private readonly PromotionService _promotionService = new();
 
     private DataGridView _dgvPromotions = null!;
-
     private TextBox _txtSearch = null!;
-
     private ComboBox _cboDiscountType = null!;
-
     private ComboBox _cboStatus = null!;
 
     private Label _lblTotal = null!;
-
     private Label _lblActive = null!;
-
     private Label _lblUpcoming = null!;
-
     private Label _lblResult = null!;
 
     private Button _btnAdd = null!;
-
     private Button _btnEdit = null!;
-
     private Button _btnDelete = null!;
-
-    private int _nextId = 5;
 
     private readonly Color _backgroundColor =
         Color.FromArgb(15, 23, 42);
@@ -78,9 +76,7 @@ public partial class PromotionUC : UserControl
 
         BuildInterface();
 
-        LoadSampleData();
-
-        RefreshPromotionTable();
+        LoadPromotionsFromDatabase();
     }
 
     // =========================================
@@ -227,7 +223,6 @@ public partial class PromotionUC : UserControl
             Margin = new Padding(0)
         };
 
-        // Phân chia chiều rộng
         filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 85));
 
@@ -251,9 +246,7 @@ public partial class PromotionUC : UserControl
 
         Color inputColor = Color.FromArgb(15, 23, 42);
 
-        // -------------------------------------
         // TÌM KIẾM
-        // -------------------------------------
 
         Label lblSearch = CreateLabel("Tìm kiếm:");
 
@@ -274,9 +267,7 @@ public partial class PromotionUC : UserControl
             Margin = new Padding(3, 3, 15, 3)
         };
 
-        // -------------------------------------
         // LOẠI GIẢM GIÁ
-        // -------------------------------------
 
         Label lblType = CreateLabel("Loại giảm:");
 
@@ -307,9 +298,7 @@ public partial class PromotionUC : UserControl
 
         _cboDiscountType.SelectedIndex = 0;
 
-        // -------------------------------------
         // TRẠNG THÁI
-        // -------------------------------------
 
         Label lblStatus = CreateLabel("Trạng thái:");
 
@@ -342,16 +331,10 @@ public partial class PromotionUC : UserControl
 
         _cboStatus.SelectedIndex = 0;
 
-        // -------------------------------------
-        // GHÉP CÁC THÀNH PHẦN
-        // -------------------------------------
-
         filterPanel.Controls.Add(lblSearch, 0, 0);
         filterPanel.Controls.Add(_txtSearch, 1, 0);
-
         filterPanel.Controls.Add(lblType, 2, 0);
         filterPanel.Controls.Add(_cboDiscountType, 3, 0);
-
         filterPanel.Controls.Add(lblStatus, 4, 0);
         filterPanel.Controls.Add(_cboStatus, 5, 0);
 
@@ -391,7 +374,7 @@ public partial class PromotionUC : UserControl
         actionPanel.Controls.Add(_btnDelete);
 
         // =====================================
-        // 1.5 BẢNG DANH SÁCH KHUYẾN MÃI
+        // 1.5 BẢNG DANH SÁCH
         // =====================================
 
         _dgvPromotions = new DataGridView
@@ -425,8 +408,6 @@ public partial class PromotionUC : UserControl
                 DataGridViewCellBorderStyle.SingleHorizontal
         };
 
-        // Header bảng
-
         _dgvPromotions.ColumnHeadersDefaultCellStyle.BackColor =
             _panelColor;
 
@@ -441,8 +422,6 @@ public partial class PromotionUC : UserControl
 
         _dgvPromotions.ColumnHeadersDefaultCellStyle.Padding =
             new Padding(8, 0, 0, 0);
-
-        // Nội dung bảng
 
         _dgvPromotions.DefaultCellStyle.BackColor =
             _panelColor;
@@ -465,7 +444,10 @@ public partial class PromotionUC : UserControl
         _dgvPromotions.AlternatingRowsDefaultCellStyle.BackColor =
             Color.FromArgb(37, 49, 68);
 
-        // Các cột
+        // Thêm cột ID ẩn để xác định chính xác bản ghi
+
+        _dgvPromotions.Columns.Add("Id", "ID");
+        _dgvPromotions.Columns["Id"]!.Visible = false;
 
         _dgvPromotions.Columns.Add("Code", "MÃ VOUCHER");
         _dgvPromotions.Columns.Add("Name", "TÊN CHƯƠNG TRÌNH");
@@ -476,8 +458,6 @@ public partial class PromotionUC : UserControl
         _dgvPromotions.Columns.Add("EndDate", "NGÀY KẾT THÚC");
         _dgvPromotions.Columns.Add("Status", "TRẠNG THÁI");
 
-        // Độ rộng cột
-
         _dgvPromotions.Columns["Code"]!.FillWeight = 90;
         _dgvPromotions.Columns["Name"]!.FillWeight = 145;
         _dgvPromotions.Columns["Discount"]!.FillWeight = 90;
@@ -486,8 +466,6 @@ public partial class PromotionUC : UserControl
         _dgvPromotions.Columns["StartDate"]!.FillWeight = 105;
         _dgvPromotions.Columns["EndDate"]!.FillWeight = 105;
         _dgvPromotions.Columns["Status"]!.FillWeight = 110;
-
-        // Căn chỉnh dữ liệu
 
         _dgvPromotions.Columns["Code"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
@@ -549,8 +527,6 @@ public partial class PromotionUC : UserControl
         _cboStatus.SelectedIndexChanged += (_, _) =>
             RefreshPromotionTable();
 
-        // Căn giữa chữ trong hai ComboBox
-
         _cboDiscountType.DrawItem += FilterComboBox_DrawItem;
         _cboStatus.DrawItem += FilterComboBox_DrawItem;
 
@@ -563,7 +539,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // CĂN GIỮA CHỮ TRONG HAI COMBOBOX BỘ LỌC
+    // CĂN GIỮA CHỮ TRONG COMBOBOX
     // =========================================
 
     private void FilterComboBox_DrawItem(
@@ -584,7 +560,8 @@ public partial class PromotionUC : UserControl
         }
 
         bool isSelected =
-            (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            (e.State & DrawItemState.Selected) ==
+            DrawItemState.Selected;
 
         Color itemBackColor = isSelected
             ? Color.FromArgb(37, 99, 235)
@@ -698,77 +675,75 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 5. DỮ LIỆU KHUYẾN MÃI MẪU
+    // 5. CHUYỂN ĐỔI MODEL DATABASE VÀ HIỂN THỊ
     // =========================================
 
-    private void LoadSampleData()
+    private PromotionDisplayItem ToDisplayItem(Promotion promotion)
     {
-        DateTime today = DateTime.Today;
+        return new PromotionDisplayItem
+        {
+            Id = promotion.Id,
+            Code = promotion.Code,
+            Name = promotion.Name,
+            DiscountType = promotion.DiscountType,
+            DiscountValue = promotion.DiscountValue,
+            MaxDiscount = promotion.MaxDiscount,
+            MinimumOrder = promotion.MinimumOrder,
+            StartDate = promotion.StartDate,
+            EndDate = promotion.EndDate,
+            IsEnabled = promotion.IsEnabled
+        };
+    }
 
-        _promotions.Clear();
-
-        _promotions.AddRange(
-        [
-            new PromotionDisplayItem
-            {
-                Id = 1,
-                Code = "WELCOME20",
-                Name = "Ưu đãi khách hàng mới",
-                DiscountType = "Phần trăm",
-                DiscountValue = 20,
-                MaxDiscount = 50000,
-                MinimumOrder = 100000,
-                StartDate = today.AddDays(-5),
-                EndDate = today.AddDays(20),
-                IsEnabled = true
-            },
-
-            new PromotionDisplayItem
-            {
-                Id = 2,
-                Code = "HAPPY50000",
-                Name = "Ưu đãi thành viên",
-                DiscountType = "Số tiền",
-                DiscountValue = 50000,
-                MaxDiscount = 0,
-                MinimumOrder = 200000,
-                StartDate = today.AddDays(3),
-                EndDate = today.AddDays(20),
-                IsEnabled = true
-            },
-
-            new PromotionDisplayItem
-            {
-                Id = 3,
-                Code = "STUDENT10",
-                Name = "Ưu đãi sinh viên",
-                DiscountType = "Phần trăm",
-                DiscountValue = 10,
-                MaxDiscount = 30000,
-                MinimumOrder = 50000,
-                StartDate = today.AddDays(-30),
-                EndDate = today.AddDays(-5),
-                IsEnabled = true
-            },
-
-            new PromotionDisplayItem
-            {
-                Id = 4,
-                Code = "CINEDAY",
-                Name = "Ngày hội điện ảnh",
-                DiscountType = "Phần trăm",
-                DiscountValue = 30,
-                MaxDiscount = 70000,
-                MinimumOrder = 150000,
-                StartDate = today,
-                EndDate = today.AddDays(15),
-                IsEnabled = false
-            }
-        ]);
+    private Promotion ToPromotionModel(PromotionDisplayItem item)
+    {
+        return new Promotion
+        {
+            Id = item.Id,
+            Code = item.Code.Trim().ToUpperInvariant(),
+            Name = item.Name.Trim(),
+            DiscountType = item.DiscountType,
+            DiscountValue = item.DiscountValue,
+            MaxDiscount = item.MaxDiscount,
+            MinimumOrder = item.MinimumOrder,
+            StartDate = item.StartDate.Date,
+            EndDate = item.EndDate.Date,
+            IsEnabled = item.IsEnabled
+        };
     }
 
     // =========================================
-    // 6. XÁC ĐỊNH TRẠNG THÁI HIỂN THỊ
+    // 6. TẢI DỮ LIỆU TỪ DATABASE
+    // =========================================
+
+    private void LoadPromotionsFromDatabase()
+    {
+        try
+        {
+            List<Promotion> data = _promotionService.GetAll();
+
+            _promotions.Clear();
+
+            _promotions.AddRange(
+                data.Select(ToDisplayItem)
+            );
+
+            RefreshPromotionTable();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể tải danh sách khuyến mãi từ database.\n\n" +
+                ex.Message,
+                "Lỗi tải dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
+    }
+
+    // =========================================
+    // 7. XÁC ĐỊNH TRẠNG THÁI HIỂN THỊ
     // =========================================
 
     private string GetPromotionStatus(PromotionDisplayItem item)
@@ -786,7 +761,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 7. HIỂN THỊ MỨC GIẢM GIÁ
+    // 8. HIỂN THỊ MỨC GIẢM GIÁ
     // =========================================
 
     private string GetDiscountText(PromotionDisplayItem item)
@@ -797,11 +772,19 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 8. HIỂN THỊ DANH SÁCH
+    // 9. HIỂN THỊ DANH SÁCH KHUYẾN MÃI
     // =========================================
 
     private void RefreshPromotionTable()
     {
+        if (_dgvPromotions == null ||
+            _txtSearch == null ||
+            _cboDiscountType == null ||
+            _cboStatus == null)
+        {
+            return;
+        }
+
         _dgvPromotions.Rows.Clear();
 
         string keyword = _txtSearch.Text.Trim();
@@ -838,6 +821,7 @@ public partial class PromotionUC : UserControl
                 : item.MaxDiscount.ToString("N0") + " đ";
 
             _dgvPromotions.Rows.Add(
+                item.Id,
                 item.Code,
                 item.Name,
                 GetDiscountText(item),
@@ -856,7 +840,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 9. CẬP NHẬT THỐNG KÊ
+    // 10. CẬP NHẬT THỐNG KÊ
     // =========================================
 
     private void UpdateStatistics()
@@ -873,7 +857,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 10. ĐỔI MÀU TRẠNG THÁI
+    // 11. ĐỔI MÀU TRẠNG THÁI
     // =========================================
 
     private void DgvPromotions_CellFormatting(
@@ -905,7 +889,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 11. LẤY CHƯƠNG TRÌNH ĐƯỢC CHỌN
+    // 12. LẤY CHƯƠNG TRÌNH ĐƯỢC CHỌN
     // =========================================
 
     private PromotionDisplayItem? GetSelectedPromotion()
@@ -913,56 +897,61 @@ public partial class PromotionUC : UserControl
         if (_dgvPromotions.SelectedRows.Count == 0)
             return null;
 
-        string code =
-            _dgvPromotions.SelectedRows[0]
-                .Cells["Code"].Value?.ToString() ?? "";
+        object? idValue =
+            _dgvPromotions.SelectedRows[0].Cells["Id"].Value;
+
+        if (idValue == null)
+            return null;
+
+        if (!int.TryParse(idValue.ToString(), out int id))
+            return null;
 
         return _promotions.FirstOrDefault(
-            item => item.Code == code
+            item => item.Id == id
         );
     }
 
     // =========================================
-    // 12. THÊM KHUYẾN MÃI
+    // 13. THÊM KHUYẾN MÃI
     // =========================================
 
     private void BtnAdd_Click(object? sender, EventArgs e)
     {
-        using PromotionEditDialog dialog = new PromotionEditDialog();
+        try
+        {
+            using PromotionEditDialog dialog =
+                new PromotionEditDialog();
 
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-            return;
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
 
-        bool duplicate = _promotions.Any(item =>
-            item.Code.Equals(
-                dialog.PromotionData.Code,
-                StringComparison.OrdinalIgnoreCase
-            ));
+            Promotion promotion =
+                ToPromotionModel(dialog.PromotionData);
 
-        if (duplicate)
+            _promotionService.Add(promotion);
+
+            LoadPromotionsFromDatabase();
+
+            MessageBox.Show(
+                "Thêm khuyến mãi thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
         {
             MessageBox.Show(
-                "Mã voucher đã tồn tại!",
-                "Thông báo",
+                ex.Message,
+                "Không thể thêm khuyến mãi",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning
             );
-
-            return;
         }
-
-        PromotionDisplayItem newItem = dialog.PromotionData with
-        {
-            Id = _nextId++
-        };
-
-        _promotions.Add(newItem);
-
-        RefreshPromotionTable();
     }
 
     // =========================================
-    // 13. SỬA KHUYẾN MÃI
+    // 14. SỬA KHUYẾN MÃI
     // =========================================
 
     private void BtnEdit_Click(object? sender, EventArgs e)
@@ -971,27 +960,8 @@ public partial class PromotionUC : UserControl
 
         if (selected == null)
         {
-            MessageBox.Show("Vui lòng chọn chương trình cần sửa!");
-            return;
-        }
-
-        using PromotionEditDialog dialog =
-            new PromotionEditDialog(selected);
-
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-            return;
-
-        bool duplicate = _promotions.Any(item =>
-            item.Id != selected.Id &&
-            item.Code.Equals(
-                dialog.PromotionData.Code,
-                StringComparison.OrdinalIgnoreCase
-            ));
-
-        if (duplicate)
-        {
             MessageBox.Show(
-                "Mã voucher đã được sử dụng!",
+                "Vui lòng chọn chương trình cần sửa!",
                 "Thông báo",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning
@@ -1000,23 +970,43 @@ public partial class PromotionUC : UserControl
             return;
         }
 
-        PromotionDisplayItem updated = dialog.PromotionData with
+        try
         {
-            Id = selected.Id
-        };
+            using PromotionEditDialog dialog =
+                new PromotionEditDialog(selected);
 
-        int index = _promotions.FindIndex(
-            item => item.Id == selected.Id
-        );
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
 
-        if (index >= 0)
-            _promotions[index] = updated;
+            Promotion promotion =
+                ToPromotionModel(dialog.PromotionData);
 
-        RefreshPromotionTable();
+            promotion.Id = selected.Id;
+
+            _promotionService.Update(promotion);
+
+            LoadPromotionsFromDatabase();
+
+            MessageBox.Show(
+                "Cập nhật khuyến mãi thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Không thể cập nhật khuyến mãi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+        }
     }
 
     // =========================================
-    // 14. XÓA KHUYẾN MÃI
+    // 15. XÓA KHUYẾN MÃI
     // =========================================
 
     private void BtnDelete_Click(object? sender, EventArgs e)
@@ -1025,7 +1015,13 @@ public partial class PromotionUC : UserControl
 
         if (selected == null)
         {
-            MessageBox.Show("Vui lòng chọn chương trình cần xóa!");
+            MessageBox.Show(
+                "Vui lòng chọn chương trình cần xóa!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+
             return;
         }
 
@@ -1039,14 +1035,33 @@ public partial class PromotionUC : UserControl
         if (confirm != DialogResult.Yes)
             return;
 
-        _promotions.Remove(selected);
+        try
+        {
+            _promotionService.Delete(selected.Id);
 
-        RefreshPromotionTable();
+            LoadPromotionsFromDatabase();
+
+            MessageBox.Show(
+                "Xóa khuyến mãi thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Không thể xóa khuyến mãi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 }
 
 // =============================================
-// 15. DIALOG THÊM / SỬA KHUYẾN MÃI
+// 16. DIALOG THÊM / SỬA KHUYẾN MÃI
 // =============================================
 
 internal sealed class PromotionEditDialog : Form
@@ -1054,19 +1069,15 @@ internal sealed class PromotionEditDialog : Form
     public PromotionDisplayItem PromotionData { get; private set; } = new();
 
     private TextBox _txtCode = null!;
-
     private TextBox _txtName = null!;
 
     private ComboBox _cboDiscountType = null!;
 
     private NumericUpDown _numDiscountValue = null!;
-
     private NumericUpDown _numMaxDiscount = null!;
-
     private NumericUpDown _numMinimumOrder = null!;
 
     private DateTimePicker _dtpStartDate = null!;
-
     private DateTimePicker _dtpEndDate = null!;
 
     private CheckBox _chkEnabled = null!;
@@ -1387,7 +1398,7 @@ internal sealed class PromotionEditDialog : Form
         footer.Controls.Add(btnSave);
         footer.Controls.Add(btnCancel);
 
-        // SỰ KIỆN
+        // SỰ KIỆN LOẠI GIẢM GIÁ
 
         _cboDiscountType.SelectedIndexChanged += (_, _) =>
         {
@@ -1492,11 +1503,15 @@ internal sealed class PromotionEditDialog : Form
     private void LoadPromotion(PromotionDisplayItem item)
     {
         _txtCode.Text = item.Code;
-
         _txtName.Text = item.Name;
 
-        _cboDiscountType.SelectedItem =
-            item.DiscountType;
+        _cboDiscountType.SelectedItem = item.DiscountType;
+
+        // Cập nhật giới hạn trước khi gán giá trị
+        if (item.DiscountType == "Số tiền")
+            _numDiscountValue.Maximum = 10000000;
+        else
+            _numDiscountValue.Maximum = 100;
 
         _numDiscountValue.Value = Math.Clamp(
             item.DiscountValue,
@@ -1517,28 +1532,41 @@ internal sealed class PromotionEditDialog : Form
         );
 
         _dtpStartDate.Value = item.StartDate;
-
         _dtpEndDate.Value = item.EndDate;
 
         _chkEnabled.Checked = item.IsEnabled;
+
+        PromotionData = item;
     }
 
     // =========================================
-    // LƯU THÔNG TIN HIỂN THỊ
+    // LƯU THÔNG TIN
     // =========================================
 
     private void BtnSave_Click(object? sender, EventArgs e)
     {
         if (string.IsNullOrWhiteSpace(_txtCode.Text))
         {
-            MessageBox.Show("Vui lòng nhập mã voucher!");
+            MessageBox.Show(
+                "Vui lòng nhập mã voucher!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+
             _txtCode.Focus();
             return;
         }
 
         if (string.IsNullOrWhiteSpace(_txtName.Text))
         {
-            MessageBox.Show("Vui lòng nhập tên chương trình!");
+            MessageBox.Show(
+                "Vui lòng nhập tên chương trình!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+
             _txtName.Focus();
             return;
         }
@@ -1557,6 +1585,8 @@ internal sealed class PromotionEditDialog : Form
 
         PromotionData = new PromotionDisplayItem
         {
+            Id = PromotionData.Id,
+
             Code = _txtCode.Text.Trim().ToUpperInvariant(),
 
             Name = _txtName.Text.Trim(),
@@ -1582,4 +1612,4 @@ internal sealed class PromotionEditDialog : Form
 
         Close();
     }
-}
+}   
