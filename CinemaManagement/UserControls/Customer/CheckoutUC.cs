@@ -63,9 +63,9 @@ public partial class CheckoutUC : UserControl
     // 3. UI CONTROLS & ANIMATION
     // =========================================================
 
-    private Panel pnlHeader = null!;
+    private TableLayoutPanel tlpHeader = null!;
     private Button btnBack = null!;
-    private Panel pnlStepper = null!;
+    private FlowLayoutPanel flpStepper = null!;
 
     private TableLayoutPanel tlpMainGrid = null!;
     private Panel pnlLeftSummary = null!;
@@ -142,6 +142,8 @@ public partial class CheckoutUC : UserControl
 
     public CheckoutUC()
     {
+        AutoScaleMode = AutoScaleMode.Dpi;
+
         SetStyle(ControlStyles.AllPaintingInWmPaint |
                  ControlStyles.OptimizedDoubleBuffer |
                  ControlStyles.UserPaint |
@@ -281,25 +283,35 @@ public partial class CheckoutUC : UserControl
         AutoScroll = true;
 
         // -----------------------------------------------------
-        // HEADER
+        // HEADER RESPONSIVE (KHÔNG BAO GIỜ CẮT NÚT HOẶC STEPPER)
         // -----------------------------------------------------
 
-        pnlHeader = new Panel
+        tlpHeader = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 60,
-            BackColor = Color.FromArgb(18, 19, 28)
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.FromArgb(18, 19, 28),
+            Padding = new Padding(20, 12, 20, 12),
+            Margin = new Padding(0)
         };
+        tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpHeader.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         btnBack = new Button
         {
             Text = "← Quay lại",
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = Color.White,
             BackColor = Color.FromArgb(35, 36, 50),
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(105, 34),
-            Location = new Point(20, 13),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12, 6, 12, 6),
+            Margin = new Padding(0, 0, 16, 0),
             Cursor = Cursors.Hand
         };
         btnBack.FlatAppearance.BorderSize = 0;
@@ -307,68 +319,69 @@ public partial class CheckoutUC : UserControl
         btnBack.MouseLeave += (s, e) => btnBack.BackColor = Color.FromArgb(35, 36, 50);
         btnBack.Click += (s, e) => OnBackClicked?.Invoke(this, EventArgs.Empty);
 
-        pnlStepper = new Panel
+        flpStepper = new FlowLayoutPanel
         {
-            Size = new Size(420, 40),
-            Location = new Point(350, 10),
-            BackColor = Color.Transparent
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Anchor = AnchorStyles.None,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
 
         Label lblStep1 = new Label
         {
-            Text = "① CHỌN SUẤT",
-            Font = new Font("Segoe UI", 9),
+            Text = "①  CHỌN SUẤT",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorTextMuted,
-            Location = new Point(0, 10),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
         };
 
         Label lblDiv1 = new Label
         {
-            Text = "───",
-            ForeColor = ColorTextMuted,
-            Location = new Point(105, 10),
-            AutoSize = true
+            Text = "──────",
+            Font = new Font("Segoe UI", 9F),
+            ForeColor = Color.FromArgb(70, 72, 95),
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
         };
 
         Label lblStep2 = new Label
         {
-            Text = "② CHỌN GHẾ",
-            Font = new Font("Segoe UI", 9),
+            Text = "②  CHỌN GHẾ",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorTextMuted,
-            Location = new Point(145, 10),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
         };
 
         Label lblDiv2 = new Label
         {
-            Text = "───",
-            ForeColor = ColorTextMuted,
-            Location = new Point(245, 10),
-            AutoSize = true
+            Text = "──────",
+            Font = new Font("Segoe UI", 9F),
+            ForeColor = Color.FromArgb(70, 72, 95),
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
         };
 
         Label lblStep3 = new Label
         {
-            Text = "③ THANH TOÁN",
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            Text = "③  THANH TOÁN",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorGold,
-            Location = new Point(285, 10),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
         };
 
-        pnlStepper.Controls.AddRange(new Control[]
+        flpStepper.Controls.AddRange(new Control[]
         {
             lblStep1, lblDiv1, lblStep2, lblDiv2, lblStep3
         });
 
-        pnlHeader.Controls.Add(btnBack);
-        pnlHeader.Controls.Add(pnlStepper);
-        pnlHeader.Resize += (s, e) =>
-        {
-            int centerX = Math.Max(140, (pnlHeader.ClientSize.Width - pnlStepper.Width) / 2);
-            pnlStepper.Location = new Point(centerX, 10);
-        };
+        tlpHeader.Controls.Add(btnBack, 0, 0);
+        tlpHeader.Controls.Add(flpStepper, 1, 0);
 
         // -----------------------------------------------------
         // MAIN 3-COLUMN RESPONSIVE GRID (29% - 42% - 29%)
@@ -452,7 +465,7 @@ public partial class CheckoutUC : UserControl
         lblCouponMsg = new Label
         {
             Text = "",
-            Font = new Font("Segoe UI", 8.5f),
+            Font = new Font("Segoe UI", 8.5F),
             ForeColor = Color.LightGreen,
             Dock = DockStyle.Top,
             Height = 32,
@@ -485,7 +498,7 @@ public partial class CheckoutUC : UserControl
         Label lblFinalLabel = new Label
         {
             Text = "TỔNG THÀNH TIỀN:",
-            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
             ForeColor = Color.White,
             Location = new Point(0, startY + 24),
             AutoSize = true
@@ -599,7 +612,8 @@ public partial class CheckoutUC : UserControl
         chkTerms = new CheckBox
         {
             Text = "Tôi đồng ý với Quy định & Điều khoản đặt vé rạp phim.",
-            Font = new Font("Segoe UI", 8.5f),
+            UseMnemonic = false,
+            Font = new Font("Segoe UI", 8.5F),
             ForeColor = ColorTextMuted,
             Dock = DockStyle.Top,
             Height = 36,
@@ -609,7 +623,7 @@ public partial class CheckoutUC : UserControl
         btnPayNow = new Button
         {
             Text = "🔒 THANH TOÁN THẺ NGAY",
-            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
             ForeColor = Color.Black,
             BackColor = ColorGold,
             FlatStyle = FlatStyle.Flat,
@@ -702,7 +716,7 @@ public partial class CheckoutUC : UserControl
         Label lblExp = new Label
         {
             Text = "Ngày hết hạn (MM/YY)",
-            Font = new Font("Segoe UI", 8.8f),
+            Font = new Font("Segoe UI", 8.8F),
             ForeColor = ColorTextMuted,
             Dock = DockStyle.Fill
         };
@@ -710,7 +724,7 @@ public partial class CheckoutUC : UserControl
         Label lblCVV = new Label
         {
             Text = "Mã CVV / CVC",
-            Font = new Font("Segoe UI", 8.8f),
+            Font = new Font("Segoe UI", 8.8F),
             ForeColor = ColorTextMuted,
             Dock = DockStyle.Fill,
             Margin = new Padding(8, 0, 0, 0)
@@ -745,7 +759,7 @@ public partial class CheckoutUC : UserControl
         Label lblCardHint = new Label
         {
             Text = "✓ Hỗ trợ Visa, Mastercard, JCB và thẻ ATM nội địa Napas.",
-            Font = new Font("Segoe UI", 8.5f),
+            Font = new Font("Segoe UI", 8.5F),
             ForeColor = Color.FromArgb(120, 200, 140),
             Location = new Point(0, 198),
             Width = 340,
@@ -772,7 +786,7 @@ public partial class CheckoutUC : UserControl
         lblQrHeader = new Label
         {
             Text = "QUÉT MÃ VIETQR - TẤT CẢ NGÂN HÀNG",
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorGold,
             Dock = DockStyle.Top,
             Height = 26,
@@ -803,7 +817,7 @@ public partial class CheckoutUC : UserControl
         lblQrAmount = new Label
         {
             Text = "Số tiền thanh toán: 0 đ",
-            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
             ForeColor = Color.White,
             Dock = DockStyle.Top,
             Height = 26,
@@ -813,7 +827,7 @@ public partial class CheckoutUC : UserControl
         lblQrNote = new Label
         {
             Text = "Mở ứng dụng Ngân hàng bất kỳ để quét mã thanh toán tự động.",
-            Font = new Font("Segoe UI", 8.3f),
+            Font = new Font("Segoe UI", 8.3F),
             ForeColor = ColorTextMuted,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.TopCenter
@@ -835,7 +849,7 @@ public partial class CheckoutUC : UserControl
         Label lblCounterTitle = new Label
         {
             Text = "🏪 ĐẶT GIỮ CHỖ & THANH TOÁN TẠI QUẦY",
-            Font = new Font("Segoe UI", 9.8f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.8F, FontStyle.Bold),
             ForeColor = ColorGold,
             Dock = DockStyle.Top,
             Height = 28
@@ -846,7 +860,7 @@ public partial class CheckoutUC : UserControl
             Text = "• Hệ thống sẽ xuất mã đặt vé giữ ghế ngay sau khi xác nhận.\n" +
                    "• Quý khách vui lòng đến quầy vé rạp Cineworld thanh toán bằng Tiền mặt / Thẻ / QR trước giờ chiếu ít nhất 30 phút.\n" +
                    "• Quá thời gian giữ chỗ, ghế sẽ tự động mở lại cho khách khác.",
-            Font = new Font("Segoe UI", 8.8f),
+            Font = new Font("Segoe UI", 8.8F),
             ForeColor = Color.FromArgb(215, 220, 235),
             Dock = DockStyle.Top,
             Height = 115
@@ -864,7 +878,7 @@ public partial class CheckoutUC : UserControl
         txtCounterPhone = new TextBox
         {
             Dock = DockStyle.Top,
-            Font = new Font("Segoe UI", 10.5f),
+            Font = new Font("Segoe UI", 10.5F),
             BackColor = ColorInputBg,
             ForeColor = Color.White,
             PlaceholderText = "Nhập số điện thoại của bạn (VD: 0901234567)"
@@ -918,14 +932,14 @@ public partial class CheckoutUC : UserControl
         Panel pnlBarcodeMock = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 62,
+            Height = 58,
             BackColor = Color.White
         };
 
         Label lblBarcodeText = new Label
         {
-            Text = "||||||||||||||||||||||||||||||||||||||\n*CINEMA-TICKET*",
-            Font = new Font("Consolas", 10.5f, FontStyle.Bold),
+            Text = "||||||||||||||||||||||||||||||||\n*CINEMA-TICKET*",
+            Font = new Font("Consolas", 9F, FontStyle.Bold),
             ForeColor = Color.Black,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter
@@ -943,7 +957,7 @@ public partial class CheckoutUC : UserControl
         lblPreviewMovieTitle = new Label
         {
             Text = "TÊN PHIM",
-            Font = new Font("Segoe UI", 12.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
             ForeColor = Color.Black,
             Dock = DockStyle.Top,
             Height = 28,
@@ -953,7 +967,7 @@ public partial class CheckoutUC : UserControl
         lblPreviewDateTime = new Label
         {
             Text = "Ngày: --/--/---- | Giờ: --:--",
-            Font = new Font("Segoe UI", 9.2f),
+            Font = new Font("Segoe UI", 9.2F),
             ForeColor = Color.FromArgb(60, 60, 60),
             Dock = DockStyle.Top,
             Height = 22
@@ -962,7 +976,7 @@ public partial class CheckoutUC : UserControl
         lblPreviewVenueSeats = new Label
         {
             Text = "Ghế: Chưa chọn",
-            Font = new Font("Segoe UI", 9.8f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.8F, FontStyle.Bold),
             ForeColor = Color.Black,
             Dock = DockStyle.Top,
             Height = 24,
@@ -972,7 +986,7 @@ public partial class CheckoutUC : UserControl
         lblPreviewPrice = new Label
         {
             Text = "Tổng: 0 đ",
-            Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 11.5F, FontStyle.Bold),
             ForeColor = Color.DarkRed,
             Dock = DockStyle.Top,
             Height = 28
@@ -1006,7 +1020,7 @@ public partial class CheckoutUC : UserControl
         tlpMainGrid.Controls.Add(pnlRightTicketPreview, 2, 0);
 
         Controls.Add(tlpMainGrid);
-        Controls.Add(pnlHeader);
+        Controls.Add(tlpHeader);
     }
 
     // =========================================================
@@ -1046,7 +1060,7 @@ public partial class CheckoutUC : UserControl
         Button btn = new Button
         {
             Text = text,
-            Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 8.8F, FontStyle.Bold),
             ForeColor = isActive ? Color.Black : Color.White,
             BackColor = isActive ? ColorGold : ColorInputBg,
             FlatStyle = FlatStyle.Flat,
@@ -1237,6 +1251,7 @@ public partial class CheckoutUC : UserControl
         Label lblTitle = new Label
         {
             Text = labelText,
+            UseMnemonic = false,
             Font = new Font("Segoe UI", 9),
             ForeColor = ColorTextMuted,
             Location = new Point(0, yPos),
@@ -1246,7 +1261,7 @@ public partial class CheckoutUC : UserControl
         Label lblVal = new Label
         {
             Text = valueText,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = valColor ?? Color.White,
             Location = new Point(parent.Width - 150, yPos),
             Size = new Size(150, 20),
@@ -1378,7 +1393,6 @@ public partial class CheckoutUC : UserControl
     {
         string code = txtCoupon.Text.Trim().ToUpperInvariant();
 
-        // Xóa trạng thái voucher cũ trước khi kiểm tra mã mới
         _appliedPromotion = null;
         discountAmount = 0m;
 
