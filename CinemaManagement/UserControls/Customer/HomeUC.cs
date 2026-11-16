@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 using CinemaManagement.Repositories;
@@ -13,12 +14,20 @@ namespace CinemaManagement.UserControls.Customer
 {
     public partial class HomeUC : UserControl
     {
+        // =========================================================
+        // 1. FIELDS
+        // =========================================================
+
         private readonly MovieRepository _movieRepository = new();
 
         private Panel pnlSidebar = null!;
         private Panel pnlMainContent = null!;
         private Panel pnlGenresList = null!;
+        private Panel pnlHeader = null!;
+        private Panel pnlSearchBox = null!;
+
         private FlowLayoutPanel flpMovieGrid = null!;
+
         private TextBox txtSearch = null!;
         private Label lblTitle = null!;
         private Label lblSubTitle = null!;
@@ -26,10 +35,18 @@ namespace CinemaManagement.UserControls.Customer
         private Button btnWatchNow = null!;
         private Button btnComingSoon = null!;
         private Button btnBrowseAll = null!;
+        private Button btnRefresh = null!;
 
         private List<Movie> _allMovies = new();
+
         private string? _selectedGenreFilter;
         private MovieStatus? _selectedStatusFilter = MovieStatus.Showing;
+
+        private bool _layoutReady;
+
+        // =========================================================
+        // 2. EVENTS
+        // =========================================================
 
         // Chuyển sang màn hình chi tiết phim.
         public event EventHandler<Movie>? OnMovieClicked;
@@ -37,9 +54,18 @@ namespace CinemaManagement.UserControls.Customer
         // Chuyển sang màn hình chọn suất chiếu.
         public event EventHandler<Movie>? OnBookNowClicked;
 
+        // =========================================================
+        // 3. CONSTRUCTOR
+        // =========================================================
+
         public HomeUC()
         {
             InitializeComponents();
+
+            _layoutReady = true;
+
+            ApplyResponsiveLayout();
+
             RefreshMovies();
 
             // Tải lại dữ liệu khi quay lại trang chủ.
@@ -54,6 +80,10 @@ namespace CinemaManagement.UserControls.Customer
             }
         }
 
+        // =========================================================
+        // 4. INITIALIZE COMPONENTS
+        // =========================================================
+
         private void InitializeComponents()
         {
             Dock = DockStyle.Fill;
@@ -65,6 +95,7 @@ namespace CinemaManagement.UserControls.Customer
             {
                 Dock = DockStyle.Left,
                 Width = 220,
+                MinimumSize = new Size(180, 0),
                 BackColor = Color.FromArgb(18, 18, 28),
                 Padding = new Padding(15)
             };
@@ -79,48 +110,65 @@ namespace CinemaManagement.UserControls.Customer
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
-            btnWatchNow = CreateSidebarButton("▶  Đang chiếu", true);
-            btnComingSoon = CreateSidebarButton("◷  Sắp chiếu", false);
-            btnBrowseAll = CreateSidebarButton("☰  Tất cả phim", false);
+            btnWatchNow = CreateSidebarButton(
+                "▶  Đang chiếu",
+                true);
 
+            btnComingSoon = CreateSidebarButton(
+                "◷  Sắp chiếu",
+                false);
+
+            btnBrowseAll = CreateSidebarButton(
+                "☰  Tất cả phim",
+                false);
+
+            // ĐANG CHIẾU
             btnWatchNow.Click += (sender, e) =>
             {
                 _selectedStatusFilter = MovieStatus.Showing;
                 _selectedGenreFilter = null;
 
                 lblTitle.Text = "Phim Đang Chiếu";
+
                 lblSubTitle.Text =
                     "Chọn phim bạn yêu thích hoặc nhấn Đặt vé ngay để chọn suất chiếu.";
 
                 SetActiveSidebarButton(btnWatchNow);
+
                 BuildDynamicGenresList();
                 ApplyFilter();
             };
 
+            // SẮP CHIẾU
             btnComingSoon.Click += (sender, e) =>
             {
                 _selectedStatusFilter = MovieStatus.ComingSoon;
                 _selectedGenreFilter = null;
 
                 lblTitle.Text = "Phim Sắp Chiếu";
+
                 lblSubTitle.Text =
                     "Những bộ phim chuẩn bị ra mắt tại rạp trong thời gian tới.";
 
                 SetActiveSidebarButton(btnComingSoon);
+
                 BuildDynamicGenresList();
                 ApplyFilter();
             };
 
+            // TẤT CẢ PHIM
             btnBrowseAll.Click += (sender, e) =>
             {
                 _selectedStatusFilter = null;
                 _selectedGenreFilter = null;
 
                 lblTitle.Text = "Tất Cả Phim Tại Rạp";
+
                 lblSubTitle.Text =
                     "Toàn bộ danh sách phim đang chiếu và sắp khởi chiếu.";
 
                 SetActiveSidebarButton(btnBrowseAll);
+
                 BuildDynamicGenresList();
                 ApplyFilter();
             };
@@ -157,7 +205,9 @@ namespace CinemaManagement.UserControls.Customer
                 BackColor = Color.FromArgb(24, 24, 36)
             };
 
-            Panel pnlHeader = new Panel
+            // ================= HEADER =================
+
+            pnlHeader = new Panel
             {
                 Dock = DockStyle.Top,
                 Height = 92
@@ -181,7 +231,8 @@ namespace CinemaManagement.UserControls.Customer
                 AutoSize = true
             };
 
-            Panel pnlSearchBox = new Panel
+            // SEARCH BOX
+            pnlSearchBox = new Panel
             {
                 Dock = DockStyle.Right,
                 Width = 350
@@ -192,12 +243,16 @@ namespace CinemaManagement.UserControls.Customer
                 Font = new Font("Segoe UI", 10.5f),
                 PlaceholderText = "Tìm tên phim, thể loại, đạo diễn...",
                 Size = new Size(240, 34),
-                Location = new Point(0, 12)
+                Location = new Point(0, 12),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
-            txtSearch.TextChanged += (sender, e) => ApplyFilter();
+            txtSearch.TextChanged += (sender, e) =>
+            {
+                ApplyFilter();
+            };
 
-            Button btnRefresh = new Button
+            btnRefresh = new Button
             {
                 Text = "↻ Làm mới",
                 Location = new Point(248, 11),
@@ -206,11 +261,16 @@ namespace CinemaManagement.UserControls.Customer
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                Cursor = Cursors.Hand,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
 
             btnRefresh.FlatAppearance.BorderSize = 0;
-            btnRefresh.Click += (sender, e) => RefreshMovies();
+
+            btnRefresh.Click += (sender, e) =>
+            {
+                RefreshMovies();
+            };
 
             pnlSearchBox.Controls.Add(txtSearch);
             pnlSearchBox.Controls.Add(btnRefresh);
@@ -219,13 +279,16 @@ namespace CinemaManagement.UserControls.Customer
             pnlHeader.Controls.Add(lblSubTitle);
             pnlHeader.Controls.Add(pnlSearchBox);
 
+            // ================= MOVIE GRID =================
+
             flpMovieGrid = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true,
                 BackColor = Color.Transparent,
                 WrapContents = true,
-                Padding = new Padding(0, 12, 0, 0)
+                Padding = new Padding(0, 12, 0, 0),
+                FlowDirection = FlowDirection.LeftToRight
             };
 
             pnlMainContent.Controls.Add(flpMovieGrid);
@@ -233,9 +296,131 @@ namespace CinemaManagement.UserControls.Customer
 
             Controls.Add(pnlMainContent);
             Controls.Add(pnlSidebar);
+
+            // Theo dõi kích thước giao diện.
+            SizeChanged += HomeUC_SizeChanged;
+            pnlMainContent.SizeChanged += HomeUC_SizeChanged;
         }
 
-        // ================= SIDEBAR BUTTON =================
+        // =========================================================
+        // 5. RESPONSIVE LAYOUT
+        // =========================================================
+
+        private void HomeUC_SizeChanged(object? sender, EventArgs e)
+        {
+            if (!_layoutReady || IsDisposed)
+                return;
+
+            ApplyResponsiveLayout();
+        }
+
+        private void ApplyResponsiveLayout()
+        {
+            if (pnlMainContent == null ||
+                pnlSidebar == null ||
+                pnlHeader == null ||
+                pnlSearchBox == null)
+            {
+                return;
+            }
+
+            int availableWidth = ClientSize.Width;
+
+            // ---------------- SIDEBAR ----------------
+
+            int sidebarWidth = (int)(availableWidth * 0.19f);
+
+            sidebarWidth = Math.Max(
+                180,
+                Math.Min(220, sidebarWidth));
+
+            pnlSidebar.Width = sidebarWidth;
+
+            // ---------------- MAIN CONTENT ----------------
+
+            bool isNarrow =
+                pnlMainContent.ClientSize.Width < 900;
+
+            if (isNarrow)
+            {
+                pnlMainContent.Padding = new Padding(15);
+
+                // Header chuyển thành 2 hàng.
+                pnlHeader.Height = 130;
+
+                // Search chuyển xuống dưới tiêu đề.
+                pnlSearchBox.Dock = DockStyle.None;
+
+                pnlSearchBox.Location = new Point(0, 82);
+
+                pnlSearchBox.Width =
+                    Math.Max(250, pnlHeader.ClientSize.Width);
+
+                pnlSearchBox.Height = 42;
+
+                // Tìm kiếm chiếm phần lớn chiều ngang.
+                txtSearch.Location = new Point(0, 3);
+
+                txtSearch.Width = Math.Max(
+                    120,
+                    pnlSearchBox.ClientSize.Width - 108);
+
+                txtSearch.Anchor =
+                    AnchorStyles.Top |
+                    AnchorStyles.Left |
+                    AnchorStyles.Right;
+
+                btnRefresh.Location = new Point(
+                    pnlSearchBox.ClientSize.Width - 98,
+                    2);
+
+                btnRefresh.Anchor =
+                    AnchorStyles.Top |
+                    AnchorStyles.Right;
+
+                // Giới hạn chiều rộng tiêu đề.
+                lblTitle.MaximumSize = new Size(
+                    Math.Max(200, pnlHeader.ClientSize.Width - 10),
+                    0);
+
+                lblSubTitle.MaximumSize = new Size(
+                    Math.Max(200, pnlHeader.ClientSize.Width - 10),
+                    0);
+            }
+            else
+            {
+                pnlMainContent.Padding = new Padding(25);
+
+                pnlHeader.Height = 92;
+
+                // Search trở lại bên phải.
+                pnlSearchBox.Dock = DockStyle.Right;
+
+                pnlSearchBox.Location = Point.Empty;
+                pnlSearchBox.Width = 350;
+                pnlSearchBox.Height = 60;
+
+                txtSearch.Location = new Point(0, 12);
+                txtSearch.Width = 240;
+
+                btnRefresh.Location = new Point(248, 11);
+
+                lblTitle.MaximumSize = new Size(
+                    Math.Max(200, pnlHeader.ClientSize.Width - 370),
+                    0);
+
+                lblSubTitle.MaximumSize = new Size(
+                    Math.Max(200, pnlHeader.ClientSize.Width - 370),
+                    0);
+            }
+
+            pnlHeader.PerformLayout();
+            pnlMainContent.PerformLayout();
+        }
+
+        // =========================================================
+        // 6. SIDEBAR BUTTON
+        // =========================================================
 
         private Button CreateSidebarButton(string text, bool isActive)
         {
@@ -243,6 +428,7 @@ namespace CinemaManagement.UserControls.Customer
             {
                 Text = text,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
+
                 ForeColor = isActive
                     ? Color.White
                     : Color.FromArgb(160, 160, 180),
@@ -261,17 +447,18 @@ namespace CinemaManagement.UserControls.Customer
             };
 
             btn.FlatAppearance.BorderSize = 0;
+
             return btn;
         }
 
         private void SetActiveSidebarButton(Button activeBtn)
         {
             foreach (Button btn in new[]
-                     {
-                         btnWatchNow,
-                         btnComingSoon,
-                         btnBrowseAll
-                     })
+            {
+                btnWatchNow,
+                btnComingSoon,
+                btnBrowseAll
+            })
             {
                 bool isSelected = btn == activeBtn;
 
@@ -285,7 +472,9 @@ namespace CinemaManagement.UserControls.Customer
             }
         }
 
-        // ================= LOAD MOVIES =================
+        // =========================================================
+        // 7. LOAD MOVIES
+        // =========================================================
 
         public void RefreshMovies()
         {
@@ -303,6 +492,7 @@ namespace CinemaManagement.UserControls.Customer
             catch (Exception ex)
             {
                 _allMovies.Clear();
+
                 flpMovieGrid.Controls.Clear();
 
                 MessageBox.Show(
@@ -313,7 +503,9 @@ namespace CinemaManagement.UserControls.Customer
             }
         }
 
-        // ================= DYNAMIC GENRES =================
+        // =========================================================
+        // 8. DYNAMIC GENRES
+        // =========================================================
 
         private void BuildDynamicGenresList()
         {
@@ -350,6 +542,7 @@ namespace CinemaManagement.UserControls.Customer
                 Label lblGenreItem = new Label
                 {
                     Text = genre.Display,
+
                     Font = new Font(
                         "Segoe UI",
                         9.5f,
@@ -367,7 +560,10 @@ namespace CinemaManagement.UserControls.Customer
                 };
 
                 lblGenreItem.MouseEnter += (sender, e) =>
-                    lblGenreItem.ForeColor = Color.FromArgb(229, 9, 20);
+                {
+                    lblGenreItem.ForeColor =
+                        Color.FromArgb(229, 9, 20);
+                };
 
                 lblGenreItem.MouseLeave += (sender, e) =>
                 {
@@ -384,20 +580,31 @@ namespace CinemaManagement.UserControls.Customer
                 lblGenreItem.Click += (sender, e) =>
                 {
                     _selectedGenreFilter = genre.FilterKey;
+
                     BuildDynamicGenresList();
                     ApplyFilter();
                 };
 
                 pnlGenresList.Controls.Add(lblGenreItem);
+
                 yOffset += 30;
             }
         }
 
-        // ================= DISPLAY MOVIES =================
+        // =========================================================
+        // 9. DISPLAY MOVIES
+        // =========================================================
 
         private void DisplayMovies(List<Movie> movies)
         {
             flpMovieGrid.SuspendLayout();
+
+            // Giải phóng các thẻ phim cũ.
+            foreach (Control control in flpMovieGrid.Controls)
+            {
+                control.Dispose();
+            }
+
             flpMovieGrid.Controls.Clear();
 
             if (movies.Count == 0)
@@ -415,7 +622,9 @@ namespace CinemaManagement.UserControls.Customer
                 };
 
                 flpMovieGrid.Controls.Add(lblEmpty);
+
                 flpMovieGrid.ResumeLayout();
+
                 return;
             }
 
@@ -449,7 +658,9 @@ namespace CinemaManagement.UserControls.Customer
             flpMovieGrid.ResumeLayout();
         }
 
-        // ================= FILTER MOVIES =================
+        // =========================================================
+        // 10. FILTER MOVIES
+        // =========================================================
 
         private void ApplyFilter()
         {

@@ -49,6 +49,16 @@ public partial class PromotionUC : UserControl
     private ComboBox _cboDiscountType = null!;
     private ComboBox _cboStatus = null!;
 
+    // Các thành phần bố cục dùng cho responsive
+    private TableLayoutPanel _mainLayout = null!;
+    private TableLayoutPanel _statisticPanel = null!;
+    private TableLayoutPanel _filterPanel = null!;
+    private FlowLayoutPanel _actionPanel = null!;
+
+    private Label _lblSearch = null!;
+    private Label _lblType = null!;
+    private Label _lblStatus = null!;
+
     private Label _lblTotal = null!;
     private Label _lblActive = null!;
     private Label _lblUpcoming = null!;
@@ -57,6 +67,8 @@ public partial class PromotionUC : UserControl
     private Button _btnAdd = null!;
     private Button _btnEdit = null!;
     private Button _btnDelete = null!;
+
+    private bool _applyingResponsiveLayout;
 
     private readonly Color _backgroundColor =
         Color.FromArgb(15, 23, 42);
@@ -74,7 +86,13 @@ public partial class PromotionUC : UserControl
     {
         InitializeComponent();
 
+        AutoScaleMode = AutoScaleMode.Dpi;
+
         BuildInterface();
+
+        SizeChanged += PromotionUC_SizeChanged;
+
+        ApplyResponsiveLayout();
 
         LoadPromotionsFromDatabase();
     }
@@ -85,7 +103,7 @@ public partial class PromotionUC : UserControl
 
     private void BuildInterface()
     {
-        TableLayoutPanel mainLayout = new TableLayoutPanel
+        _mainLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -94,25 +112,25 @@ public partial class PromotionUC : UserControl
             Padding = new Padding(15)
         };
 
-        mainLayout.ColumnStyles.Add(
+        _mainLayout.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 75));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 110));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 70));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 50));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 32));
 
         // =====================================
@@ -150,7 +168,7 @@ public partial class PromotionUC : UserControl
         // 1.2 THỐNG KÊ
         // =====================================
 
-        TableLayoutPanel statisticPanel = new TableLayoutPanel
+        _statisticPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
@@ -160,7 +178,7 @@ public partial class PromotionUC : UserControl
 
         for (int i = 0; i < 3; i++)
         {
-            statisticPanel.ColumnStyles.Add(
+            _statisticPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 33.33f));
         }
 
@@ -188,21 +206,21 @@ public partial class PromotionUC : UserControl
             AutoSize = true
         };
 
-        statisticPanel.Controls.Add(
+        _statisticPanel.Controls.Add(
             CreateStatisticCard(
                 "TỔNG KHUYẾN MÃI",
                 Color.FromArgb(37, 99, 235),
                 _lblTotal
             ), 0, 0);
 
-        statisticPanel.Controls.Add(
+        _statisticPanel.Controls.Add(
             CreateStatisticCard(
                 "ĐANG ÁP DỤNG",
                 Color.FromArgb(16, 185, 129),
                 _lblActive
             ), 1, 0);
 
-        statisticPanel.Controls.Add(
+        _statisticPanel.Controls.Add(
             CreateStatisticCard(
                 "SẮP DIỄN RA",
                 Color.FromArgb(245, 158, 11),
@@ -213,7 +231,7 @@ public partial class PromotionUC : UserControl
         // 1.3 TÌM KIẾM VÀ BỘ LỌC
         // =====================================
 
-        TableLayoutPanel filterPanel = new TableLayoutPanel
+        _filterPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 6,
@@ -223,37 +241,37 @@ public partial class PromotionUC : UserControl
             Margin = new Padding(0)
         };
 
-        filterPanel.ColumnStyles.Add(
+        _filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 85));
 
-        filterPanel.ColumnStyles.Add(
+        _filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-        filterPanel.ColumnStyles.Add(
+        _filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 85));
 
-        filterPanel.ColumnStyles.Add(
+        _filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 145));
 
-        filterPanel.ColumnStyles.Add(
+        _filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 90));
 
-        filterPanel.ColumnStyles.Add(
+        _filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 155));
 
-        filterPanel.RowStyles.Add(
+        _filterPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
         Color inputColor = Color.FromArgb(15, 23, 42);
 
         // TÌM KIẾM
 
-        Label lblSearch = CreateLabel("Tìm kiếm:");
+        _lblSearch = CreateLabel("Tìm kiếm:");
 
-        lblSearch.AutoSize = false;
-        lblSearch.Dock = DockStyle.Fill;
-        lblSearch.TextAlign = ContentAlignment.MiddleLeft;
-        lblSearch.Margin = new Padding(0, 0, 5, 0);
+        _lblSearch.AutoSize = false;
+        _lblSearch.Dock = DockStyle.Fill;
+        _lblSearch.TextAlign = ContentAlignment.MiddleLeft;
+        _lblSearch.Margin = new Padding(0, 0, 5, 0);
 
         _txtSearch = new TextBox
         {
@@ -269,12 +287,12 @@ public partial class PromotionUC : UserControl
 
         // LOẠI GIẢM GIÁ
 
-        Label lblType = CreateLabel("Loại giảm:");
+        _lblType = CreateLabel("Loại giảm:");
 
-        lblType.AutoSize = false;
-        lblType.Dock = DockStyle.Fill;
-        lblType.TextAlign = ContentAlignment.MiddleLeft;
-        lblType.Margin = new Padding(0, 0, 5, 0);
+        _lblType.AutoSize = false;
+        _lblType.Dock = DockStyle.Fill;
+        _lblType.TextAlign = ContentAlignment.MiddleLeft;
+        _lblType.Margin = new Padding(0, 0, 5, 0);
 
         _cboDiscountType = new ComboBox
         {
@@ -300,12 +318,12 @@ public partial class PromotionUC : UserControl
 
         // TRẠNG THÁI
 
-        Label lblStatus = CreateLabel("Trạng thái:");
+        _lblStatus = CreateLabel("Trạng thái:");
 
-        lblStatus.AutoSize = false;
-        lblStatus.Dock = DockStyle.Fill;
-        lblStatus.TextAlign = ContentAlignment.MiddleLeft;
-        lblStatus.Margin = new Padding(0, 0, 5, 0);
+        _lblStatus.AutoSize = false;
+        _lblStatus.Dock = DockStyle.Fill;
+        _lblStatus.TextAlign = ContentAlignment.MiddleLeft;
+        _lblStatus.Margin = new Padding(0, 0, 5, 0);
 
         _cboStatus = new ComboBox
         {
@@ -331,18 +349,18 @@ public partial class PromotionUC : UserControl
 
         _cboStatus.SelectedIndex = 0;
 
-        filterPanel.Controls.Add(lblSearch, 0, 0);
-        filterPanel.Controls.Add(_txtSearch, 1, 0);
-        filterPanel.Controls.Add(lblType, 2, 0);
-        filterPanel.Controls.Add(_cboDiscountType, 3, 0);
-        filterPanel.Controls.Add(lblStatus, 4, 0);
-        filterPanel.Controls.Add(_cboStatus, 5, 0);
+        _filterPanel.Controls.Add(_lblSearch, 0, 0);
+        _filterPanel.Controls.Add(_txtSearch, 1, 0);
+        _filterPanel.Controls.Add(_lblType, 2, 0);
+        _filterPanel.Controls.Add(_cboDiscountType, 3, 0);
+        _filterPanel.Controls.Add(_lblStatus, 4, 0);
+        _filterPanel.Controls.Add(_cboStatus, 5, 0);
 
         // =====================================
         // 1.4 CÁC NÚT CHỨC NĂNG
         // =====================================
 
-        FlowLayoutPanel actionPanel = new FlowLayoutPanel
+        _actionPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
@@ -369,9 +387,9 @@ public partial class PromotionUC : UserControl
             145
         );
 
-        actionPanel.Controls.Add(_btnAdd);
-        actionPanel.Controls.Add(_btnEdit);
-        actionPanel.Controls.Add(_btnDelete);
+        _actionPanel.Controls.Add(_btnAdd);
+        _actionPanel.Controls.Add(_btnEdit);
+        _actionPanel.Controls.Add(_btnDelete);
 
         // =====================================
         // 1.5 BẢNG DANH SÁCH
@@ -505,14 +523,14 @@ public partial class PromotionUC : UserControl
         // 1.7 GHÉP GIAO DIỆN
         // =====================================
 
-        mainLayout.Controls.Add(headerPanel, 0, 0);
-        mainLayout.Controls.Add(statisticPanel, 0, 1);
-        mainLayout.Controls.Add(filterPanel, 0, 2);
-        mainLayout.Controls.Add(actionPanel, 0, 3);
-        mainLayout.Controls.Add(_dgvPromotions, 0, 4);
-        mainLayout.Controls.Add(_lblResult, 0, 5);
+        _mainLayout.Controls.Add(headerPanel, 0, 0);
+        _mainLayout.Controls.Add(_statisticPanel, 0, 1);
+        _mainLayout.Controls.Add(_filterPanel, 0, 2);
+        _mainLayout.Controls.Add(_actionPanel, 0, 3);
+        _mainLayout.Controls.Add(_dgvPromotions, 0, 4);
+        _mainLayout.Controls.Add(_lblResult, 0, 5);
 
-        Controls.Add(mainLayout);
+        Controls.Add(_mainLayout);
 
         // =====================================
         // 1.8 SỰ KIỆN
@@ -539,7 +557,294 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // CĂN GIỮA CHỮ TRONG COMBOBOX
+    // 2. RESPONSIVE LAYOUT
+    // =========================================
+
+    private void PromotionUC_SizeChanged(object? sender, EventArgs e)
+    {
+        ApplyResponsiveLayout();
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_applyingResponsiveLayout ||
+            _mainLayout == null ||
+            _statisticPanel == null ||
+            _filterPanel == null ||
+            _actionPanel == null ||
+            _dgvPromotions == null)
+        {
+            return;
+        }
+
+        _applyingResponsiveLayout = true;
+
+        try
+        {
+            int availableWidth = ClientSize.Width;
+
+            // Desktop: từ 1100px trở lên
+            // Laptop: từ 760px đến dưới 1100px
+            // Màn hình hẹp: dưới 760px
+
+            bool isCompact = availableWidth < 1100;
+            bool isNarrow = availableWidth < 760;
+
+            _mainLayout.SuspendLayout();
+
+            try
+            {
+                // ---------------------------------
+                // 2.1 MAIN LAYOUT
+                // ---------------------------------
+
+                _mainLayout.RowStyles[0].Height = 75;
+                _mainLayout.RowStyles[1].Height = isNarrow ? 285 : 110;
+                _mainLayout.RowStyles[2].Height =
+                    isNarrow ? 150 : isCompact ? 112 : 70;
+
+                _mainLayout.RowStyles[3].Height = isCompact ? 90 : 50;
+
+                _mainLayout.RowStyles[4].SizeType = SizeType.Percent;
+                _mainLayout.RowStyles[4].Height = 100;
+
+                _mainLayout.RowStyles[5].Height = 32;
+
+                // ---------------------------------
+                // 2.2 STATISTIC PANEL
+                // ---------------------------------
+
+                _statisticPanel.SuspendLayout();
+
+                try
+                {
+                    // Giữ lại ba thẻ hiện tại, chỉ thay đổi vị trí.
+                    if (isNarrow)
+                    {
+                        _statisticPanel.ColumnCount = 1;
+                        _statisticPanel.RowCount = 3;
+
+                        _statisticPanel.ColumnStyles.Clear();
+                        _statisticPanel.RowStyles.Clear();
+
+                        _statisticPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Percent, 100));
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            _statisticPanel.RowStyles.Add(
+                                new RowStyle(SizeType.Percent, 33.33f));
+
+                            _statisticPanel.SetCellPosition(
+                                _statisticPanel.Controls[i],
+                                new TableLayoutPanelCellPosition(0, i));
+                        }
+                    }
+                    else
+                    {
+                        _statisticPanel.ColumnCount = 3;
+                        _statisticPanel.RowCount = 1;
+
+                        _statisticPanel.ColumnStyles.Clear();
+                        _statisticPanel.RowStyles.Clear();
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            _statisticPanel.ColumnStyles.Add(
+                                new ColumnStyle(SizeType.Percent, 33.33f));
+
+                            _statisticPanel.SetCellPosition(
+                                _statisticPanel.Controls[i],
+                                new TableLayoutPanelCellPosition(i, 0));
+                        }
+
+                        _statisticPanel.RowStyles.Add(
+                            new RowStyle(SizeType.Percent, 100));
+                    }
+                }
+                finally
+                {
+                    _statisticPanel.ResumeLayout(true);
+                }
+
+                // ---------------------------------
+                // 2.3 FILTER PANEL
+                // ---------------------------------
+
+                _filterPanel.SuspendLayout();
+
+                try
+                {
+                    _filterPanel.Controls.Clear();
+
+                    _filterPanel.ColumnStyles.Clear();
+                    _filterPanel.RowStyles.Clear();
+
+                    _lblSearch.Dock = DockStyle.Fill;
+                    _lblType.Dock = DockStyle.Fill;
+                    _lblStatus.Dock = DockStyle.Fill;
+
+                    _txtSearch.Dock = DockStyle.Fill;
+                    _cboDiscountType.Dock = DockStyle.Fill;
+                    _cboStatus.Dock = DockStyle.Fill;
+
+                    if (!isCompact)
+                    {
+                        // DESKTOP: tất cả bộ lọc trên một hàng
+
+                        _filterPanel.ColumnCount = 6;
+                        _filterPanel.RowCount = 1;
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 85));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Percent, 100));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 85));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 145));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 90));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 155));
+
+                        _filterPanel.RowStyles.Add(
+                            new RowStyle(SizeType.Percent, 100));
+
+                        _filterPanel.Controls.Add(_lblSearch, 0, 0);
+                        _filterPanel.Controls.Add(_txtSearch, 1, 0);
+                        _filterPanel.Controls.Add(_lblType, 2, 0);
+                        _filterPanel.Controls.Add(_cboDiscountType, 3, 0);
+                        _filterPanel.Controls.Add(_lblStatus, 4, 0);
+                        _filterPanel.Controls.Add(_cboStatus, 5, 0);
+                    }
+                    else if (!isNarrow)
+                    {
+                        // LAPTOP: tìm kiếm ở hàng đầu,
+                        // loại giảm và trạng thái ở hàng thứ hai.
+
+                        _filterPanel.ColumnCount = 4;
+                        _filterPanel.RowCount = 2;
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 85));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Percent, 50));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 90));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Percent, 50));
+
+                        _filterPanel.RowStyles.Add(
+                            new RowStyle(SizeType.Percent, 50));
+
+                        _filterPanel.RowStyles.Add(
+                            new RowStyle(SizeType.Percent, 50));
+
+                        _filterPanel.Controls.Add(_lblSearch, 0, 0);
+                        _filterPanel.Controls.Add(_txtSearch, 1, 0);
+
+                        _filterPanel.Controls.Add(_lblType, 0, 1);
+                        _filterPanel.Controls.Add(_cboDiscountType, 1, 1);
+
+                        _filterPanel.Controls.Add(_lblStatus, 2, 1);
+                        _filterPanel.Controls.Add(_cboStatus, 3, 1);
+                    }
+                    else
+                    {
+                        // MÀN HÌNH HẸP: mỗi bộ lọc một hàng
+
+                        _filterPanel.ColumnCount = 2;
+                        _filterPanel.RowCount = 3;
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Absolute, 90));
+
+                        _filterPanel.ColumnStyles.Add(
+                            new ColumnStyle(SizeType.Percent, 100));
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            _filterPanel.RowStyles.Add(
+                                new RowStyle(SizeType.Percent, 33.33f));
+                        }
+
+                        _filterPanel.Controls.Add(_lblSearch, 0, 0);
+                        _filterPanel.Controls.Add(_txtSearch, 1, 0);
+
+                        _filterPanel.Controls.Add(_lblType, 0, 1);
+                        _filterPanel.Controls.Add(_cboDiscountType, 1, 1);
+
+                        _filterPanel.Controls.Add(_lblStatus, 0, 2);
+                        _filterPanel.Controls.Add(_cboStatus, 1, 2);
+                    }
+                }
+                finally
+                {
+                    _filterPanel.ResumeLayout(true);
+                }
+
+                // ---------------------------------
+                // 2.4 ACTION BUTTONS
+                // ---------------------------------
+
+                _actionPanel.WrapContents = isCompact;
+                _actionPanel.FlowDirection = FlowDirection.LeftToRight;
+                _actionPanel.AutoScroll = isNarrow;
+
+                _btnAdd.Margin = new Padding(0, 0, 10, 5);
+                _btnEdit.Margin = new Padding(0, 0, 10, 5);
+                _btnDelete.Margin = new Padding(0, 0, 10, 5);
+
+                // ---------------------------------
+                // 2.5 DATA GRID VIEW
+                // ---------------------------------
+
+                if (isCompact)
+                {
+                    _dgvPromotions.AutoSizeColumnsMode =
+                        DataGridViewAutoSizeColumnsMode.None;
+
+                    _dgvPromotions.ScrollBars = ScrollBars.Both;
+
+                    _dgvPromotions.Columns["Code"]!.Width = 120;
+                    _dgvPromotions.Columns["Name"]!.Width = 190;
+                    _dgvPromotions.Columns["Discount"]!.Width = 110;
+                    _dgvPromotions.Columns["MaxDiscount"]!.Width = 125;
+                    _dgvPromotions.Columns["MinOrder"]!.Width = 130;
+                    _dgvPromotions.Columns["StartDate"]!.Width = 120;
+                    _dgvPromotions.Columns["EndDate"]!.Width = 120;
+                    _dgvPromotions.Columns["Status"]!.Width = 125;
+                }
+                else
+                {
+                    _dgvPromotions.AutoSizeColumnsMode =
+                        DataGridViewAutoSizeColumnsMode.Fill;
+
+                    _dgvPromotions.ScrollBars = ScrollBars.Both;
+                }
+            }
+            finally
+            {
+                _mainLayout.ResumeLayout(true);
+            }
+        }
+        finally
+        {
+            _applyingResponsiveLayout = false;
+        }
+    }
+
+    // =========================================
+    // 3. CĂN GIỮA CHỮ TRONG COMBOBOX
     // =========================================
 
     private void FilterComboBox_DrawItem(
@@ -592,7 +897,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 2. TẠO LABEL
+    // 4. TẠO LABEL
     // =========================================
 
     private Label CreateLabel(string text)
@@ -608,7 +913,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 3. TẠO BUTTON
+    // 5. TẠO BUTTON
     // =========================================
 
     private Button CreateButton(
@@ -634,7 +939,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 4. TẠO THẺ THỐNG KÊ
+    // 6. TẠO THẺ THỐNG KÊ
     // =========================================
 
     private Panel CreateStatisticCard(
@@ -675,7 +980,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 5. CHUYỂN ĐỔI MODEL DATABASE VÀ HIỂN THỊ
+    // 7. CHUYỂN ĐỔI MODEL DATABASE VÀ HIỂN THỊ
     // =========================================
 
     private PromotionDisplayItem ToDisplayItem(Promotion promotion)
@@ -713,7 +1018,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 6. TẢI DỮ LIỆU TỪ DATABASE
+    // 8. TẢI DỮ LIỆU TỪ DATABASE
     // =========================================
 
     private void LoadPromotionsFromDatabase()
@@ -743,7 +1048,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 7. XÁC ĐỊNH TRẠNG THÁI HIỂN THỊ
+    // 9. XÁC ĐỊNH TRẠNG THÁI HIỂN THỊ
     // =========================================
 
     private string GetPromotionStatus(PromotionDisplayItem item)
@@ -761,7 +1066,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 8. HIỂN THỊ MỨC GIẢM GIÁ
+    // 10. HIỂN THỊ MỨC GIẢM GIÁ
     // =========================================
 
     private string GetDiscountText(PromotionDisplayItem item)
@@ -772,7 +1077,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 9. HIỂN THỊ DANH SÁCH KHUYẾN MÃI
+    // 11. HIỂN THỊ DANH SÁCH KHUYẾN MÃI
     // =========================================
 
     private void RefreshPromotionTable()
@@ -840,7 +1145,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 10. CẬP NHẬT THỐNG KÊ
+    // 12. CẬP NHẬT THỐNG KÊ
     // =========================================
 
     private void UpdateStatistics()
@@ -857,7 +1162,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 11. ĐỔI MÀU TRẠNG THÁI
+    // 13. ĐỔI MÀU TRẠNG THÁI
     // =========================================
 
     private void DgvPromotions_CellFormatting(
@@ -889,7 +1194,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 12. LẤY CHƯƠNG TRÌNH ĐƯỢC CHỌN
+    // 14. LẤY CHƯƠNG TRÌNH ĐƯỢC CHỌN
     // =========================================
 
     private PromotionDisplayItem? GetSelectedPromotion()
@@ -912,7 +1217,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 13. THÊM KHUYẾN MÃI
+    // 15. THÊM KHUYẾN MÃI
     // =========================================
 
     private void BtnAdd_Click(object? sender, EventArgs e)
@@ -951,7 +1256,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 14. SỬA KHUYẾN MÃI
+    // 16. SỬA KHUYẾN MÃI
     // =========================================
 
     private void BtnEdit_Click(object? sender, EventArgs e)
@@ -1006,7 +1311,7 @@ public partial class PromotionUC : UserControl
     }
 
     // =========================================
-    // 15. XÓA KHUYẾN MÃI
+    // 17. XÓA KHUYẾN MÃI
     // =========================================
 
     private void BtnDelete_Click(object? sender, EventArgs e)
@@ -1061,7 +1366,7 @@ public partial class PromotionUC : UserControl
 }
 
 // =============================================
-// 16. DIALOG THÊM / SỬA KHUYẾN MÃI
+// 18. DIALOG THÊM / SỬA KHUYẾN MÃI
 // =============================================
 
 internal sealed class PromotionEditDialog : Form
@@ -1095,14 +1400,16 @@ internal sealed class PromotionEditDialog : Form
             : "Chỉnh sửa khuyến mãi";
 
         Size = new Size(800, 630);
-        MinimumSize = new Size(720, 570);
+        MinimumSize = new Size(680, 560);
 
         StartPosition = FormStartPosition.CenterParent;
 
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        FormBorderStyle = FormBorderStyle.Sizable;
 
-        MaximizeBox = false;
+        MaximizeBox = true;
         MinimizeBox = false;
+
+        AutoScaleMode = AutoScaleMode.Dpi;
 
         BackColor = _background;
         ForeColor = Color.White;
@@ -1113,7 +1420,7 @@ internal sealed class PromotionEditDialog : Form
     }
 
     // =========================================
-    // XÂY DỰNG GIAO DIỆN DIALOG
+    // 18.1 XÂY DỰNG GIAO DIỆN DIALOG
     // =========================================
 
     private void BuildInterface(PromotionDisplayItem? item)
@@ -1439,7 +1746,7 @@ internal sealed class PromotionEditDialog : Form
     }
 
     // =========================================
-    // TẠO FIELD
+    // 18.2 TẠO FIELD
     // =========================================
 
     private Panel CreateField(string title, Control input)
@@ -1471,7 +1778,7 @@ internal sealed class PromotionEditDialog : Form
     }
 
     // =========================================
-    // TẠO BUTTON DIALOG
+    // 18.3 TẠO BUTTON DIALOG
     // =========================================
 
     private Button CreateDialogButton(
@@ -1497,7 +1804,7 @@ internal sealed class PromotionEditDialog : Form
     }
 
     // =========================================
-    // NẠP DỮ LIỆU KHI CHỈNH SỬA
+    // 18.4 NẠP DỮ LIỆU KHI CHỈNH SỬA
     // =========================================
 
     private void LoadPromotion(PromotionDisplayItem item)
@@ -1540,7 +1847,7 @@ internal sealed class PromotionEditDialog : Form
     }
 
     // =========================================
-    // LƯU THÔNG TIN
+    // 18.5 LƯU THÔNG TIN
     // =========================================
 
     private void BtnSave_Click(object? sender, EventArgs e)
@@ -1612,4 +1919,4 @@ internal sealed class PromotionEditDialog : Form
 
         Close();
     }
-}   
+}

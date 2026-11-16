@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -25,7 +26,10 @@ namespace CinemaManagement
 
         private UserRole currentRole;
 
-        // Dữ liệu dùng chung trong toàn bộ quy trình đặt vé
+        // Tránh xử lý Resize khi giao diện chưa khởi tạo xong.
+        private bool _responsiveReady;
+
+        // Dữ liệu dùng chung trong toàn bộ quy trình đặt vé.
         private readonly BookingContext _bookingContext = new();
 
         // =========================================================
@@ -42,7 +46,16 @@ namespace CinemaManagement
 
             currentRole = role;
 
+            // WinForms tự co giãn theo DPI của Windows.
+            AutoScaleMode = AutoScaleMode.Dpi;
+
             SetupFullUILayout();
+
+            // Chỉ bật responsive sau khi giao diện đã được tạo.
+            SizeChanged += MainForm_SizeChanged;
+            _responsiveReady = true;
+
+            UpdateResponsiveLayout();
         }
 
         public MainForm(string roleName)
@@ -55,7 +68,7 @@ namespace CinemaManagement
                     : UserRole.Admin)
         {
         }
-        
+
         // =========================================================
         // 3. MAIN INTERFACE
         // =========================================================
@@ -80,6 +93,7 @@ namespace CinemaManagement
             {
                 Dock = DockStyle.Left,
                 Width = 240,
+                MinimumSize = new Size(190, 0),
                 BackColor = Color.FromArgb(30, 39, 46),
                 AutoScroll = true
             };
@@ -111,7 +125,8 @@ namespace CinemaManagement
                 ForeColor = Color.FromArgb(47, 53, 66),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(20, 0, 0, 0)
+                Padding = new Padding(20, 0, 10, 0),
+                AutoEllipsis = true
             };
 
             panelHeader.Controls.Add(lblHeaderTitle);
@@ -122,7 +137,7 @@ namespace CinemaManagement
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(241, 242, 246)
             };
-            
+
             // STAFF AND ADMIN MENU
             if (currentRole == UserRole.Admin ||
                 currentRole == UserRole.Staff)
@@ -137,7 +152,7 @@ namespace CinemaManagement
                     "📷 Quét mã QR soát vé",
                     () => OpenTicketScannerView());
             }
-            
+
             // ADMIN MENU
             if (currentRole == UserRole.Admin)
             {
@@ -166,18 +181,19 @@ namespace CinemaManagement
                     () => SwitchView(
                         "⏰ Lịch chiếu rạp",
                         new ShowtimeManagementUC()));
+
                 AddNavButton(
                     "💰 Quản lý Giá vé",
                     () => SwitchView(
                         "💰 Quản lý giá vé",
                         new PricingUC()));
-                
+
                 AddNavButton(
                     "🍿 Quản lý Bắp nước",
                     () => SwitchView(
                         "🍿 Menu sản phẩm",
                         new FoodManagementUC()));
-                
+
                 AddNavButton(
                     "🎟️ Quản lý Khuyến mãi",
                     () => SwitchView(
@@ -189,10 +205,9 @@ namespace CinemaManagement
                     () => SwitchView(
                         "👥 Tài khoản người dùng",
                         new UserManagementUC()));
-
             }
-            
-            // CUSTOMER MENU (Chỉ hiển thị cho Customer)
+
+            // CUSTOMER MENU
             if (currentRole == UserRole.Customer)
             {
                 AddNavGroup("--- KHÁCH HÀNG (CUSTOMER) ---");
@@ -200,7 +215,7 @@ namespace CinemaManagement
                 AddNavButton(
                     "🏠 Trang chủ Phim",
                     OpenHomeView);
-                
+
                 AddNavButton(
                     "🎁 Khuyến mãi",
                     () => SwitchView(
@@ -240,10 +255,10 @@ namespace CinemaManagement
 
             AddNavButton("🚪 Đăng xuất", () =>
             {
-                // Xóa lượt đặt vé chưa hoàn tất
+                // Xóa lượt đặt vé chưa hoàn tất.
                 _bookingContext.Clear();
 
-                // Chỉ đăng xuất, không xóa lịch sử đặt vé
+                // Chỉ đăng xuất, không xóa lịch sử đặt vé.
                 UserSession.Logout();
 
                 Hide();
@@ -307,7 +322,7 @@ namespace CinemaManagement
             {
                 Text = text,
                 Dock = DockStyle.Top,
-                Height = 40,
+                Height = 44,
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 9.5F),
@@ -338,6 +353,7 @@ namespace CinemaManagement
 
             lblHeaderTitle.Text = title;
 
+            // Giải phóng màn hình cũ.
             foreach (Control c in panelContent.Controls)
             {
                 c.Dispose();
@@ -345,6 +361,7 @@ namespace CinemaManagement
 
             panelContent.Controls.Clear();
 
+            // Hiển thị màn hình mới.
             control.Dock = DockStyle.Fill;
 
             panelContent.Controls.Add(control);
@@ -353,7 +370,48 @@ namespace CinemaManagement
         }
 
         // =========================================================
-        // 6. CUSTOMER BOOKING FLOW
+        // 6. RESPONSIVE LAYOUT
+        // =========================================================
+
+        /// <summary>
+        /// Tự điều chỉnh chiều rộng Sidebar theo cửa sổ.
+        /// Không thay đổi Font của các control.
+        /// </summary>
+        
+        private void UpdateResponsiveLayout()
+        {
+            if (panelSidebar == null || panelSidebar.IsDisposed)
+                return;
+
+            int availableWidth = ClientSize.Width;
+
+            // Sidebar chiếm khoảng 18% chiều rộng cửa sổ.
+            int sidebarWidth = (int)(availableWidth * 0.18f);
+
+            // Giới hạn để Sidebar không chiếm quá nhiều diện tích.
+            if (availableWidth < 1100)
+            {
+                sidebarWidth = Math.Clamp(sidebarWidth, 180, 210);
+            }
+            else
+            {
+                sidebarWidth = Math.Clamp(sidebarWidth, 210, 250);
+            }
+
+            panelSidebar.Width = sidebarWidth;
+        }
+
+
+        private void MainForm_SizeChanged(object? sender, EventArgs e)
+        {
+            if (!_responsiveReady || IsDisposed)
+                return;
+
+            UpdateResponsiveLayout();
+        }
+
+        // =========================================================
+        // 7. CUSTOMER BOOKING FLOW
         // Home -> Movie Detail -> Showtime
         // -> Seat -> Food -> Checkout -> Ticket
         // =========================================================
@@ -574,7 +632,6 @@ namespace CinemaManagement
         // STEP 5: CHECKOUT
         // ---------------------------------------------------------
 
-        
         private void OpenCheckoutView()
         {
             if (!_bookingContext.CanCheckout)
@@ -613,17 +670,16 @@ namespace CinemaManagement
 
                 try
                 {
-                    // 1. Trừ tồn kho bắp nước trong SQLite
+                    // 1. Trừ tồn kho bắp nước trong SQLite.
                     FoodService foodService = new FoodService();
 
                     foodService.DeductStockForOrder(
-                        _bookingContext.FoodCart
-                    );
+                        _bookingContext.FoodCart);
 
-                    // 2. Ghi nhận đơn đặt vé
+                    // 2. Ghi nhận đơn đặt vé.
                     UserSession.AddBooking(result);
 
-                    // 3. Chuyển đến màn hình vé
+                    // 3. Chuyển đến màn hình vé.
                     OpenTicketView(result);
                 }
                 catch (InvalidOperationException ex)
@@ -647,7 +703,6 @@ namespace CinemaManagement
             SwitchView("💳 Thanh toán", checkoutUC);
         }
 
-
         // ---------------------------------------------------------
         // STEP 6: TICKET
         // ---------------------------------------------------------
@@ -665,10 +720,15 @@ namespace CinemaManagement
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
 
-                if (currentRole == UserRole.Staff || currentRole == UserRole.Admin)
+                if (currentRole == UserRole.Staff ||
+                    currentRole == UserRole.Admin)
+                {
                     OpenPOSView();
+                }
                 else
+                {
                     OpenHomeView();
+                }
 
                 return;
             }
@@ -679,10 +739,15 @@ namespace CinemaManagement
             {
                 _bookingContext.Clear();
 
-                if (currentRole == UserRole.Staff || currentRole == UserRole.Admin)
+                if (currentRole == UserRole.Staff ||
+                    currentRole == UserRole.Admin)
+                {
                     OpenPOSView();
+                }
                 else
+                {
                     OpenHomeView();
+                }
             };
 
             SwitchView(
@@ -702,7 +767,7 @@ namespace CinemaManagement
         }
 
         // =========================================================
-        // 7. STAFF / ADMIN POS
+        // 8. STAFF / ADMIN POS
         // =========================================================
 
         public void OpenPOSView()
@@ -758,7 +823,7 @@ namespace CinemaManagement
         }
 
         // =========================================================
-        // 8. TICKET SCANNER
+        // 9. TICKET SCANNER
         // =========================================================
 
         public void OpenTicketScannerView(

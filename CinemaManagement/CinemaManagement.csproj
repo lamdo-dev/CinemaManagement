@@ -22,30 +22,6 @@
       <Compile Update="Forms\LoginForm.cs">
         <SubType>Form</SubType>
       </Compile>
-      <Compile Update="UserControls\Admin\DashboardUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Admin\MovieManagementUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Admin\RoomManagementUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Admin\ShowtimeManagementUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Admin\PricingUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Admin\FoodManagementUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Admin\PromotionUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
-      <Compile Update="UserControls\Admin\UserManagementUC.cs">
-        <SubType>UserControl</SubType>
-      </Compile>
       <Compile Update="UserControls\Common\SeatMatrixUC.cs">
         <SubType>UserControl</SubType>
       </Compile>
