@@ -16,7 +16,7 @@ public partial class HomeUC : UserControl
 
     private Panel pnlSidebar = null!;
     private Panel pnlMainContent = null!;
-    private Panel pnlGenresList = null!;
+    private FlowLayoutPanel flpGenresList = null!;
     private FlowLayoutPanel flpMovieGrid = null!;
     private TextBox txtSearch = null!;
     private Label lblTitle = null!;
@@ -38,13 +38,15 @@ public partial class HomeUC : UserControl
 
     public HomeUC()
     {
+        AutoScaleMode = AutoScaleMode.Dpi;
+
         InitializeComponents();
         RefreshMovies();
 
         // Tự động làm mới dữ liệu khi quay lại màn hình Trang chủ
-        this.VisibleChanged += (s, e) =>
+        VisibleChanged += (s, e) =>
         {
-            if (this.Visible)
+            if (Visible)
             {
                 RefreshMovies();
             }
@@ -53,8 +55,8 @@ public partial class HomeUC : UserControl
 
     private void InitializeComponents()
     {
-        this.Dock = DockStyle.Fill;
-        this.BackColor = Color.FromArgb(24, 24, 36);
+        Dock = DockStyle.Fill;
+        BackColor = Color.FromArgb(24, 24, 36);
 
         // -------------------------------------------------------------
         // 1. SIDEBAR BÊN TRÁI (DANH MỤC & THỂ LOẠI ĐỘNG TỪ DB)
@@ -62,18 +64,34 @@ public partial class HomeUC : UserControl
         pnlSidebar = new Panel
         {
             Dock = DockStyle.Left,
-            Width = 220,
+            Width = 230,
             BackColor = Color.FromArgb(18, 18, 28),
-            Padding = new Padding(15)
+            Padding = new Padding(14, 16, 14, 16)
         };
+
+        var tlpSidebar = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 6,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        tlpSidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // Tiêu đề Danh mục
+        tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // Nút Đang chiếu
+        tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // Nút Sắp chiếu
+        tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // Nút Tất cả phim
+        tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // Tiêu đề Thể loại
+        tlpSidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // Danh sách Thể loại
 
         Label lblLibraryHeader = new Label
         {
             Text = "Danh mục phim",
-            Font = new Font("Segoe UI", 13, FontStyle.Bold),
+            Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
             ForeColor = Color.White,
-            Dock = DockStyle.Top,
-            Height = 38
+            AutoSize = true,
+            Margin = new Padding(4, 0, 0, 10)
         };
 
         btnWatchNow = CreateSidebarButton("▶  Đang chiếu", true);
@@ -116,108 +134,159 @@ public partial class HomeUC : UserControl
         Label lblGenresHeader = new Label
         {
             Text = "Thể loại",
-            Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
             ForeColor = Color.FromArgb(150, 150, 170),
-            Location = new Point(15, 185),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(4, 18, 0, 8)
         };
 
-        pnlGenresList = new Panel
+        flpGenresList = new FlowLayoutPanel
         {
-            Location = new Point(15, 215),
-            Size = new Size(190, 350),
-            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left,
-            AutoScroll = true
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
 
-        pnlSidebar.Controls.Add(pnlGenresList);
-        pnlSidebar.Controls.Add(lblGenresHeader);
-        pnlSidebar.Controls.Add(btnBrowseAll);
-        pnlSidebar.Controls.Add(btnComingSoon);
-        pnlSidebar.Controls.Add(btnWatchNow);
-        pnlSidebar.Controls.Add(lblLibraryHeader);
+        tlpSidebar.Controls.Add(lblLibraryHeader, 0, 0);
+        tlpSidebar.Controls.Add(btnWatchNow, 0, 1);
+        tlpSidebar.Controls.Add(btnComingSoon, 0, 2);
+        tlpSidebar.Controls.Add(btnBrowseAll, 0, 3);
+        tlpSidebar.Controls.Add(lblGenresHeader, 0, 4);
+        tlpSidebar.Controls.Add(flpGenresList, 0, 5);
+
+        pnlSidebar.Controls.Add(tlpSidebar);
 
         // -------------------------------------------------------------
-        // 2. KHU VỰC NỘI DUNG CHÍNH BÊN PHẢI
+        // 2. KHU VỰC NỘI DUNG CHÍNH BÊN PHẢI (RESPONSIVE HEADER + GRID)
         // -------------------------------------------------------------
         pnlMainContent = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(25, 20, 25, 20)
+            Padding = new Padding(24, 18, 24, 18)
         };
 
-        Panel pnlHeader = new Panel
+        var tlpHeader = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 82
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+            Padding = new Padding(0, 0, 0, 16)
         };
+        tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        tlpHeader.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        // Khối Tiêu đề + Mô tả phụ (xếp dọc tự giãn -> không bao giờ đè chữ)
+        var tlpTitleBlock = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 0, 16, 0)
+        };
+        tlpTitleBlock.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpTitleBlock.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpTitleBlock.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         lblTitle = new Label
         {
             Text = "Phim Đang Chiếu",
-            Font = new Font("Segoe UI", 20, FontStyle.Bold),
+            Font = new Font("Segoe UI", 18F, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(0, 0),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4)
         };
 
         lblSubTitle = new Label
         {
             Text = "Chọn phim bạn yêu thích hoặc nhấn 'Đặt vé ngay' để chọn suất chiếu.",
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = Color.FromArgb(150, 150, 170),
-            Location = new Point(2, 42),
-            AutoSize = true
+            Font = new Font("Segoe UI", 9.5F),
+            ForeColor = Color.FromArgb(160, 165, 185),
+            AutoSize = true,
+            Margin = new Padding(2, 0, 0, 0)
         };
 
-        Panel pnlSearchBox = new Panel
+        tlpTitleBlock.Controls.Add(lblTitle, 0, 0);
+        tlpTitleBlock.Controls.Add(lblSubTitle, 0, 1);
+
+        // Khối Tìm kiếm + Nút Làm mới (tự giãn theo chiều rộng chữ)
+        var flpSearchActions = new FlowLayoutPanel
         {
-            Dock = DockStyle.Right,
-            Width = 345
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 4, 0, 0)
         };
 
         txtSearch = new TextBox
         {
-            Font = new Font("Segoe UI", 10.5f),
+            Font = new Font("Segoe UI", 10F),
             PlaceholderText = "🔍 Tìm tên phim, đạo diễn...",
-            Size = new Size(240, 32),
-            Location = new Point(0, 12)
+            Width = 230,
+            Margin = new Padding(0, 1, 8, 0)
         };
         txtSearch.TextChanged += (s, e) => ApplyFilter();
 
         Button btnRefresh = new Button
         {
             Text = "🔄 Làm mới",
-            Location = new Point(248, 11),
-            Size = new Size(95, 32),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12, 5, 12, 5),
+            Margin = new Padding(0),
             BackColor = Color.FromArgb(40, 42, 60),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             Cursor = Cursors.Hand
         };
         btnRefresh.FlatAppearance.BorderSize = 0;
+        btnRefresh.MouseEnter += (s, e) => btnRefresh.BackColor = Color.FromArgb(56, 59, 82);
+        btnRefresh.MouseLeave += (s, e) => btnRefresh.BackColor = Color.FromArgb(40, 42, 60);
         btnRefresh.Click += (s, e) => RefreshMovies();
 
-        pnlSearchBox.Controls.Add(txtSearch);
-        pnlSearchBox.Controls.Add(btnRefresh);
+        flpSearchActions.Controls.Add(txtSearch);
+        flpSearchActions.Controls.Add(btnRefresh);
 
-        pnlHeader.Controls.Add(lblTitle);
-        pnlHeader.Controls.Add(lblSubTitle);
-        pnlHeader.Controls.Add(pnlSearchBox);
+        tlpHeader.Controls.Add(tlpTitleBlock, 0, 0);
+        tlpHeader.Controls.Add(flpSearchActions, 1, 0);
+
+        // Tự động điều chỉnh chiều rộng tối đa của dòng mô tả để xuống dòng gọn khi thu nhỏ cửa sổ
+        tlpHeader.SizeChanged += (s, e) =>
+        {
+            int availableWidth = tlpHeader.ClientSize.Width - flpSearchActions.Width - 24;
+            if (availableWidth > 180)
+            {
+                lblSubTitle.MaximumSize = new Size(availableWidth, 0);
+            }
+        };
 
         flpMovieGrid = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
-            BackColor = Color.Transparent
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
 
         pnlMainContent.Controls.Add(flpMovieGrid);
-        pnlMainContent.Controls.Add(pnlHeader);
+        pnlMainContent.Controls.Add(tlpHeader);
 
-        this.Controls.Add(pnlMainContent);
-        this.Controls.Add(pnlSidebar);
+        Controls.Add(pnlMainContent);
+        Controls.Add(pnlSidebar);
     }
 
     private Button CreateSidebarButton(string text, bool isActive)
@@ -225,15 +294,16 @@ public partial class HomeUC : UserControl
         Button btn = new Button
         {
             Text = text,
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = isActive ? Color.White : Color.FromArgb(160, 160, 180),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+            ForeColor = isActive ? Color.White : Color.FromArgb(165, 170, 190),
             BackColor = isActive ? Color.FromArgb(229, 9, 20) : Color.Transparent,
             FlatStyle = FlatStyle.Flat,
-            Dock = DockStyle.Top,
-            Height = 40,
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(8, 0, 0, 0),
-            Margin = new Padding(0, 4, 0, 4),
+            Padding = new Padding(10, 8, 10, 8),
+            Margin = new Padding(0, 3, 0, 3),
             Cursor = Cursors.Hand
         };
         btn.FlatAppearance.BorderSize = 0;
@@ -246,7 +316,7 @@ public partial class HomeUC : UserControl
         {
             bool isSelected = btn == activeBtn;
             btn.BackColor = isSelected ? Color.FromArgb(229, 9, 20) : Color.Transparent;
-            btn.ForeColor = isSelected ? Color.White : Color.FromArgb(160, 160, 180);
+            btn.ForeColor = isSelected ? Color.White : Color.FromArgb(165, 170, 190);
         }
     }
 
@@ -282,7 +352,8 @@ public partial class HomeUC : UserControl
 
     private void BuildDynamicGenresList()
     {
-        pnlGenresList.Controls.Clear();
+        flpGenresList.SuspendLayout();
+        flpGenresList.Controls.Clear();
 
         var distinctGenres = _allMovies
             .SelectMany(m => (m.Genre ?? string.Empty)
@@ -303,7 +374,6 @@ public partial class HomeUC : UserControl
             genreItems.Add((g, g));
         }
 
-        int yOffset = 0;
         foreach (var genre in genreItems)
         {
             bool isSelected = string.Equals(_selectedGenreFilter, genre.FilterKey, StringComparison.OrdinalIgnoreCase);
@@ -311,10 +381,10 @@ public partial class HomeUC : UserControl
             Label lblGenreItem = new Label
             {
                 Text = genre.Display,
-                Font = new Font("Segoe UI", 9.5f, isSelected ? FontStyle.Bold : FontStyle.Regular),
-                ForeColor = isSelected ? Color.FromArgb(229, 9, 20) : Color.FromArgb(180, 180, 200),
-                Location = new Point(5, yOffset),
+                Font = new Font("Segoe UI", 9.5F, isSelected ? FontStyle.Bold : FontStyle.Regular),
+                ForeColor = isSelected ? Color.FromArgb(229, 9, 20) : Color.FromArgb(180, 185, 205),
                 AutoSize = true,
+                Margin = new Padding(4, 5, 4, 5),
                 Cursor = Cursors.Hand
             };
 
@@ -322,7 +392,7 @@ public partial class HomeUC : UserControl
             lblGenreItem.MouseLeave += (s, e) =>
             {
                 bool active = string.Equals(_selectedGenreFilter, genre.FilterKey, StringComparison.OrdinalIgnoreCase);
-                lblGenreItem.ForeColor = active ? Color.FromArgb(229, 9, 20) : Color.FromArgb(180, 180, 200);
+                lblGenreItem.ForeColor = active ? Color.FromArgb(229, 9, 20) : Color.FromArgb(180, 185, 205);
             };
 
             lblGenreItem.Click += (s, e) =>
@@ -332,9 +402,10 @@ public partial class HomeUC : UserControl
                 ApplyFilter();
             };
 
-            pnlGenresList.Controls.Add(lblGenreItem);
-            yOffset += 30;
+            flpGenresList.Controls.Add(lblGenreItem);
         }
+
+        flpGenresList.ResumeLayout();
     }
 
     private void DisplayMovies(List<Movie> movies)
@@ -349,10 +420,10 @@ public partial class HomeUC : UserControl
                 Text = _allMovies.Count == 0
                     ? "🎬 Hiện chưa có phim nào trong hệ thống.\nVui lòng đăng nhập tài khoản Admin -> Quản lý Phim để thêm phim mới."
                     : "🔍 Không tìm thấy phim phù hợp với điều kiện lọc.",
-                Font = new Font("Segoe UI", 11.5f),
+                Font = new Font("Segoe UI", 11F),
                 ForeColor = Color.FromArgb(160, 165, 190),
                 AutoSize = true,
-                Padding = new Padding(12, 30, 0, 0)
+                Padding = new Padding(4, 24, 0, 0)
             };
             flpMovieGrid.Controls.Add(lblEmpty);
             flpMovieGrid.ResumeLayout();
