@@ -1,4 +1,5 @@
 ﻿
+
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -22,7 +23,7 @@ namespace CinemaManagement.UserControls.Customer
 
         private Panel pnlSidebar = null!;
         private Panel pnlMainContent = null!;
-        private Panel pnlGenresList = null!;
+        private FlowLayoutPanel flpGenresList = null!;
         private Panel pnlHeader = null!;
         private Panel pnlSearchBox = null!;
 
@@ -60,6 +61,7 @@ namespace CinemaManagement.UserControls.Customer
 
         public HomeUC()
         {
+            AutoScaleMode = AutoScaleMode.Dpi;
             InitializeComponents();
 
             _layoutReady = true;
@@ -90,114 +92,111 @@ namespace CinemaManagement.UserControls.Customer
             BackColor = Color.FromArgb(24, 24, 36);
 
             // ================= SIDEBAR =================
-
             pnlSidebar = new Panel
             {
                 Dock = DockStyle.Left,
-                Width = 220,
+                Width = 230,
                 MinimumSize = new Size(180, 0),
                 BackColor = Color.FromArgb(18, 18, 28),
-                Padding = new Padding(15)
+                Padding = new Padding(14, 16, 14, 16)
             };
 
-            Label lblLibraryHeader = new Label
+            var tlpSidebar = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 6,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+
+            tlpSidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpSidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpSidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            var lblLibraryHeader = new Label
             {
                 Text = "DANH MỤC PHIM",
-                Font = new Font("Segoe UI", 13, FontStyle.Bold),
+                Font = new Font("Segoe UI", 13F, FontStyle.Bold),
                 ForeColor = Color.White,
                 Dock = DockStyle.Top,
                 Height = 42,
-                TextAlign = ContentAlignment.MiddleLeft
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 0, 0, 8)
             };
 
-            btnWatchNow = CreateSidebarButton(
-                "▶  Đang chiếu",
-                true);
+            btnWatchNow = CreateSidebarButton("▶  Đang chiếu", true);
+            btnComingSoon = CreateSidebarButton("◷  Sắp chiếu", false);
+            btnBrowseAll = CreateSidebarButton("☰  Tất cả phim", false);
 
-            btnComingSoon = CreateSidebarButton(
-                "◷  Sắp chiếu",
-                false);
-
-            btnBrowseAll = CreateSidebarButton(
-                "☰  Tất cả phim",
-                false);
-
-            // ĐANG CHIẾU
             btnWatchNow.Click += (sender, e) =>
             {
                 _selectedStatusFilter = MovieStatus.Showing;
                 _selectedGenreFilter = null;
-
                 lblTitle.Text = "Phim Đang Chiếu";
-
-                lblSubTitle.Text =
-                    "Chọn phim bạn yêu thích hoặc nhấn Đặt vé ngay để chọn suất chiếu.";
-
+                lblSubTitle.Text = "Chọn phim bạn yêu thích hoặc nhấn Đặt vé ngay để chọn suất chiếu.";
                 SetActiveSidebarButton(btnWatchNow);
-
                 BuildDynamicGenresList();
                 ApplyFilter();
             };
 
-            // SẮP CHIẾU
             btnComingSoon.Click += (sender, e) =>
             {
                 _selectedStatusFilter = MovieStatus.ComingSoon;
                 _selectedGenreFilter = null;
-
                 lblTitle.Text = "Phim Sắp Chiếu";
-
-                lblSubTitle.Text =
-                    "Những bộ phim chuẩn bị ra mắt tại rạp trong thời gian tới.";
-
+                lblSubTitle.Text = "Những bộ phim chuẩn bị ra mắt tại rạp trong thời gian tới.";
                 SetActiveSidebarButton(btnComingSoon);
-
                 BuildDynamicGenresList();
                 ApplyFilter();
             };
 
-            // TẤT CẢ PHIM
             btnBrowseAll.Click += (sender, e) =>
             {
                 _selectedStatusFilter = null;
                 _selectedGenreFilter = null;
-
                 lblTitle.Text = "Tất Cả Phim Tại Rạp";
-
-                lblSubTitle.Text =
-                    "Toàn bộ danh sách phim đang chiếu và sắp khởi chiếu.";
-
+                lblSubTitle.Text = "Toàn bộ danh sách phim đang chiếu và sắp khởi chiếu.";
                 SetActiveSidebarButton(btnBrowseAll);
-
                 BuildDynamicGenresList();
                 ApplyFilter();
             };
 
-            Label lblGenresHeader = new Label
+            var lblGenresHeader = new Label
             {
                 Text = "THỂ LOẠI",
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                Font = new Font("Segoe UI", 11F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(150, 150, 170),
                 Dock = DockStyle.Top,
                 Height = 38,
-                TextAlign = ContentAlignment.MiddleLeft
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 12, 0, 4)
             };
 
-            pnlGenresList = new Panel
+            flpGenresList = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                AutoScroll = true
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoScroll = true,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0),
+                Padding = new Padding(0, 4, 0, 4)
             };
 
-            pnlSidebar.Controls.Add(pnlGenresList);
-            pnlSidebar.Controls.Add(lblGenresHeader);
-            pnlSidebar.Controls.Add(btnBrowseAll);
-            pnlSidebar.Controls.Add(btnComingSoon);
-            pnlSidebar.Controls.Add(btnWatchNow);
-            pnlSidebar.Controls.Add(lblLibraryHeader);
+            tlpSidebar.Controls.Add(lblLibraryHeader, 0, 0);
+            tlpSidebar.Controls.Add(btnWatchNow, 0, 1);
+            tlpSidebar.Controls.Add(btnComingSoon, 0, 2);
+            tlpSidebar.Controls.Add(btnBrowseAll, 0, 3);
+            tlpSidebar.Controls.Add(lblGenresHeader, 0, 4);
+            tlpSidebar.Controls.Add(flpGenresList, 0, 5);
+            pnlSidebar.Controls.Add(tlpSidebar);
 
             // ================= MAIN CONTENT =================
-
             pnlMainContent = new Panel
             {
                 Dock = DockStyle.Fill,
@@ -205,72 +204,67 @@ namespace CinemaManagement.UserControls.Customer
                 BackColor = Color.FromArgb(24, 24, 36)
             };
 
-            // ================= HEADER =================
-
             pnlHeader = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 92
+                Height = 92,
+                BackColor = Color.Transparent
             };
 
             lblTitle = new Label
             {
                 Text = "Phim Đang Chiếu",
-                Font = new Font("Segoe UI", 20, FontStyle.Bold),
+                Font = new Font("Segoe UI", 18F, FontStyle.Bold),
                 ForeColor = Color.White,
+                AutoSize = true,
                 Location = new Point(0, 0),
-                AutoSize = true
+                MaximumSize = new Size(600, 0)
             };
 
             lblSubTitle = new Label
             {
                 Text = "Chọn phim bạn yêu thích hoặc nhấn Đặt vé ngay để chọn suất chiếu.",
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = Color.FromArgb(150, 150, 170),
-                Location = new Point(2, 42),
-                AutoSize = true
+                Font = new Font("Segoe UI", 9.5F),
+                ForeColor = Color.FromArgb(160, 165, 185),
+                AutoSize = true,
+                Location = new Point(2, 43),
+                MaximumSize = new Size(600, 0)
             };
 
-            // SEARCH BOX
             pnlSearchBox = new Panel
             {
                 Dock = DockStyle.Right,
-                Width = 350
+                Width = 350,
+                Height = 60,
+                BackColor = Color.Transparent
             };
 
             txtSearch = new TextBox
             {
-                Font = new Font("Segoe UI", 10.5f),
-                PlaceholderText = "Tìm tên phim, thể loại, đạo diễn...",
-                Size = new Size(240, 34),
+                Font = new Font("Segoe UI", 10F),
+                PlaceholderText = "🔍 Tìm tên phim, đạo diễn...",
                 Location = new Point(0, 12),
+                Size = new Size(240, 34),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
-
-            txtSearch.TextChanged += (sender, e) =>
-            {
-                ApplyFilter();
-            };
+            txtSearch.TextChanged += (sender, e) => ApplyFilter();
 
             btnRefresh = new Button
             {
                 Text = "↻ Làm mới",
-                Location = new Point(248, 11),
-                Size = new Size(98, 35),
-                BackColor = Color.FromArgb(40, 42, 60),
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 ForeColor = Color.White,
+                BackColor = Color.FromArgb(40, 42, 60),
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right
+                Size = new Size(96, 34),
+                Location = new Point(248, 12),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Cursor = Cursors.Hand
             };
-
             btnRefresh.FlatAppearance.BorderSize = 0;
-
-            btnRefresh.Click += (sender, e) =>
-            {
-                RefreshMovies();
-            };
+            btnRefresh.MouseEnter += (sender, e) => btnRefresh.BackColor = Color.FromArgb(56, 59, 82);
+            btnRefresh.MouseLeave += (sender, e) => btnRefresh.BackColor = Color.FromArgb(40, 42, 60);
+            btnRefresh.Click += (sender, e) => RefreshMovies();
 
             pnlSearchBox.Controls.Add(txtSearch);
             pnlSearchBox.Controls.Add(btnRefresh);
@@ -279,8 +273,6 @@ namespace CinemaManagement.UserControls.Customer
             pnlHeader.Controls.Add(lblSubTitle);
             pnlHeader.Controls.Add(pnlSearchBox);
 
-            // ================= MOVIE GRID =================
-
             flpMovieGrid = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -288,7 +280,8 @@ namespace CinemaManagement.UserControls.Customer
                 BackColor = Color.Transparent,
                 WrapContents = true,
                 Padding = new Padding(0, 12, 0, 0),
-                FlowDirection = FlowDirection.LeftToRight
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(0)
             };
 
             pnlMainContent.Controls.Add(flpMovieGrid);
@@ -297,7 +290,6 @@ namespace CinemaManagement.UserControls.Customer
             Controls.Add(pnlMainContent);
             Controls.Add(pnlSidebar);
 
-            // Theo dõi kích thước giao diện.
             SizeChanged += HomeUC_SizeChanged;
             pnlMainContent.SizeChanged += HomeUC_SizeChanged;
         }
@@ -424,30 +416,22 @@ namespace CinemaManagement.UserControls.Customer
 
         private Button CreateSidebarButton(string text, bool isActive)
         {
-            Button btn = new Button
+            var btn = new Button
             {
                 Text = text,
-                Font = new Font("Segoe UI", 10, FontStyle.Bold),
-
-                ForeColor = isActive
-                    ? Color.White
-                    : Color.FromArgb(160, 160, 180),
-
-                BackColor = isActive
-                    ? Color.FromArgb(229, 9, 20)
-                    : Color.Transparent,
-
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                ForeColor = isActive ? Color.White : Color.FromArgb(165, 170, 190),
+                BackColor = isActive ? Color.FromArgb(229, 9, 20) : Color.Transparent,
                 FlatStyle = FlatStyle.Flat,
                 Dock = DockStyle.Top,
                 Height = 42,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(8, 0, 0, 0),
-                Margin = new Padding(0, 4, 0, 4),
+                Padding = new Padding(10, 0, 0, 0),
+                Margin = new Padding(0, 3, 0, 3),
                 Cursor = Cursors.Hand
             };
 
             btn.FlatAppearance.BorderSize = 0;
-
             return btn;
         }
 
@@ -468,7 +452,7 @@ namespace CinemaManagement.UserControls.Customer
 
                 btn.ForeColor = isSelected
                     ? Color.White
-                    : Color.FromArgb(160, 160, 180);
+                    : Color.FromArgb(165, 170, 190);
             }
         }
 
@@ -509,17 +493,18 @@ namespace CinemaManagement.UserControls.Customer
 
         private void BuildDynamicGenresList()
         {
-            pnlGenresList.Controls.Clear();
+            flpGenresList.SuspendLayout();
+            flpGenresList.Controls.Clear();
 
             var genres = _allMovies
                 .SelectMany(movie =>
                     (movie.Genre ?? string.Empty).Split(
                         new[] { ',', '/', '|' },
                         StringSplitOptions.RemoveEmptyEntries))
-                .Select(genre => genre.Trim())
-                .Where(genre => !string.IsNullOrWhiteSpace(genre))
+                .Select(item => item.Trim())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(genre => genre)
+                .OrderBy(item => item)
                 .ToList();
 
             var genreItems = new List<(string Display, string? FilterKey)>
@@ -527,68 +512,58 @@ namespace CinemaManagement.UserControls.Customer
                 ("Tất cả thể loại", null)
             };
 
-            genreItems.AddRange(
-                genres.Select(genre => (genre, (string?)genre)));
+            genreItems.AddRange(genres.Select(item => (item, (string?)item)));
 
-            int yOffset = 8;
-
-            foreach (var genre in genreItems)
+            foreach (var genreItem in genreItems)
             {
                 bool isSelected = string.Equals(
                     _selectedGenreFilter,
-                    genre.FilterKey,
+                    genreItem.FilterKey,
                     StringComparison.OrdinalIgnoreCase);
 
-                Label lblGenreItem = new Label
+                var lblGenreItem = new Label
                 {
-                    Text = genre.Display,
-
+                    Text = genreItem.Display,
                     Font = new Font(
                         "Segoe UI",
-                        9.5f,
-                        isSelected
-                            ? FontStyle.Bold
-                            : FontStyle.Regular),
-
+                        9.5F,
+                        isSelected ? FontStyle.Bold : FontStyle.Regular),
                     ForeColor = isSelected
                         ? Color.FromArgb(229, 9, 20)
-                        : Color.FromArgb(180, 180, 200),
-
-                    Location = new Point(8, yOffset),
+                        : Color.FromArgb(180, 185, 205),
                     AutoSize = true,
+                    Margin = new Padding(8, 6, 4, 6),
                     Cursor = Cursors.Hand
                 };
 
                 lblGenreItem.MouseEnter += (sender, e) =>
                 {
-                    lblGenreItem.ForeColor =
-                        Color.FromArgb(229, 9, 20);
+                    lblGenreItem.ForeColor = Color.FromArgb(229, 9, 20);
                 };
 
                 lblGenreItem.MouseLeave += (sender, e) =>
                 {
                     bool active = string.Equals(
                         _selectedGenreFilter,
-                        genre.FilterKey,
+                        genreItem.FilterKey,
                         StringComparison.OrdinalIgnoreCase);
 
                     lblGenreItem.ForeColor = active
                         ? Color.FromArgb(229, 9, 20)
-                        : Color.FromArgb(180, 180, 200);
+                        : Color.FromArgb(180, 185, 205);
                 };
 
                 lblGenreItem.Click += (sender, e) =>
                 {
-                    _selectedGenreFilter = genre.FilterKey;
-
+                    _selectedGenreFilter = genreItem.FilterKey;
                     BuildDynamicGenresList();
                     ApplyFilter();
                 };
 
-                pnlGenresList.Controls.Add(lblGenreItem);
-
-                yOffset += 30;
+                flpGenresList.Controls.Add(lblGenreItem);
             }
+
+            flpGenresList.ResumeLayout();
         }
 
         // =========================================================
@@ -615,10 +590,10 @@ namespace CinemaManagement.UserControls.Customer
                         ? "🎬 Hiện chưa có phim nào trong hệ thống.\nVui lòng đăng nhập tài khoản Admin và thêm phim mới."
                         : "🔍 Không tìm thấy phim phù hợp với điều kiện lọc.",
 
-                    Font = new Font("Segoe UI", 11.5f),
+                    Font = new Font("Segoe UI", 11F),
                     ForeColor = Color.FromArgb(160, 165, 190),
                     AutoSize = true,
-                    Padding = new Padding(12, 30, 0, 0)
+                    Padding = new Padding(4, 24, 0, 0)
                 };
 
                 flpMovieGrid.Controls.Add(lblEmpty);
