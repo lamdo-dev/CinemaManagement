@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Services;
 
 public partial class CheckoutUC : UserControl
 {
@@ -38,10 +39,12 @@ public partial class CheckoutUC : UserControl
     private PaymentMethodType _selectedPaymentMethod = PaymentMethodType.Card;
 
     // =========================================================
-    // 2. BOOKING DATA
+    // 2. BOOKING DATA & SERVICES
     // =========================================================
 
     private BookingContext? _bookingContext;
+    private readonly PromotionService _promotionService = new();
+    private Promotion? _appliedPromotion;
 
     public Movie? MovieData { get; private set; }
     public Showtime? ShowtimeData { get; private set; }
@@ -137,7 +140,6 @@ public partial class CheckoutUC : UserControl
     // 5. CONSTRUCTOR
     // =========================================================
 
-
     public CheckoutUC()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint |
@@ -149,12 +151,13 @@ public partial class CheckoutUC : UserControl
         SetupAnimationTimer();
         SelectPaymentMethod(PaymentMethodType.Card, animate: false);
 
-        this.Disposed += (s, e) =>
+        Disposed += (s, e) =>
         {
             _animTimer?.Stop();
             _animTimer?.Dispose();
         };
     }
+
     // =========================================================
     // 6. SET BOOKING CONTEXT
     // =========================================================
@@ -192,6 +195,7 @@ public partial class CheckoutUC : UserControl
         foodSubTotal = context.FoodAmount;
 
         discountAmount = 0m;
+        _appliedPromotion = null;
 
         txtCoupon.Clear();
         lblCouponMsg.Text = string.Empty;
@@ -233,6 +237,7 @@ public partial class CheckoutUC : UserControl
         foodSubTotal = foodTotal;
 
         discountAmount = 0m;
+        _appliedPromotion = null;
 
         CalculateTotal();
         UpdateUIWithData();
@@ -250,6 +255,7 @@ public partial class CheckoutUC : UserControl
         foodSubTotal = 0m;
         discountAmount = 0m;
         totalAmount = 0m;
+        _appliedPromotion = null;
 
         if (txtCoupon != null)
             txtCoupon.Clear();
@@ -275,7 +281,7 @@ public partial class CheckoutUC : UserControl
         AutoScroll = true;
 
         // -----------------------------------------------------
-        // HEADER (Tự căn giữa Stepper trên mọi độ rộng màn hình)
+        // HEADER
         // -----------------------------------------------------
 
         pnlHeader = new Panel
@@ -449,7 +455,8 @@ public partial class CheckoutUC : UserControl
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = Color.LightGreen,
             Dock = DockStyle.Top,
-            Height = 24,
+            Height = 32,
+            AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft
         };
 
@@ -506,7 +513,7 @@ public partial class CheckoutUC : UserControl
         pnlLeftSummary.Controls.Add(lblSummaryHeader);
 
         // -----------------------------------------------------
-        // CENTER COLUMN - PAYMENT (LƯỚI 2x2 CHỐNG KHUẤT + ANIMATION)
+        // CENTER COLUMN - PAYMENT (2x2 GRID + ANIMATION)
         // -----------------------------------------------------
 
         pnlCenterPayment = new Panel
@@ -526,7 +533,6 @@ public partial class CheckoutUC : UserControl
             Height = 32
         };
 
-        // Lưới 2 hàng x 2 cột chia đều 50%-50% chiều ngang -> Không bao giờ tràn ra ngoài!
         tlpMethodGrid = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -558,7 +564,6 @@ public partial class CheckoutUC : UserControl
         tlpMethodGrid.Controls.Add(btnMethodMoMo, 0, 1);
         tlpMethodGrid.Controls.Add(btnMethodCounter, 1, 1);
 
-        // Thanh trượt Animation báo hiệu phương thức đang chọn
         pnlAnimTrack = new Panel
         {
             Dock = DockStyle.Top,
@@ -577,7 +582,6 @@ public partial class CheckoutUC : UserControl
         pnlAnimTrack.Controls.Add(pnlAnimIndicator);
         pnlAnimTrack.Resize += (s, e) => UpdateIndicatorTarget(animate: false);
 
-        // Khung thân thanh toán co giãn tự động
         Panel pnlPaymentBody = new Panel
         {
             Dock = DockStyle.Fill,
@@ -585,7 +589,6 @@ public partial class CheckoutUC : UserControl
             Padding = new Padding(14)
         };
 
-        // Footer nút xác nhận luôn ghim dưới cùng khung thanh toán
         Panel pnlPaymentFooter = new Panel
         {
             Dock = DockStyle.Bottom,
@@ -628,7 +631,6 @@ public partial class CheckoutUC : UserControl
         pnlPaymentFooter.Controls.Add(btnPayNow);
         pnlPaymentFooter.Controls.Add(chkTerms);
 
-        // Vùng chứa nội dung thay đổi theo phương thức
         Panel pnlMethodContentHost = new Panel
         {
             Dock = DockStyle.Fill,
@@ -886,7 +888,7 @@ public partial class CheckoutUC : UserControl
         pnlCenterPayment.Controls.Add(lblPaymentHeader);
 
         // -----------------------------------------------------
-        // RIGHT COLUMN - TICKET PREVIEW (Co giãn chuẩn mọi màn hình)
+        // RIGHT COLUMN - TICKET PREVIEW
         // -----------------------------------------------------
 
         pnlRightTicketPreview = new Panel
@@ -1015,7 +1017,7 @@ public partial class CheckoutUC : UserControl
     {
         _animTimer = new System.Windows.Forms.Timer
         {
-            Interval = 15 // ~60 FPS mượt mà
+            Interval = 15
         };
         _animTimer.Tick += (s, e) =>
         {
@@ -1369,47 +1371,116 @@ public partial class CheckoutUC : UserControl
     }
 
     // =========================================================
-    // 13. APPLY COUPON
+    // 13. APPLY COUPON (SQLITE PROMOTION SERVICE)
     // =========================================================
 
     private void BtnApplyCoupon_Click(object? sender, EventArgs e)
     {
         string code = txtCoupon.Text.Trim().ToUpperInvariant();
 
-        if (code == "MYTICKET20" || code == "CINEMA2026")
+        // Xóa trạng thái voucher cũ trước khi kiểm tra mã mới
+        _appliedPromotion = null;
+        discountAmount = 0m;
+
+        if (string.IsNullOrWhiteSpace(code))
         {
-            if (ticketSubTotal + foodSubTotal < 20000m)
+            lblCouponMsg.ForeColor = Color.OrangeRed;
+            lblCouponMsg.Text = "Vui lòng nhập mã voucher.";
+
+            CalculateTotal();
+            UpdateUIWithData();
+            return;
+        }
+
+        try
+        {
+            Promotion? promotion = _promotionService.GetAll()
+                .FirstOrDefault(p =>
+                    string.Equals(
+                        p.Code?.Trim(),
+                        code,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (promotion == null)
             {
-                discountAmount = 0m;
-
-                lblCouponMsg.ForeColor = Color.OrangeRed;
-                lblCouponMsg.Text =
-                    "Đơn hàng chưa đủ điều kiện áp dụng mã.";
-
-                CalculateTotal();
-                UpdateUIWithData();
+                ShowCouponError("Mã voucher không tồn tại.");
                 return;
             }
 
-            discountAmount = 20000m;
+            if (!promotion.IsEnabled)
+            {
+                ShowCouponError("Voucher hiện đã bị vô hiệu hóa.");
+                return;
+            }
+
+            DateTime today = DateTime.Today;
+            if (today < promotion.StartDate.Date ||
+                today > promotion.EndDate.Date)
+            {
+                ShowCouponError("Voucher chưa đến thời gian áp dụng hoặc đã hết hạn.");
+                return;
+            }
+
+            decimal orderAmount = ticketSubTotal + foodSubTotal;
+            if (orderAmount < promotion.MinimumOrder)
+            {
+                ShowCouponError(
+                    $"Đơn hàng cần đạt tối thiểu " +
+                    $"{promotion.MinimumOrder.ToString("N0", ViCulture)} đ.");
+                return;
+            }
+
+            decimal calculatedDiscount;
+            if (promotion.DiscountType == "Phần trăm")
+            {
+                calculatedDiscount = orderAmount * promotion.DiscountValue / 100m;
+
+                if (promotion.MaxDiscount > 0 &&
+                    calculatedDiscount > promotion.MaxDiscount)
+                {
+                    calculatedDiscount = promotion.MaxDiscount;
+                }
+            }
+            else if (promotion.DiscountType == "Số tiền")
+            {
+                calculatedDiscount = promotion.DiscountValue;
+            }
+            else
+            {
+                ShowCouponError("Loại giảm giá của voucher không hợp lệ.");
+                return;
+            }
+
+            calculatedDiscount = Math.Min(calculatedDiscount, orderAmount);
+
+            if (calculatedDiscount <= 0)
+            {
+                ShowCouponError("Voucher không tạo ra giá trị giảm hợp lệ.");
+                return;
+            }
+
+            _appliedPromotion = promotion;
+            discountAmount = calculatedDiscount;
 
             lblCouponMsg.ForeColor = Color.LightGreen;
-            lblCouponMsg.Text =
-                "✓ Áp dụng mã giảm giá 20.000đ thành công!";
-        }
-        else if (string.IsNullOrWhiteSpace(code))
-        {
-            discountAmount = 0m;
-            lblCouponMsg.Text = string.Empty;
-        }
-        else
-        {
-            discountAmount = 0m;
+            lblCouponMsg.Text = $"✓ Áp dụng {promotion.Code} thành công!";
 
-            lblCouponMsg.ForeColor = Color.OrangeRed;
-            lblCouponMsg.Text =
-                "✕ Mã giảm giá không hợp lệ hoặc đã hết hạn.";
+            CalculateTotal();
+            UpdateUIWithData();
         }
+        catch (Exception ex)
+        {
+            ShowCouponError("Không thể kiểm tra voucher:\n" + ex.Message);
+        }
+    }
+
+    private void ShowCouponError(string message)
+    {
+        _appliedPromotion = null;
+        discountAmount = 0m;
+
+        lblCouponMsg.ForeColor = Color.OrangeRed;
+        lblCouponMsg.Text = message;
 
         CalculateTotal();
         UpdateUIWithData();
@@ -1550,6 +1621,8 @@ public partial class CheckoutUC : UserControl
                     string ImgPath)>(FoodCart),
 
                 TotalAmount = totalAmount,
+                PromotionCode = _appliedPromotion?.Code ?? string.Empty,
+                DiscountAmount = discountAmount,
                 BookingTime = DateTime.Now,
                 Channel = _selectedPaymentMethod == PaymentMethodType.Counter ? "Tại quầy (Đặt trước)" : "Online",
                 PaymentMethod = methodDisplayName,
@@ -1601,6 +1674,10 @@ public class BookingResultEventArgs : EventArgs
         { get; set; } = new();
 
     public decimal TotalAmount { get; set; }
+
+    public string PromotionCode { get; set; } = string.Empty;
+
+    public decimal DiscountAmount { get; set; }
 
     public DateTime BookingTime { get; set; }
 

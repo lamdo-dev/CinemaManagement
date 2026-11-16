@@ -6,6 +6,7 @@ using System.Windows.Forms;
 
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
+using CinemaManagement.Services;
 using CinemaManagement.UserControls.Admin;
 using CinemaManagement.UserControls.Customer;
 using CinemaManagement.UserControls.Staff;
@@ -28,7 +29,9 @@ namespace CinemaManagement
             Movie,
             Room,
             Schedule,
+            PriceTag,
             Food,
+            Gift,
             Users,
             Home,
             Ticket,
@@ -46,14 +49,14 @@ namespace CinemaManagement
             public bool IsDanger;
         }
 
-        private readonly Color ColSidebarBg       = Color.FromArgb(255, 255, 255); // Trắng sạch tinh tế
-        private readonly Color ColSidebarBorder   = Color.FromArgb(229, 234, 242);
-        private readonly Color ColGroupLabel      = Color.FromArgb(148, 163, 184); // Xám nhạt chữ in hoa
-        private readonly Color ColItemText        = Color.FromArgb(30, 41, 59);    // Xanh than đậm
-        private readonly Color ColItemActiveBg    = Color.FromArgb(241, 245, 249); // Nền viên thuốc khi chọn
-        private readonly Color ColItemHoverBg     = Color.FromArgb(248, 250, 252);
-        private readonly Color ColEmeraldIcon     = Color.FromArgb(22, 163, 74);   // Xanh lá nét mảnh (#16A34A)
-        private readonly Color ColEmeraldSoft     = Color.FromArgb(220, 252, 231);
+        private readonly Color ColSidebarBg     = Color.FromArgb(255, 255, 255);
+        private readonly Color ColSidebarBorder = Color.FromArgb(229, 234, 242);
+        private readonly Color ColGroupLabel    = Color.FromArgb(148, 163, 184);
+        private readonly Color ColItemText      = Color.FromArgb(30, 41, 59);
+        private readonly Color ColItemActiveBg  = Color.FromArgb(241, 245, 249);
+        private readonly Color ColItemHoverBg   = Color.FromArgb(248, 250, 252);
+        private readonly Color ColEmeraldIcon   = Color.FromArgb(22, 163, 74);
+        private readonly Color ColEmeraldSoft   = Color.FromArgb(220, 252, 231);
 
         private Panel panelSidebar = null!;
         private FlowLayoutPanel flpNavContainer = null!;
@@ -63,7 +66,7 @@ namespace CinemaManagement
         private readonly List<Panel> _navPanels = new();
         private Panel? _activeNavPanel;
 
-        private UserRole currentRole;
+        private readonly UserRole currentRole;
 
         // Dữ liệu dùng chung trong toàn bộ quy trình đặt vé
         private readonly BookingContext _bookingContext = new();
@@ -79,9 +82,7 @@ namespace CinemaManagement
         public MainForm(UserRole role)
         {
             InitializeComponent();
-
             currentRole = role;
-
             SetupFullUILayout();
         }
 
@@ -116,7 +117,7 @@ namespace CinemaManagement
             BackColor = Color.FromArgb(245, 246, 250);
 
             // -----------------------------------------------------
-            // SIDEBAR HIỆN ĐẠI GIỐNG MẪU
+            // SIDEBAR
             // -----------------------------------------------------
             panelSidebar = new Panel
             {
@@ -128,10 +129,14 @@ namespace CinemaManagement
             panelSidebar.Paint += (s, e) =>
             {
                 using var borderPen = new Pen(ColSidebarBorder, 1F);
-                e.Graphics.DrawLine(borderPen, panelSidebar.Width - 1, 0, panelSidebar.Width - 1, panelSidebar.Height);
+                e.Graphics.DrawLine(
+                    borderPen,
+                    panelSidebar.Width - 1,
+                    0,
+                    panelSidebar.Width - 1,
+                    panelSidebar.Height);
             };
 
-            // Khu vực Logo thương hiệu phía trên Sidebar
             var pnlBrand = new Panel
             {
                 Dock = DockStyle.Top,
@@ -157,10 +162,14 @@ namespace CinemaManagement
                 e.Graphics.DrawString($"● {userDisplay}", fontRole, brushRole, 63, 38);
 
                 using var divPen = new Pen(ColSidebarBorder, 1F);
-                e.Graphics.DrawLine(divPen, 16, pnlBrand.Height - 1, pnlBrand.Width - 16, pnlBrand.Height - 1);
+                e.Graphics.DrawLine(
+                    divPen,
+                    16,
+                    pnlBrand.Height - 1,
+                    pnlBrand.Width - 16,
+                    pnlBrand.Height - 1);
             };
 
-            // Danh sách cuộn mượt cho các nhóm menu
             flpNavContainer = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -186,7 +195,12 @@ namespace CinemaManagement
             panelHeader.Paint += (s, e) =>
             {
                 using var borderPen = new Pen(ColSidebarBorder, 1F);
-                e.Graphics.DrawLine(borderPen, 0, panelHeader.Height - 1, panelHeader.Width, panelHeader.Height - 1);
+                e.Graphics.DrawLine(
+                    borderPen,
+                    0,
+                    panelHeader.Height - 1,
+                    panelHeader.Width,
+                    panelHeader.Height - 1);
             };
 
             lblHeaderTitle = new Label
@@ -211,13 +225,11 @@ namespace CinemaManagement
             };
 
             // =====================================================
-            // MENU ITEMS (GIỮ NGUYÊN PHÂN QUYỀN & CHỨC NĂNG)
+            // MENU ITEMS (PHÂN QUYỀN ĐẦY ĐỦ)
             // =====================================================
-            AddNavGroup("BẢNG ĐIỀU KHIỂN");
 
-            // STAFF AND ADMIN MENU
-            if (currentRole == UserRole.Admin ||
-                currentRole == UserRole.Staff)
+            // STAFF & ADMIN MENU
+            if (currentRole == UserRole.Admin || currentRole == UserRole.Staff)
             {
                 AddNavGroup("BÁN HÀNG & SOÁT VÉ");
 
@@ -269,11 +281,25 @@ namespace CinemaManagement
                         new ShowtimeManagementUC()));
 
                 AddNavButton(
+                    "Quản lý Giá vé",
+                    NavIconType.PriceTag,
+                    () => SwitchView(
+                        "Quản lý giá vé",
+                        new PricingUC()));
+
+                AddNavButton(
                     "Quản lý Bắp nước",
                     NavIconType.Food,
                     () => SwitchView(
                         "Menu sản phẩm",
                         new FoodManagementUC()));
+
+                AddNavButton(
+                    "Quản lý Khuyến mãi",
+                    NavIconType.Gift,
+                    () => SwitchView(
+                        "Quản lý chương trình khuyến mãi",
+                        new PromotionUC()));
 
                 AddNavButton(
                     "Quản lý Người dùng",
@@ -294,6 +320,13 @@ namespace CinemaManagement
                     "Trang chủ Phim",
                     NavIconType.Home,
                     OpenHomeView);
+
+                AddNavButton(
+                    "Khuyến mãi",
+                    NavIconType.Gift,
+                    () => SwitchView(
+                        "Ưu đãi & Khuyến mãi",
+                        new PromotionListUC()));
 
                 AddNavButton(
                     "Lịch chiếu",
@@ -408,12 +441,14 @@ namespace CinemaManagement
                 Cursor = Cursors.Hand
             };
 
-            // Bật DoubleBuffered cho Panel chuẩn
-            typeof(Control).InvokeMember("DoubleBuffered",
+            typeof(Control).InvokeMember(
+                "DoubleBuffered",
                 System.Reflection.BindingFlags.SetProperty |
                 System.Reflection.BindingFlags.Instance |
                 System.Reflection.BindingFlags.NonPublic,
-                null, item, new object[] { true });
+                null,
+                item,
+                new object[] { true });
 
             item.Paint += (s, e) =>
             {
@@ -573,6 +608,18 @@ namespace CinemaManagement
                     g.DrawLine(pen, x + 12, y + 1, x + 12, y + 4);
                     break;
 
+                case NavIconType.PriceTag:
+                    g.DrawPolygon(pen, new[]
+                    {
+                        new Point(x + 2, y + 9),
+                        new Point(x + 9, y + 2),
+                        new Point(x + 16, y + 2),
+                        new Point(x + 16, y + 9),
+                        new Point(x + 9, y + 16)
+                    });
+                    g.FillEllipse(brush, x + 12, y + 5, 2, 2);
+                    break;
+
                 case NavIconType.Food:
                     g.DrawPolygon(pen, new[]
                     {
@@ -583,6 +630,14 @@ namespace CinemaManagement
                     });
                     g.DrawArc(pen, x + 4, y + 3, 5, 5, 180, 180);
                     g.DrawArc(pen, x + 9, y + 3, 5, 5, 180, 180);
+                    break;
+
+                case NavIconType.Gift:
+                    g.DrawRectangle(pen, x + 3, y + 8, 12, 8);
+                    g.DrawRectangle(pen, x + 2, y + 5, 14, 3);
+                    g.DrawLine(pen, x + 9, y + 5, x + 9, y + 16);
+                    g.DrawArc(pen, x + 5, y + 2, 4, 3, 0, 360);
+                    g.DrawArc(pen, x + 9, y + 2, 4, 3, 0, 360);
                     break;
 
                 case NavIconType.Users:
@@ -657,9 +712,7 @@ namespace CinemaManagement
             panelContent.Controls.Clear();
 
             control.Dock = DockStyle.Fill;
-
             panelContent.Controls.Add(control);
-
             control.BringToFront();
         }
 
@@ -870,7 +923,6 @@ namespace CinemaManagement
             }
 
             var checkoutUC = new CheckoutUC();
-
             checkoutUC.SetBookingContext(_bookingContext);
 
             checkoutUC.OnBackClicked += (s, e) =>
@@ -885,24 +937,38 @@ namespace CinemaManagement
 
                 try
                 {
+                    // 1. Trừ tồn kho bắp nước trong SQLite
+                    FoodService foodService = new FoodService();
+                    foodService.DeductStockForOrder(_bookingContext.FoodCart);
+
+                    // 2. Ghi nhận đơn đặt vé
                     UserSession.AddBooking(result);
+
+                    // 3. Chuyển đến màn hình vé
                     OpenTicketView(result);
                 }
                 catch (InvalidOperationException ex)
                 {
                     MessageBox.Show(
                         ex.Message,
-                        "Không thể đặt vé",
+                        "Không thể hoàn tất đơn hàng",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        "Lỗi xử lý đơn hàng:\n" + ex.Message,
+                        "Lỗi",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
                 }
             };
 
             SwitchView("Thanh toán", checkoutUC);
         }
 
-        public void OpenTicketView(
-            BookingResultEventArgs? bookingData = null)
+        public void OpenTicketView(BookingResultEventArgs? bookingData = null)
         {
             bookingData ??= UserSession.LatestBooking;
 
@@ -991,8 +1057,7 @@ namespace CinemaManagement
         // 8. TICKET SCANNER
         // =========================================================
 
-        public void OpenTicketScannerView(
-            string? prefillCode = null)
+        public void OpenTicketScannerView(string? prefillCode = null)
         {
             var scannerUC = new TicketScannerUC(prefillCode);
 
@@ -1012,11 +1077,8 @@ namespace CinemaManagement
 
             scannerUC.OnTicketAccepted += (s, result) =>
             {
-                int room =
-                    result.Booking?.Showtime?.RoomId ?? 1;
-
-                var seats =
-                    result.Booking?.Seats ?? new List<string>();
+                int room = result.Booking?.Showtime?.RoomId ?? 1;
+                var seats = result.Booking?.Seats ?? new List<string>();
 
                 lblHeaderTitle.Text =
                     $"Soát vé - Mời khách vào Phòng 0{room} (Ghế {string.Join(", ", seats)})";

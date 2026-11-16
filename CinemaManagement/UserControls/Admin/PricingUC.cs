@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using CinemaManagement.Models;
+using CinemaManagement.Services;
 
 namespace CinemaManagement.UserControls.Admin;
 
@@ -13,28 +15,9 @@ public partial class PricingUC : UserControl
     // 1. DỮ LIỆU GIÁ VÉ
     // =========================================
 
-    private sealed class PricingRule
-    {
-        public int Id { get; set; }
-
-        public string Format { get; set; } = "2D";
-
-        public string SeatType { get; set; } = "Ghế thường";
-
-        public string DayType { get; set; } = "Ngày thường";
-
-        public string TimeSlot { get; set; } = "Cả ngày";
-
-        public decimal BasePrice { get; set; }
-
-        public decimal Surcharge { get; set; }
-
-        public decimal FinalPrice => BasePrice + Surcharge;
-    }
-
+    private readonly PricingService _pricingService = new();
     private readonly List<PricingRule> _rules = new();
 
-    private int _nextId = 1;
     private int? _editingId;
 
     // =========================================
@@ -92,9 +75,7 @@ public partial class PricingUC : UserControl
 
         BuildInterface();
 
-        LoadSampleData();
-
-        RefreshPricingTable();
+        LoadPricingData();
 
         UpdatePricePreview();
     }
@@ -117,27 +98,21 @@ public partial class PricingUC : UserControl
         mainLayout.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-        // Header
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 85));
 
-        // Thống kê
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 115));
 
-        // Tìm kiếm và lọc
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 65));
 
-        // Biểu mẫu giá
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 230));
 
-        // Bảng dữ liệu
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        // Chân trang
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 32));
 
@@ -347,15 +322,13 @@ public partial class PricingUC : UserControl
                 new ColumnStyle(SizeType.Percent, 25));
         }
 
-        // Hàng đầu tiên
         fieldsPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 50));
 
-        // Hàng thứ hai
         fieldsPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 50));
 
-        // Hàng 1: Định dạng
+        // Định dạng phim
         _cboFormat = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -375,7 +348,7 @@ public partial class PricingUC : UserControl
             0, 0
         );
 
-        // Hàng 1: Loại ghế
+        // Loại ghế
         _cboSeatType = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -396,7 +369,7 @@ public partial class PricingUC : UserControl
             1, 0
         );
 
-        // Hàng 1: Ngày áp dụng
+        // Ngày áp dụng
         _cboDayType = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -416,7 +389,7 @@ public partial class PricingUC : UserControl
             2, 0
         );
 
-        // Hàng 1: Khung giờ
+        // Khung giờ
         _cboTimeSlot = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -437,7 +410,7 @@ public partial class PricingUC : UserControl
             3, 0
         );
 
-        // Hàng 2: Giá cơ bản
+        // Giá cơ bản
         _numBasePrice = new NumericUpDown
         {
             Minimum = 10000,
@@ -453,7 +426,7 @@ public partial class PricingUC : UserControl
             0, 1
         );
 
-        // Hàng 2: Phụ thu
+        // Phụ thu
         _numSurcharge = new NumericUpDown
         {
             Minimum = -100000,
@@ -469,7 +442,7 @@ public partial class PricingUC : UserControl
             1, 1
         );
 
-        // Hàng 2: Giá cuối cùng
+        // Giá cuối cùng
         _lblPricePreview = new Label
         {
             Text = "75.000 VNĐ",
@@ -483,7 +456,7 @@ public partial class PricingUC : UserControl
             2, 1
         );
 
-        // Hàng 2: Thông tin
+        // Cách tính
         Label lblNote = new Label
         {
             Text = "Giá cuối = Giá cơ bản + Phụ thu",
@@ -678,12 +651,10 @@ public partial class PricingUC : UserControl
     // 6. TẠO Ô NHẬP LIỆU
     // =========================================
 
-   
     private Panel CreateEditorField(
         string title,
         Control input)
     {
-        // Panel chứa Label và ô nhập liệu
         Panel field = new Panel
         {
             Dock = DockStyle.Fill,
@@ -691,7 +662,6 @@ public partial class PricingUC : UserControl
             Margin = new Padding(6, 3, 6, 3)
         };
 
-        // Bố cục gồm 2 hàng
         TableLayoutPanel fieldLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -702,11 +672,9 @@ public partial class PricingUC : UserControl
             Margin = new Padding(0)
         };
 
-        // Hàng 1: Label
         fieldLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 25));
 
-        // Hàng 2: Ô nhập liệu
         fieldLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 32));
 
@@ -726,17 +694,13 @@ public partial class PricingUC : UserControl
         input.Dock = DockStyle.Fill;
         input.Margin = new Padding(0);
 
-        // Thêm Label vào hàng 1
         fieldLayout.Controls.Add(label, 0, 0);
-
-        // Thêm ô nhập liệu vào hàng 2
         fieldLayout.Controls.Add(input, 0, 1);
 
         field.Controls.Add(fieldLayout);
 
         return field;
     }
-
 
     // =========================================
     // 7. TẠO BUTTON
@@ -821,82 +785,30 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 9. DỮ LIỆU GIÁ VÉ MẪU
+    // 9. TẢI DỮ LIỆU TỪ SQLITE
     // =========================================
 
-    private void LoadSampleData()
+    private void LoadPricingData()
     {
-        _rules.Clear();
-
-        _nextId = 1;
-
-        string[] formats = { "2D", "3D" };
-
-        string[] seatTypes =
+        try
         {
-            "Ghế thường",
-            "Ghế VIP",
-            "Ghế đôi"
-        };
+            _rules.Clear();
 
-        string[] dayTypes =
+            List<PricingRule> data = _pricingService.GetAll();
+
+            _rules.AddRange(data);
+
+            RefreshPricingTable();
+        }
+        catch (Exception ex)
         {
-            "Ngày thường",
-            "Cuối tuần"
-        };
-
-        string[] timeSlots =
-        {
-            "Trước 12:00",
-            "12:00 - 17:00",
-            "Sau 17:00"
-        };
-
-        foreach (string format in formats)
-        {
-            foreach (string seatType in seatTypes)
-            {
-                foreach (string dayType in dayTypes)
-                {
-                    foreach (string timeSlot in timeSlots)
-                    {
-                        decimal surcharge = 0;
-
-                        // Phụ thu phim 3D
-                        if (format == "3D")
-                            surcharge += 20000;
-
-                        // Phụ thu ghế
-                        if (seatType == "Ghế VIP")
-                            surcharge += 15000;
-
-                        if (seatType == "Ghế đôi")
-                            surcharge += 45000;
-
-                        // Phụ thu cuối tuần
-                        if (dayType == "Cuối tuần")
-                            surcharge += 10000;
-
-                        // Điều chỉnh theo khung giờ
-                        if (timeSlot == "Trước 12:00")
-                            surcharge -= 5000;
-
-                        if (timeSlot == "Sau 17:00")
-                            surcharge += 5000;
-
-                        _rules.Add(new PricingRule
-                        {
-                            Id = _nextId++,
-                            Format = format,
-                            SeatType = seatType,
-                            DayType = dayType,
-                            TimeSlot = timeSlot,
-                            BasePrice = 75000,
-                            Surcharge = surcharge
-                        });
-                    }
-                }
-            }
+            MessageBox.Show(
+                "Không thể tải dữ liệu giá vé từ cơ sở dữ liệu.\n\n" +
+                ex.Message,
+                "Lỗi tải dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
         }
     }
 
@@ -1014,33 +926,108 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 14. KIỂM TRA QUY TẮC GIÁ TRÙNG
-    // =========================================
-
-    private bool IsDuplicateRule(PricingRule newRule)
-    {
-        return _rules.Any(rule =>
-            rule.Id != newRule.Id &&
-            rule.Format == newRule.Format &&
-            rule.SeatType == newRule.SeatType &&
-            rule.DayType == newRule.DayType &&
-            rule.TimeSlot == newRule.TimeSlot
-        );
-    }
-
-    // =========================================
-    // 15. THÊM HOẶC CẬP NHẬT QUY TẮC GIÁ
+    // 14. THÊM HOẶC CẬP NHẬT QUY TẮC GIÁ
     // =========================================
 
     private void BtnSave_Click(object? sender, EventArgs e)
     {
-        decimal finalPrice =
-            _numBasePrice.Value + _numSurcharge.Value;
+        try
+        {
+            decimal finalPrice =
+                _numBasePrice.Value + _numSurcharge.Value;
 
-        if (finalPrice <= 0)
+            if (finalPrice <= 0)
+            {
+                MessageBox.Show(
+                    "Giá vé sau điều chỉnh phải lớn hơn 0!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            PricingRule newRule = new PricingRule
+            {
+                Id = _editingId ?? 0,
+
+                Format = _cboFormat.SelectedItem?.ToString() ?? "2D",
+
+                SeatType = _cboSeatType.SelectedItem?.ToString()
+                           ?? "Ghế thường",
+
+                DayType = _cboDayType.SelectedItem?.ToString()
+                          ?? "Ngày thường",
+
+                TimeSlot = _cboTimeSlot.SelectedItem?.ToString()
+                           ?? "12:00 - 17:00",
+
+                BasePrice = _numBasePrice.Value,
+
+                Surcharge = _numSurcharge.Value
+            };
+
+            if (_editingId.HasValue)
+            {
+                bool updated = _pricingService.Update(newRule);
+
+                if (!updated)
+                {
+                    MessageBox.Show(
+                        "Không thể cập nhật quy tắc giá.",
+                        "Thông báo",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+
+                    return;
+                }
+
+                MessageBox.Show(
+                    "Cập nhật giá vé thành công!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            else
+            {
+                _pricingService.Add(newRule);
+
+                MessageBox.Show(
+                    "Thêm quy tắc giá thành công!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+
+            LoadPricingData();
+
+            ResetEditor();
+        }
+        catch (Exception ex)
         {
             MessageBox.Show(
-                "Giá vé sau điều chỉnh phải lớn hơn 0!",
+                "Không thể lưu quy tắc giá.\n\n" + ex.Message,
+                "Lỗi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
+    }
+
+    // =========================================
+    // 15. CHỌN QUY TẮC GIÁ ĐỂ SỬA
+    // =========================================
+
+    private void BtnEdit_Click(object? sender, EventArgs e)
+    {
+        if (_dgvPricing.SelectedRows.Count == 0)
+        {
+            MessageBox.Show(
+                "Vui lòng chọn quy tắc giá cần sửa!",
                 "Thông báo",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning
@@ -1049,105 +1036,48 @@ public partial class PricingUC : UserControl
             return;
         }
 
-        PricingRule newRule = new PricingRule
+        try
         {
-            Id = _editingId ?? _nextId++,
+            int id = Convert.ToInt32(
+                _dgvPricing.SelectedRows[0].Cells["Id"].Value
+            );
 
-            Format = _cboFormat.SelectedItem?.ToString() ?? "2D",
+            PricingRule? rule = _pricingService.GetById(id);
 
-            SeatType = _cboSeatType.SelectedItem?.ToString()
-                       ?? "Ghế thường",
+            if (rule == null)
+            {
+                MessageBox.Show("Không tìm thấy quy tắc giá!");
+                return;
+            }
 
-            DayType = _cboDayType.SelectedItem?.ToString()
-                      ?? "Ngày thường",
+            _editingId = id;
 
-            TimeSlot = _cboTimeSlot.SelectedItem?.ToString()
-                       ?? "12:00 - 17:00",
+            _cboFormat.SelectedItem = rule.Format;
+            _cboSeatType.SelectedItem = rule.SeatType;
+            _cboDayType.SelectedItem = rule.DayType;
+            _cboTimeSlot.SelectedItem = rule.TimeSlot;
 
-            BasePrice = _numBasePrice.Value,
+            _numBasePrice.Value = rule.BasePrice;
+            _numSurcharge.Value = rule.Surcharge;
 
-            Surcharge = _numSurcharge.Value
-        };
+            _btnSave.Text = "Cập nhật giá";
+            _btnCancel.Visible = true;
 
-        if (IsDuplicateRule(newRule))
+            UpdatePricePreview();
+        }
+        catch (Exception ex)
         {
             MessageBox.Show(
-                "Quy tắc giá này đã tồn tại!\n" +
-                "Vui lòng chọn định dạng, loại ghế, ngày hoặc khung giờ khác.",
-                "Quy tắc bị trùng",
+                "Không thể tải quy tắc giá cần sửa.\n\n" + ex.Message,
+                "Lỗi",
                 MessageBoxButtons.OK,
-                MessageBoxIcon.Warning
+                MessageBoxIcon.Error
             );
-
-            return;
         }
-
-        if (_editingId.HasValue)
-        {
-            int index = _rules.FindIndex(
-                r => r.Id == _editingId.Value
-            );
-
-            if (index < 0)
-                return;
-
-            _rules[index] = newRule;
-
-            MessageBox.Show("Cập nhật giá vé thành công!");
-        }
-        else
-        {
-            _rules.Add(newRule);
-
-            MessageBox.Show("Thêm quy tắc giá thành công!");
-        }
-
-        RefreshPricingTable();
-
-        ResetEditor();
     }
 
     // =========================================
-    // 16. CHỌN QUY TẮC GIÁ ĐỂ SỬA
-    // =========================================
-
-    private void BtnEdit_Click(object? sender, EventArgs e)
-    {
-        if (_dgvPricing.SelectedRows.Count == 0)
-        {
-            MessageBox.Show("Vui lòng chọn quy tắc giá cần sửa!");
-            return;
-        }
-
-        int id = Convert.ToInt32(
-            _dgvPricing.SelectedRows[0].Cells["Id"].Value
-        );
-
-        PricingRule? rule = _rules.FirstOrDefault(
-            r => r.Id == id
-        );
-
-        if (rule == null)
-            return;
-
-        _editingId = id;
-
-        _cboFormat.SelectedItem = rule.Format;
-        _cboSeatType.SelectedItem = rule.SeatType;
-        _cboDayType.SelectedItem = rule.DayType;
-        _cboTimeSlot.SelectedItem = rule.TimeSlot;
-
-        _numBasePrice.Value = rule.BasePrice;
-        _numSurcharge.Value = rule.Surcharge;
-
-        _btnSave.Text = "Cập nhật giá";
-        _btnCancel.Visible = true;
-
-        UpdatePricePreview();
-    }
-
-    // =========================================
-    // 17. HỦY CHỈNH SỬA
+    // 16. HỦY CHỈNH SỬA
     // =========================================
 
     private void BtnCancel_Click(object? sender, EventArgs e)
@@ -1174,27 +1104,26 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 18. XÓA QUY TẮC GIÁ
+    // 17. XÓA QUY TẮC GIÁ
     // =========================================
 
     private void BtnDelete_Click(object? sender, EventArgs e)
     {
         if (_dgvPricing.SelectedRows.Count == 0)
         {
-            MessageBox.Show("Vui lòng chọn quy tắc giá cần xóa!");
+            MessageBox.Show(
+                "Vui lòng chọn quy tắc giá cần xóa!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+
             return;
         }
 
         int id = Convert.ToInt32(
             _dgvPricing.SelectedRows[0].Cells["Id"].Value
         );
-
-        PricingRule? rule = _rules.FirstOrDefault(
-            r => r.Id == id
-        );
-
-        if (rule == null)
-            return;
 
         DialogResult confirm = MessageBox.Show(
             "Bạn có chắc chắn muốn xóa quy tắc giá này?",
@@ -1206,13 +1135,42 @@ public partial class PricingUC : UserControl
         if (confirm != DialogResult.Yes)
             return;
 
-        _rules.Remove(rule);
+        try
+        {
+            bool deleted = _pricingService.Delete(id);
 
-        if (_editingId == id)
-            ResetEditor();
+            if (!deleted)
+            {
+                MessageBox.Show(
+                    "Không thể xóa quy tắc giá.",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
 
-        RefreshPricingTable();
+                return;
+            }
 
-        MessageBox.Show("Xóa quy tắc giá thành công!");
+            if (_editingId == id)
+                ResetEditor();
+
+            LoadPricingData();
+
+            MessageBox.Show(
+                "Xóa quy tắc giá thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể xóa quy tắc giá.\n\n" + ex.Message,
+                "Lỗi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 }

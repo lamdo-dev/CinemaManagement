@@ -1,11 +1,11 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Services;
 
 namespace CinemaManagement.UserControls.Admin;
 
@@ -15,9 +15,9 @@ public partial class FoodManagementUC : UserControl
     // 1. KHAI BÁO DỮ LIỆU
     // =========================================
 
-    private readonly List<Product> _products = new();
+    private readonly FoodService _foodService = new();
 
-    private int _nextId = 1;
+    private readonly List<Product> _products = new();
 
     // Các thành phần giao diện
     private DataGridView _dgvProducts = null!;
@@ -65,9 +65,7 @@ public partial class FoodManagementUC : UserControl
 
         BuildInterface();
 
-        LoadSampleData();
-
-        RefreshProductTable();
+        LoadProductsFromDatabase();
     }
 
     // =========================================
@@ -88,27 +86,21 @@ public partial class FoodManagementUC : UserControl
         mainLayout.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-        // Header
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 85));
 
-        // Thống kê
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 115));
 
-        // Tìm kiếm và lọc
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 62));
 
-        // Nút chức năng
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 53));
 
-        // Bảng sản phẩm
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        // Chân trang
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 32));
 
@@ -185,37 +177,32 @@ public partial class FoodManagementUC : UserControl
             out _lblLowStock
         );
 
-        // Tăng chiều cao các thẻ
         cardTotal.Height = 120;
         cardActive.Height = 120;
         cardLowStock.Height = 120;
 
-        // Căn khoảng cách giữa các thẻ
         cardTotal.Margin = new Padding(0, 5, 10, 5);
         cardActive.Margin = new Padding(5, 5, 5, 5);
         cardLowStock.Margin = new Padding(10, 5, 0, 5);
 
-        // Điều chỉnh khu vực chứa 3 thẻ
         statisticPanel.Padding = new Padding(3, 5, 3, 5);
         statisticPanel.Height = 135;
 
-        // Điều chỉnh chiều cao dòng chứa các thẻ
         if (statisticPanel.RowStyles.Count > 0)
         {
-            statisticPanel.RowStyles[0].SizeType = SizeType.Absolute;
+            statisticPanel.RowStyles[0].SizeType =
+                SizeType.Absolute;
+
             statisticPanel.RowStyles[0].Height = 125;
         }
 
-        // Thêm các thẻ vào giao diện
         statisticPanel.Controls.Add(cardTotal, 0, 0);
         statisticPanel.Controls.Add(cardActive, 1, 0);
         statisticPanel.Controls.Add(cardLowStock, 2, 0);
 
-        
-        
-         // =====================================
-         // 3.3 TÌM KIẾM VÀ LỌC
-         // =====================================
+        // =====================================
+        // 3.3 TÌM KIẾM VÀ LỌC
+        // =====================================
 
         TableLayoutPanel filterPanel = new TableLayoutPanel
         {
@@ -227,7 +214,6 @@ public partial class FoodManagementUC : UserControl
             Margin = new Padding(0)
         };
 
-        // Phân chia chiều rộng các cột
         filterPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Absolute, 75));
 
@@ -249,13 +235,9 @@ public partial class FoodManagementUC : UserControl
         filterPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        // Màu nền chung
         Color inputBackColor = Color.FromArgb(15, 23, 42);
 
-        // -------------------------------------
-        // 1. TÌM KIẾM
-        // -------------------------------------
-
+        // Tìm kiếm
         Label lblSearch = CreateLabel("Tìm kiếm:", 9);
 
         lblSearch.AutoSize = false;
@@ -274,10 +256,7 @@ public partial class FoodManagementUC : UserControl
             Margin = new Padding(3, 3, 8, 3)
         };
 
-        // -------------------------------------
-        // 2. DANH MỤC
-        // -------------------------------------
-
+        // Danh mục
         Label lblCategory = CreateLabel("Danh mục:", 9);
 
         lblCategory.AutoSize = false;
@@ -306,10 +285,7 @@ public partial class FoodManagementUC : UserControl
 
         _cboCategory.SelectedIndex = 0;
 
-        // -------------------------------------
-        // 3. TRẠNG THÁI
-        // -------------------------------------
-
+        // Trạng thái
         Label lblStatus = CreateLabel("Trạng thái:", 9);
 
         lblStatus.AutoSize = false;
@@ -337,10 +313,6 @@ public partial class FoodManagementUC : UserControl
 
         _cboStatus.SelectedIndex = 0;
 
-        // -------------------------------------
-        // 4. ĐƯA VÀO CÙNG MỘT HÀNG
-        // -------------------------------------
-
         filterPanel.Controls.Add(lblSearch, 0, 0);
         filterPanel.Controls.Add(_txtSearch, 1, 0);
 
@@ -350,9 +322,6 @@ public partial class FoodManagementUC : UserControl
         filterPanel.Controls.Add(lblStatus, 4, 0);
         filterPanel.Controls.Add(_cboStatus, 5, 0);
 
-
-
-        
         // =====================================
         // 3.4 CÁC NÚT CHỨC NĂNG
         // =====================================
@@ -368,37 +337,31 @@ public partial class FoodManagementUC : UserControl
             Margin = new Padding(0)
         };
 
-        // Thêm sản phẩm
         _btnAdd = CreateButton(
             "+ Thêm sản phẩm",
             _accentColor
         );
 
-        // Sửa sản phẩm
         _btnEdit = CreateButton(
             "Sửa sản phẩm",
             Color.FromArgb(217, 119, 6)
         );
 
-        // Xóa sản phẩm
         _btnDelete = CreateButton(
             "Xóa sản phẩm",
             Color.FromArgb(220, 38, 38)
         );
-    
-        // Nhập kho
+
         _btnImport = CreateButton(
             "Nhập kho",
             Color.FromArgb(16, 185, 129)
         );
 
-        // Xuất kho
         _btnExport = CreateButton(
             "Xuất kho",
             Color.FromArgb(234, 88, 12)
         );
 
-        // Thiết lập kích thước và kiểu chữ đồng bộ
         Button[] actionButtons =
         {
             _btnAdd,
@@ -411,6 +374,7 @@ public partial class FoodManagementUC : UserControl
         foreach (Button button in actionButtons)
         {
             button.Height = 38;
+
             button.Font = new Font(
                 "Segoe UI",
                 9,
@@ -422,22 +386,18 @@ public partial class FoodManagementUC : UserControl
             button.Margin = new Padding(0, 0, 10, 0);
         }
 
-        // Chiều rộng riêng cho từng nút
         _btnAdd.Width = 165;
         _btnEdit.Width = 135;
         _btnDelete.Width = 125;
         _btnImport.Width = 125;
         _btnExport.Width = 125;
 
-        // Thêm nút vào khu vực chức năng
         actionPanel.Controls.Add(_btnAdd);
         actionPanel.Controls.Add(_btnEdit);
         actionPanel.Controls.Add(_btnDelete);
         actionPanel.Controls.Add(_btnImport);
         actionPanel.Controls.Add(_btnExport);
 
-
-        
         // =====================================
         // 3.5 BẢNG DANH SÁCH SẢN PHẨM
         // =====================================
@@ -446,29 +406,31 @@ public partial class FoodManagementUC : UserControl
         {
             Dock = DockStyle.Fill,
 
-            // Nền và đường viền
             BackgroundColor = _panelColor,
             BorderStyle = BorderStyle.None,
             GridColor = Color.FromArgb(51, 65, 85),
+
             CellBorderStyle =
                 DataGridViewCellBorderStyle.SingleHorizontal,
+
             ColumnHeadersBorderStyle =
                 DataGridViewHeaderBorderStyle.None,
 
-            // Kích thước bảng
             AutoSizeColumnsMode =
                 DataGridViewAutoSizeColumnsMode.Fill,
+
             AutoSizeRowsMode =
                 DataGridViewAutoSizeRowsMode.None,
 
             ColumnHeadersHeight = 46,
+
             ColumnHeadersHeightSizeMode =
                 DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
 
-            // Quyền thao tác
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
             AllowUserToResizeRows = false,
+
             ReadOnly = true,
             MultiSelect = false,
             RowHeadersVisible = false,
@@ -478,20 +440,14 @@ public partial class FoodManagementUC : UserControl
 
             EnableHeadersVisualStyles = false,
 
-            // Chiều cao hàng
             RowTemplate = { Height = 55 },
 
-            // Hiển thị thanh cuộn
             ScrollBars = ScrollBars.Both,
 
-            // Hiển thị gợi ý khi nội dung dài
             ShowCellToolTips = true
         };
 
-        // -------------------------------------
         // HEADER BẢNG
-        // -------------------------------------
-
         _dgvProducts.ColumnHeadersDefaultCellStyle.BackColor =
             Color.FromArgb(30, 41, 59);
 
@@ -510,10 +466,7 @@ public partial class FoodManagementUC : UserControl
         _dgvProducts.ColumnHeadersDefaultCellStyle.SelectionBackColor =
             Color.FromArgb(30, 41, 59);
 
-        // -------------------------------------
         // NỘI DUNG BẢNG
-        // -------------------------------------
-
         _dgvProducts.DefaultCellStyle.BackColor = _panelColor;
 
         _dgvProducts.DefaultCellStyle.ForeColor =
@@ -537,14 +490,10 @@ public partial class FoodManagementUC : UserControl
         _dgvProducts.DefaultCellStyle.WrapMode =
             DataGridViewTriState.False;
 
-        // Hàng xen kẽ màu
         _dgvProducts.AlternatingRowsDefaultCellStyle.BackColor =
             Color.FromArgb(37, 49, 68);
 
-        // -------------------------------------
         // TẠO CÁC CỘT
-        // -------------------------------------
-
         _dgvProducts.Columns.Add("Id", "MÃ SP");
         _dgvProducts.Columns.Add("Name", "TÊN SẢN PHẨM");
         _dgvProducts.Columns.Add("Category", "DANH MỤC");
@@ -553,10 +502,7 @@ public partial class FoodManagementUC : UserControl
         _dgvProducts.Columns.Add("Image", "HÌNH ẢNH");
         _dgvProducts.Columns.Add("Status", "TRẠNG THÁI");
 
-        // -------------------------------------
         // ĐỘ RỘNG TƯƠNG ĐỐI CỦA CỘT
-        // -------------------------------------
-
         _dgvProducts.Columns["Id"]!.FillWeight = 55;
         _dgvProducts.Columns["Name"]!.FillWeight = 170;
         _dgvProducts.Columns["Category"]!.FillWeight = 90;
@@ -565,10 +511,7 @@ public partial class FoodManagementUC : UserControl
         _dgvProducts.Columns["Image"]!.FillWeight = 105;
         _dgvProducts.Columns["Status"]!.FillWeight = 115;
 
-        // -------------------------------------
         // CHIỀU RỘNG TỐI THIỂU
-        // -------------------------------------
-
         _dgvProducts.Columns["Id"]!.MinimumWidth = 55;
         _dgvProducts.Columns["Name"]!.MinimumWidth = 145;
         _dgvProducts.Columns["Category"]!.MinimumWidth = 85;
@@ -576,68 +519,55 @@ public partial class FoodManagementUC : UserControl
         _dgvProducts.Columns["Stock"]!.MinimumWidth = 70;
         _dgvProducts.Columns["Image"]!.MinimumWidth = 85;
         _dgvProducts.Columns["Status"]!.MinimumWidth = 110;
-            
-        // =====================================
-        // CĂN CHỈNH TIÊU ĐỀ VÀ NỘI DUNG CÁC CỘT
-        // =====================================
 
-// MÃ SẢN PHẨM
+        // CĂN CHỈNH CÁC CỘT
         _dgvProducts.Columns["Id"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
         _dgvProducts.Columns["Id"]!.HeaderCell.Style.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
-// TÊN SẢN PHẨM
         _dgvProducts.Columns["Name"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleLeft;
 
         _dgvProducts.Columns["Name"]!.HeaderCell.Style.Alignment =
             DataGridViewContentAlignment.MiddleLeft;
 
-// DANH MỤC
         _dgvProducts.Columns["Category"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
         _dgvProducts.Columns["Category"]!.HeaderCell.Style.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
-// GIÁ BÁN
         _dgvProducts.Columns["Price"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleRight;
 
         _dgvProducts.Columns["Price"]!.HeaderCell.Style.Alignment =
             DataGridViewContentAlignment.MiddleRight;
 
-// TỒN KHO
         _dgvProducts.Columns["Stock"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
         _dgvProducts.Columns["Stock"]!.HeaderCell.Style.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
-// HÌNH ẢNH
         _dgvProducts.Columns["Image"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
         _dgvProducts.Columns["Image"]!.HeaderCell.Style.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
-// TRẠNG THÁI
         _dgvProducts.Columns["Status"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
         _dgvProducts.Columns["Status"]!.HeaderCell.Style.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
 
-
-        // Không cho sắp xếp tự động khi nhấn tiêu đề
         foreach (DataGridViewColumn column in _dgvProducts.Columns)
         {
             column.SortMode =
                 DataGridViewColumnSortMode.NotSortable;
         }
-
 
         // =====================================
         // 3.6 CHÂN TRANG
@@ -746,7 +676,6 @@ public partial class FoodManagementUC : UserControl
             MinimumSize = new Size(0, 105)
         };
 
-        // Thanh màu bên trái
         Panel accent = new Panel
         {
             Dock = DockStyle.Left,
@@ -754,7 +683,6 @@ public partial class FoodManagementUC : UserControl
             BackColor = accentColor
         };
 
-        // Tiêu đề thẻ
         Label lblTitle = new Label
         {
             Text = title,
@@ -764,10 +692,11 @@ public partial class FoodManagementUC : UserControl
             Location = new Point(20, 9),
             Size = new Size(420, 23),
             TextAlign = ContentAlignment.MiddleLeft,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            Anchor = AnchorStyles.Top |
+                     AnchorStyles.Left |
+                     AnchorStyles.Right
         };
 
-        // Số liệu thống kê
         valueLabel = new Label
         {
             Text = "0",
@@ -780,7 +709,6 @@ public partial class FoodManagementUC : UserControl
             Anchor = AnchorStyles.Top | AnchorStyles.Left
         };
 
-        // Nội dung mô tả
         Label lblDescription = new Label
         {
             Text = description,
@@ -790,7 +718,9 @@ public partial class FoodManagementUC : UserControl
             Location = new Point(22, 72),
             Size = new Size(420, 22),
             TextAlign = ContentAlignment.MiddleLeft,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            Anchor = AnchorStyles.Top |
+                     AnchorStyles.Left |
+                     AnchorStyles.Right
         };
 
         card.Controls.Add(accent);
@@ -802,83 +732,29 @@ public partial class FoodManagementUC : UserControl
     }
 
     // =========================================
-    // 7. DỮ LIỆU SẢN PHẨM MẪU
+    // 7. TẢI SẢN PHẨM TỪ DATABASE
     // =========================================
 
-    private void LoadSampleData()
+    private void LoadProductsFromDatabase()
     {
-        _products.Clear();
-
-        _products.AddRange(new[]
+        try
         {
-            new Product
-            {
-                Id = 1,
-                Name = "Bắp rang bơ nhỏ",
-                Category = "Food",
-                Price = 35000,
-                StockQuantity = 50,
-                ImageUrl = "",
-                IsActive = true
-            },
+            _products.Clear();
 
-            new Product
-            {
-                Id = 2,
-                Name = "Bắp rang bơ lớn",
-                Category = "Food",
-                Price = 55000,
-                StockQuantity = 35,
-                ImageUrl = "",
-                IsActive = true
-            },
+            _products.AddRange(_foodService.GetAll());
 
-            new Product
-            {
-                Id = 3,
-                Name = "Nước Coca-Cola",
-                Category = "Drink",
-                Price = 30000,
-                StockQuantity = 45,
-                ImageUrl = "",
-                IsActive = true
-            },
-
-            new Product
-            {
-                Id = 4,
-                Name = "Nước suối",
-                Category = "Drink",
-                Price = 20000,
-                StockQuantity = 8,
-                ImageUrl = "",
-                IsActive = true
-            },
-
-            new Product
-            {
-                Id = 5,
-                Name = "Combo Couple",
-                Category = "Combo",
-                Price = 120000,
-                StockQuantity = 15,
-                ImageUrl = "",
-                IsActive = true
-            },
-
-            new Product
-            {
-                Id = 6,
-                Name = "Combo Family",
-                Category = "Combo",
-                Price = 180000,
-                StockQuantity = 5,
-                ImageUrl = "",
-                IsActive = false
-            }
-        });
-
-        _nextId = _products.Max(p => p.Id) + 1;
+            RefreshProductTable();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Không thể tải danh sách sản phẩm từ database.\n\n" +
+                ex.Message,
+                "Lỗi tải dữ liệu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
 
     // =========================================
@@ -992,7 +868,6 @@ public partial class FoodManagementUC : UserControl
         string columnName =
             _dgvProducts.Columns[e.ColumnIndex].Name;
 
-        // Sắp hết hàng
         if (columnName == "Stock" &&
             int.TryParse(e.Value?.ToString(), out int stock))
         {
@@ -1006,7 +881,6 @@ public partial class FoodManagementUC : UserControl
             }
         }
 
-        // Trạng thái kinh doanh
         if (columnName == "Status")
         {
             string status = e.Value?.ToString() ?? "";
@@ -1024,39 +898,33 @@ public partial class FoodManagementUC : UserControl
 
     private void BtnAdd_Click(object? sender, EventArgs e)
     {
-        using ProductEditDialog dialog =
-            new ProductEditDialog();
+        using ProductEditDialog dialog = new ProductEditDialog();
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
-        bool exists = _products.Any(p =>
-            p.Name.Equals(
-                dialog.ProductData.Name,
-                StringComparison.OrdinalIgnoreCase
-            )
-        );
-
-        if (exists)
+        try
         {
-            MessageBox.Show("Tên sản phẩm đã tồn tại!");
-            return;
+            _foodService.Add(dialog.ProductData);
+
+            LoadProductsFromDatabase();
+
+            MessageBox.Show(
+                "Thêm sản phẩm thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
         }
-
-        Product newProduct = dialog.ProductData;
-
-        newProduct.Id = _nextId++;
-
-        _products.Add(newProduct);
-
-        RefreshProductTable();
-
-        MessageBox.Show(
-            "Thêm sản phẩm thành công!",
-            "Thông báo",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information
-        );
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Không thể thêm sản phẩm",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+        }
     }
 
     // =========================================
@@ -1075,50 +943,46 @@ public partial class FoodManagementUC : UserControl
             _dgvProducts.SelectedRows[0].Cells["Id"].Value
         );
 
-        Product? product = _products.FirstOrDefault(
-            p => p.Id == id
-        );
-
-        if (product == null)
+        try
         {
-            MessageBox.Show("Không tìm thấy sản phẩm!");
-            return;
+            Product? product = _foodService.GetById(id);
+
+            if (product == null)
+            {
+                MessageBox.Show("Không tìm thấy sản phẩm!");
+                return;
+            }
+
+            using ProductEditDialog dialog =
+                new ProductEditDialog(product);
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+
+            Product updatedProduct = dialog.ProductData;
+
+            updatedProduct.Id = id;
+
+            _foodService.Update(updatedProduct);
+
+            LoadProductsFromDatabase();
+
+            MessageBox.Show(
+                "Cập nhật sản phẩm thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
         }
-
-        using ProductEditDialog dialog =
-            new ProductEditDialog(product);
-
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-            return;
-
-        bool duplicate = _products.Any(p =>
-            p.Id != id &&
-            p.Name.Equals(
-                dialog.ProductData.Name,
-                StringComparison.OrdinalIgnoreCase
-            )
-        );
-
-        if (duplicate)
+        catch (Exception ex)
         {
-            MessageBox.Show("Tên sản phẩm đã tồn tại!");
-            return;
+            MessageBox.Show(
+                ex.Message,
+                "Không thể cập nhật sản phẩm",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
         }
-
-        int index = _products.FindIndex(p => p.Id == id);
-
-        if (index < 0)
-            return;
-
-        Product updatedProduct = dialog.ProductData;
-
-        updatedProduct.Id = id;
-
-        _products[index] = updatedProduct;
-
-        RefreshProductTable();
-
-        MessageBox.Show("Cập nhật sản phẩm thành công!");
     }
 
     // =========================================
@@ -1154,11 +1018,28 @@ public partial class FoodManagementUC : UserControl
         if (confirm != DialogResult.Yes)
             return;
 
-        _products.Remove(product);
+        try
+        {
+            _foodService.Delete(id);
 
-        RefreshProductTable();
+            LoadProductsFromDatabase();
 
-        MessageBox.Show("Xóa sản phẩm thành công!");
+            MessageBox.Show(
+                "Xóa sản phẩm thành công!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Không thể xóa sản phẩm",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+        }
     }
 
     // =========================================
@@ -1191,24 +1072,33 @@ public partial class FoodManagementUC : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
-        if (product.StockQuantity > int.MaxValue - dialog.Quantity)
+        try
         {
-            MessageBox.Show("Số lượng tồn kho vượt giới hạn!");
-            return;
+            _foodService.ImportStock(id, dialog.Quantity);
+
+            LoadProductsFromDatabase();
+
+            Product? updatedProduct =
+                _products.FirstOrDefault(p => p.Id == id);
+
+            MessageBox.Show(
+                $"Nhập kho thành công!\n" +
+                $"Sản phẩm: {product.Name}\n" +
+                $"Số lượng hiện tại: {updatedProduct?.StockQuantity}",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
         }
-
-        product.StockQuantity += dialog.Quantity;
-
-        RefreshProductTable();
-
-        MessageBox.Show(
-            $"Nhập kho thành công!\n" +
-            $"Sản phẩm: {product.Name}\n" +
-            $"Số lượng hiện tại: {product.StockQuantity}",
-            "Thông báo",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information
-        );
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Không thể nhập kho",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+        }
     }
 
     // =========================================
@@ -1241,30 +1131,33 @@ public partial class FoodManagementUC : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
-        if (dialog.Quantity > product.StockQuantity)
+        try
+        {
+            _foodService.ExportStock(id, dialog.Quantity);
+
+            LoadProductsFromDatabase();
+
+            Product? updatedProduct =
+                _products.FirstOrDefault(p => p.Id == id);
+
+            MessageBox.Show(
+                $"Xuất kho thành công!\n" +
+                $"Sản phẩm: {product.Name}\n" +
+                $"Số lượng còn lại: {updatedProduct?.StockQuantity}",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
+        catch (Exception ex)
         {
             MessageBox.Show(
-                "Số lượng xuất lớn hơn số lượng tồn kho!",
-                "Không đủ hàng",
+                ex.Message,
+                "Không thể xuất kho",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning
             );
-
-            return;
         }
-
-        product.StockQuantity -= dialog.Quantity;
-
-        RefreshProductTable();
-
-        MessageBox.Show(
-            $"Xuất kho thành công!\n" +
-            $"Sản phẩm: {product.Name}\n" +
-            $"Số lượng còn lại: {product.StockQuantity}",
-            "Thông báo",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information
-        );
     }
 }
 
@@ -1295,345 +1188,321 @@ internal sealed class ProductEditDialog : Form
     // XÂY DỰNG GIAO DIỆN DIALOG
     // =====================================
 
-   
-private void BuildInterface(Product? product)
-{
-    Text = product == null
-        ? "Thêm sản phẩm"
-        : "Chỉnh sửa sản phẩm";
-
-    Size = new Size(740, 580);
-    MinimumSize = new Size(680, 540);
-
-    StartPosition = FormStartPosition.CenterParent;
-    FormBorderStyle = FormBorderStyle.FixedDialog;
-
-    MaximizeBox = false;
-    MinimizeBox = false;
-
-    BackColor = Color.FromArgb(15, 23, 42);
-    ForeColor = Color.White;
-    Font = new Font("Segoe UI", 10);
-
-    Color background = Color.FromArgb(15, 23, 42);
-    Color panel = Color.FromArgb(30, 41, 59);
-    Color input = Color.FromArgb(15, 23, 42);
-    Color textColor = Color.FromArgb(226, 232, 240);
-
-    // =====================================
-    // 1. LAYOUT CHÍNH
-    // =====================================
-
-    TableLayoutPanel mainLayout = new TableLayoutPanel
-    {
-        Dock = DockStyle.Fill,
-        ColumnCount = 1,
-        RowCount = 3,
-        BackColor = background,
-        Padding = new Padding(20)
-    };
-
-    mainLayout.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Percent, 100));
-
-    mainLayout.RowStyles.Add(
-        new RowStyle(SizeType.Absolute, 75));
-
-    mainLayout.RowStyles.Add(
-        new RowStyle(SizeType.Percent, 100));
-
-    mainLayout.RowStyles.Add(
-        new RowStyle(SizeType.Absolute, 62));
-
-    // =====================================
-    // 2. HEADER
-    // =====================================
-
-    Panel headerPanel = new Panel
-    {
-        Dock = DockStyle.Fill,
-        BackColor = background,
-        Margin = new Padding(0)
-    };
-
-    Label lblTitle = new Label
+    private void BuildInterface(Product? product)
     {
         Text = product == null
-            ? "THÊM SẢN PHẨM MỚI"
-            : "CHỈNH SỬA SẢN PHẨM",
+            ? "Thêm sản phẩm"
+            : "Chỉnh sửa sản phẩm";
 
-        Font = new Font("Segoe UI", 18, FontStyle.Bold),
-        ForeColor = Color.White,
-        AutoSize = true,
-        Location = new Point(3, 5)
-    };
+        Size = new Size(740, 580);
+        MinimumSize = new Size(680, 540);
 
-    Label lblDescription = new Label
-    {
-        Text = "Nhập đầy đủ thông tin sản phẩm",
-        Font = new Font("Segoe UI", 9),
-        ForeColor = Color.FromArgb(148, 163, 184),
-        AutoSize = true,
-        Location = new Point(5, 45)
-    };
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
 
-    headerPanel.Controls.Add(lblTitle);
-    headerPanel.Controls.Add(lblDescription);
+        MaximizeBox = false;
+        MinimizeBox = false;
 
-    // =====================================
-    // 3. KHU VỰC NHẬP LIỆU
-    // =====================================
+        BackColor = Color.FromArgb(15, 23, 42);
+        ForeColor = Color.White;
+        Font = new Font("Segoe UI", 10);
 
-    TableLayoutPanel fieldsPanel = new TableLayoutPanel
-    {
-        Dock = DockStyle.Fill,
-        ColumnCount = 2,
-        RowCount = 3,
-        BackColor = panel,
-        Padding = new Padding(12),
-        Margin = new Padding(0)
-    };
+        Color background = Color.FromArgb(15, 23, 42);
+        Color panel = Color.FromArgb(30, 41, 59);
+        Color input = Color.FromArgb(15, 23, 42);
 
-    fieldsPanel.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Percent, 50));
+        // =====================================
+        // 1. LAYOUT CHÍNH
+        // =====================================
 
-    fieldsPanel.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Percent, 50));
+        TableLayoutPanel mainLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            BackColor = background,
+            Padding = new Padding(20)
+        };
 
-    for (int i = 0; i < 3; i++)
-    {
-        fieldsPanel.RowStyles.Add(
-            new RowStyle(SizeType.Percent, 33.33f));
+        mainLayout.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Percent, 100));
+
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 75));
+
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Percent, 100));
+
+        mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 62));
+
+        // =====================================
+        // 2. HEADER
+        // =====================================
+
+        Panel headerPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = background,
+            Margin = new Padding(0)
+        };
+
+        Label lblTitle = new Label
+        {
+            Text = product == null
+                ? "THÊM SẢN PHẨM MỚI"
+                : "CHỈNH SỬA SẢN PHẨM",
+
+            Font = new Font("Segoe UI", 18, FontStyle.Bold),
+            ForeColor = Color.White,
+            AutoSize = true,
+            Location = new Point(3, 5)
+        };
+
+        Label lblDescription = new Label
+        {
+            Text = "Nhập đầy đủ thông tin sản phẩm",
+            Font = new Font("Segoe UI", 9),
+            ForeColor = Color.FromArgb(148, 163, 184),
+            AutoSize = true,
+            Location = new Point(5, 45)
+        };
+
+        headerPanel.Controls.Add(lblTitle);
+        headerPanel.Controls.Add(lblDescription);
+
+        // =====================================
+        // 3. KHU VỰC NHẬP LIỆU
+        // =====================================
+
+        TableLayoutPanel fieldsPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 3,
+            BackColor = panel,
+            Padding = new Padding(12),
+            Margin = new Padding(0)
+        };
+
+        fieldsPanel.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Percent, 50));
+
+        fieldsPanel.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Percent, 50));
+
+        for (int i = 0; i < 3; i++)
+        {
+            fieldsPanel.RowStyles.Add(
+                new RowStyle(SizeType.Percent, 33.33f));
+        }
+
+        // TÊN SẢN PHẨM
+        _txtName = new TextBox
+        {
+            Font = new Font("Segoe UI", 10),
+            BackColor = input,
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            PlaceholderText = "Nhập tên sản phẩm..."
+        };
+
+        fieldsPanel.Controls.Add(
+            CreateField("Tên sản phẩm *", _txtName),
+            0, 0
+        );
+
+        // DANH MỤC
+        _cboCategory = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Font = new Font("Segoe UI", 10),
+            BackColor = input,
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+
+        _cboCategory.Items.AddRange(new object[]
+        {
+            "Đồ ăn",
+            "Đồ uống",
+            "Combo"
+        });
+
+        _cboCategory.SelectedIndex = 0;
+
+        fieldsPanel.Controls.Add(
+            CreateField("Danh mục *", _cboCategory),
+            1, 0
+        );
+
+        // GIÁ BÁN
+        _numPrice = new NumericUpDown
+        {
+            Minimum = 1000,
+            Maximum = 10000000,
+            Increment = 1000,
+            Value = 30000,
+            ThousandsSeparator = true,
+            Font = new Font("Segoe UI", 10),
+            BackColor = input,
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        fieldsPanel.Controls.Add(
+            CreateField("Giá bán (VNĐ) *", _numPrice),
+            0, 1
+        );
+
+        // TỒN KHO
+        _numStock = new NumericUpDown
+        {
+            Minimum = 0,
+            Maximum = 100000,
+            Increment = 1,
+            Value = 10,
+            ThousandsSeparator = true,
+            Font = new Font("Segoe UI", 10),
+            BackColor = input,
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        fieldsPanel.Controls.Add(
+            CreateField("Số lượng tồn kho", _numStock),
+            1, 1
+        );
+
+        // HÌNH ẢNH
+        _txtImage = new TextBox
+        {
+            Font = new Font("Segoe UI", 9),
+            BackColor = input,
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            ReadOnly = true
+        };
+
+        Button btnBrowse = new Button
+        {
+            Text = "Chọn ảnh",
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(71, 85, 105),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            Margin = new Padding(5, 0, 0, 0)
+        };
+
+        btnBrowse.FlatAppearance.BorderSize = 0;
+
+        TableLayoutPanel imagePanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = panel
+        };
+
+        imagePanel.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Percent, 100));
+
+        imagePanel.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Absolute, 100));
+
+        imagePanel.RowStyles.Add(
+            new RowStyle(SizeType.Percent, 100));
+
+        imagePanel.Controls.Add(_txtImage, 0, 0);
+        imagePanel.Controls.Add(btnBrowse, 1, 0);
+
+        btnBrowse.Click += BtnBrowse_Click;
+
+        fieldsPanel.Controls.Add(
+            CreateField("Hình ảnh sản phẩm", imagePanel),
+            0, 2
+        );
+
+        // TRẠNG THÁI
+        _chkActive = new CheckBox
+        {
+            Text = "Đang kinh doanh",
+            Checked = true,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(52, 211, 153),
+            BackColor = panel,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            Padding = new Padding(8, 0, 0, 0)
+        };
+
+        fieldsPanel.Controls.Add(
+            CreateField("Trạng thái", _chkActive),
+            1, 2
+        );
+
+        // =====================================
+        // 4. FOOTER - NÚT THAO TÁC
+        // =====================================
+
+        FlowLayoutPanel footerPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            BackColor = background,
+            Padding = new Padding(0, 12, 0, 0)
+        };
+
+        Button btnSave = CreateDialogButton(
+            "Lưu sản phẩm",
+            Color.FromArgb(37, 99, 235)
+        );
+
+        Button btnCancel = CreateDialogButton(
+            "Hủy",
+            Color.FromArgb(71, 85, 105)
+        );
+
+        btnSave.Size = new Size(140, 38);
+        btnCancel.Size = new Size(110, 38);
+
+        footerPanel.Controls.Add(btnSave);
+        footerPanel.Controls.Add(btnCancel);
+
+        btnSave.Click += BtnSave_Click;
+
+        btnCancel.Click += (s, e) =>
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        };
+
+        // =====================================
+        // 5. GHÉP GIAO DIỆN
+        // =====================================
+
+        mainLayout.Controls.Add(headerPanel, 0, 0);
+        mainLayout.Controls.Add(fieldsPanel, 0, 1);
+        mainLayout.Controls.Add(footerPanel, 0, 2);
+
+        Controls.Add(mainLayout);
+
+        AcceptButton = btnSave;
+        CancelButton = btnCancel;
+
+        if (product != null)
+        {
+            LoadProduct(product);
+        }
     }
-
-    // =====================================
-    // TÊN SẢN PHẨM
-    // =====================================
-
-    _txtName = new TextBox
-    {
-        Font = new Font("Segoe UI", 10),
-        BackColor = input,
-        ForeColor = Color.White,
-        BorderStyle = BorderStyle.FixedSingle,
-        PlaceholderText = "Nhập tên sản phẩm..."
-    };
-
-    fieldsPanel.Controls.Add(
-        CreateField("Tên sản phẩm *", _txtName),
-        0, 0
-    );
-
-    // =====================================
-    // DANH MỤC
-    // =====================================
-
-    _cboCategory = new ComboBox
-    {
-        DropDownStyle = ComboBoxStyle.DropDownList,
-        Font = new Font("Segoe UI", 10),
-        BackColor = input,
-        ForeColor = Color.White,
-        FlatStyle = FlatStyle.Flat
-    };
-
-    _cboCategory.Items.AddRange(new object[]
-    {
-        "Đồ ăn",
-        "Đồ uống",
-        "Combo"
-    });
-
-    _cboCategory.SelectedIndex = 0;
-
-    fieldsPanel.Controls.Add(
-        CreateField("Danh mục *", _cboCategory),
-        1, 0
-    );
-
-    // =====================================
-    // GIÁ BÁN
-    // =====================================
-
-    _numPrice = new NumericUpDown
-    {
-        Minimum = 1000,
-        Maximum = 10000000,
-        Increment = 1000,
-        Value = 30000,
-        ThousandsSeparator = true,
-        Font = new Font("Segoe UI", 10),
-        BackColor = input,
-        ForeColor = Color.White,
-        BorderStyle = BorderStyle.FixedSingle
-    };
-
-    fieldsPanel.Controls.Add(
-        CreateField("Giá bán (VNĐ) *", _numPrice),
-        0, 1
-    );
-
-    // =====================================
-    // TỒN KHO
-    // =====================================
-
-    _numStock = new NumericUpDown
-    {
-        Minimum = 0,
-        Maximum = 100000,
-        Increment = 1,
-        Value = 10,
-        ThousandsSeparator = true,
-        Font = new Font("Segoe UI", 10),
-        BackColor = input,
-        ForeColor = Color.White,
-        BorderStyle = BorderStyle.FixedSingle
-    };
-
-    fieldsPanel.Controls.Add(
-        CreateField("Số lượng tồn kho", _numStock),
-        1, 1
-    );
-
-    // =====================================
-    // HÌNH ẢNH
-    // =====================================
-
-    _txtImage = new TextBox
-    {
-        Font = new Font("Segoe UI", 9),
-        BackColor = input,
-        ForeColor = Color.White,
-        BorderStyle = BorderStyle.FixedSingle,
-        ReadOnly = true
-    };
-
-    Button btnBrowse = new Button
-    {
-        Text = "Chọn ảnh",
-        Dock = DockStyle.Fill,
-        BackColor = Color.FromArgb(71, 85, 105),
-        ForeColor = Color.White,
-        FlatStyle = FlatStyle.Flat,
-        Font = new Font("Segoe UI", 9, FontStyle.Bold),
-        Cursor = Cursors.Hand,
-        Margin = new Padding(5, 0, 0, 0)
-    };
-
-    btnBrowse.FlatAppearance.BorderSize = 0;
-
-    TableLayoutPanel imagePanel = new TableLayoutPanel
-    {
-        Dock = DockStyle.Fill,
-        ColumnCount = 2,
-        RowCount = 1,
-        BackColor = panel
-    };
-
-    imagePanel.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Percent, 100));
-
-    imagePanel.ColumnStyles.Add(
-        new ColumnStyle(SizeType.Absolute, 100));
-
-    imagePanel.RowStyles.Add(
-        new RowStyle(SizeType.Percent, 100));
-
-    imagePanel.Controls.Add(_txtImage, 0, 0);
-    imagePanel.Controls.Add(btnBrowse, 1, 0);
-
-    btnBrowse.Click += BtnBrowse_Click;
-
-    fieldsPanel.Controls.Add(
-        CreateField("Hình ảnh sản phẩm", imagePanel),
-        0, 2
-    );
-
-    // =====================================
-    // TRẠNG THÁI
-    // =====================================
-
-    _chkActive = new CheckBox
-    {
-        Text = "Đang kinh doanh",
-        Checked = true,
-        AutoSize = false,
-        Dock = DockStyle.Fill,
-        ForeColor = Color.FromArgb(52, 211, 153),
-        BackColor = panel,
-        Font = new Font("Segoe UI", 10, FontStyle.Bold),
-        Padding = new Padding(8, 0, 0, 0)
-    };
-
-    fieldsPanel.Controls.Add(
-        CreateField("Trạng thái", _chkActive),
-        1, 2
-    );
-
-    // =====================================
-    // 4. FOOTER - NÚT THAO TÁC
-    // =====================================
-
-    FlowLayoutPanel footerPanel = new FlowLayoutPanel
-    {
-        Dock = DockStyle.Fill,
-        FlowDirection = FlowDirection.RightToLeft,
-        WrapContents = false,
-        BackColor = background,
-        Padding = new Padding(0, 12, 0, 0)
-    };
-
-    Button btnSave = CreateDialogButton(
-        "Lưu sản phẩm",
-        Color.FromArgb(37, 99, 235)
-    );
-
-    Button btnCancel = CreateDialogButton(
-        "Hủy",
-        Color.FromArgb(71, 85, 105)
-    );
-
-    btnSave.Size = new Size(140, 38);
-    btnCancel.Size = new Size(110, 38);
-
-    // Nút Lưu nằm bên phải
-    footerPanel.Controls.Add(btnSave);
-    footerPanel.Controls.Add(btnCancel);
-
-    btnSave.Click += BtnSave_Click;
-
-    btnCancel.Click += (s, e) =>
-    {
-        DialogResult = DialogResult.Cancel;
-        Close();
-    };
-
-    // =====================================
-    // 5. GHÉP GIAO DIỆN
-    // =====================================
-
-    mainLayout.Controls.Add(headerPanel, 0, 0);
-    mainLayout.Controls.Add(fieldsPanel, 0, 1);
-    mainLayout.Controls.Add(footerPanel, 0, 2);
-
-    Controls.Add(mainLayout);
-
-    AcceptButton = btnSave;
-    CancelButton = btnCancel;
-
-    // Nếu là chỉnh sửa thì nạp thông tin hiện tại
-    if (product != null)
-    {
-        LoadProduct(product);
-    }
-}
-
 
     // =====================================
     // TẠO TRƯỜNG NHẬP LIỆU
     // =====================================
 
-    
     private Panel CreateField(string title, Control input)
     {
         Panel field = new Panel
@@ -1663,7 +1532,6 @@ private void BuildInterface(Product? product)
 
         return field;
     }
-
 
     // =====================================
     // TẠO BUTTON DIALOG
@@ -1798,7 +1666,6 @@ private void BuildInterface(Product? product)
 
 internal sealed class StockQuantityDialog : Form
 {
-    // Số lượng người dùng nhập
     public int Quantity => (int)_numQuantity.Value;
 
     private NumericUpDown _numQuantity = null!;
@@ -1811,18 +1678,20 @@ internal sealed class StockQuantityDialog : Form
         MinimumSize = new Size(500, 370);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
+
         MaximizeBox = false;
         MinimizeBox = false;
+
         BackColor = Color.FromArgb(15, 23, 42);
         ForeColor = Color.White;
         Font = new Font("Segoe UI", 10);
+
         BuildInterface(title);
     }
 
     // =====================================
     // XÂY DỰNG GIAO DIỆN NHẬP / XUẤT KHO
     // =====================================
-
 
     private void BuildInterface(string title)
     {
@@ -1833,6 +1702,7 @@ internal sealed class StockQuantityDialog : Form
 
         Color background = Color.FromArgb(15, 23, 42);
         Color panel = Color.FromArgb(30, 41, 59);
+
         Color accentColor = isImport
             ? Color.FromArgb(16, 185, 129)
             : Color.FromArgb(234, 88, 12);
@@ -1861,6 +1731,7 @@ internal sealed class StockQuantityDialog : Form
 
         mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 60));
+
         // =====================================
         // 2. HEADER
         // =====================================
@@ -1880,7 +1751,10 @@ internal sealed class StockQuantityDialog : Form
 
         Label lblTitle = new Label
         {
-            Text = isImport ? "NHẬP KHO SẢN PHẨM" : "XUẤT KHO SẢN PHẨM",
+            Text = isImport
+                ? "NHẬP KHO SẢN PHẨM"
+                : "XUẤT KHO SẢN PHẨM",
+
             Font = new Font("Segoe UI", 17, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
@@ -1892,6 +1766,7 @@ internal sealed class StockQuantityDialog : Form
             Text = isImport
                 ? "Cập nhật số lượng sản phẩm nhập vào kho"
                 : "Ghi nhận số lượng sản phẩm xuất khỏi kho",
+
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(148, 163, 184),
             AutoSize = true,
@@ -1902,10 +1777,9 @@ internal sealed class StockQuantityDialog : Form
         headerPanel.Controls.Add(lblDescription);
         headerPanel.Controls.Add(accent);
 
-        
-// =====================================
-// 3. KHU VỰC NHẬP SỐ LƯỢNG
-// =====================================
+        // =====================================
+        // 3. KHU VỰC NHẬP SỐ LƯỢNG
+        // =====================================
 
         TableLayoutPanel quantityPanel = new TableLayoutPanel
         {
@@ -1920,7 +1794,6 @@ internal sealed class StockQuantityDialog : Form
         quantityPanel.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-// Chia chiều cao cố định để không bị chồng chữ
         quantityPanel.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 32));
 
@@ -1930,7 +1803,6 @@ internal sealed class StockQuantityDialog : Form
         quantityPanel.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 28));
 
-// Nhãn số lượng
         Label lblQuantity = new Label
         {
             Text = "SỐ LƯỢNG SẢN PHẨM",
@@ -1941,7 +1813,6 @@ internal sealed class StockQuantityDialog : Form
             AutoSize = false
         };
 
-// Ô nhập số lượng
         _numQuantity = new NumericUpDown
         {
             Dock = DockStyle.Fill,
@@ -1957,7 +1828,6 @@ internal sealed class StockQuantityDialog : Form
             Margin = new Padding(0, 4, 0, 4)
         };
 
-// Dòng mô tả
         Label lblUnit = new Label
         {
             Text = "Đơn vị tính: sản phẩm",
@@ -1968,11 +1838,9 @@ internal sealed class StockQuantityDialog : Form
             AutoSize = false
         };
 
-// Đưa vào từng hàng riêng biệt
         quantityPanel.Controls.Add(lblQuantity, 0, 0);
         quantityPanel.Controls.Add(_numQuantity, 0, 1);
         quantityPanel.Controls.Add(lblUnit, 0, 2);
-
 
         // =====================================
         // 4. CÁC NÚT THAO TÁC
@@ -1989,7 +1857,10 @@ internal sealed class StockQuantityDialog : Form
 
         Button btnConfirm = new Button
         {
-            Text = isImport ? "Xác nhận nhập kho" : "Xác nhận xuất kho",
+            Text = isImport
+                ? "Xác nhận nhập kho"
+                : "Xác nhận xuất kho",
+
             Size = new Size(165, 38),
             BackColor = accentColor,
             ForeColor = Color.White,
@@ -2014,7 +1885,6 @@ internal sealed class StockQuantityDialog : Form
         btnConfirm.FlatAppearance.BorderSize = 0;
         btnCancel.FlatAppearance.BorderSize = 0;
 
-        // Hiệu ứng khi rê chuột
         btnConfirm.FlatAppearance.MouseOverBackColor =
             ControlPaint.Light(accentColor, 0.15f);
 

@@ -6,17 +6,29 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Models.Enums;
+using CinemaManagement.Repositories;
 using CinemaManagement.UserControls.Common;
 
 public partial class HomeUC : UserControl
 {
+    private readonly MovieRepository _movieRepository = new();
+
     private Panel pnlSidebar = null!;
     private Panel pnlMainContent = null!;
+    private Panel pnlGenresList = null!;
     private FlowLayoutPanel flpMovieGrid = null!;
     private TextBox txtSearch = null!;
+    private Label lblTitle = null!;
+    private Label lblSubTitle = null!;
+
+    private Button btnWatchNow = null!;
+    private Button btnComingSoon = null!;
+    private Button btnBrowseAll = null!;
 
     private List<Movie> _allMovies = new();
     private string? _selectedGenreFilter;
+    private MovieStatus? _selectedStatusFilter = MovieStatus.Showing;
 
     // Sự kiện chuyển màn hình sang Chi tiết Phim (MovieDetailUC)
     public event EventHandler<Movie>? OnMovieClicked;
@@ -27,7 +39,16 @@ public partial class HomeUC : UserControl
     public HomeUC()
     {
         InitializeComponents();
-        LoadDummyData(); // Tải dữ liệu phim mẫu hiển thị demo
+        RefreshMovies();
+
+        // Tự động làm mới dữ liệu khi quay lại màn hình Trang chủ
+        this.VisibleChanged += (s, e) =>
+        {
+            if (this.Visible)
+            {
+                RefreshMovies();
+            }
+        };
     }
 
     private void InitializeComponents()
@@ -36,7 +57,7 @@ public partial class HomeUC : UserControl
         this.BackColor = Color.FromArgb(24, 24, 36);
 
         // -------------------------------------------------------------
-        // 1. SIDEBAR BÊN TRÁI (DANH MỤC & THỂ LOẠI)
+        // 1. SIDEBAR BÊN TRÁI (DANH MỤC & THỂ LOẠI ĐỘNG TỪ DB)
         // -------------------------------------------------------------
         pnlSidebar = new Panel
         {
@@ -48,143 +69,143 @@ public partial class HomeUC : UserControl
 
         Label lblLibraryHeader = new Label
         {
-            Text = "Library",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
+            Text = "Danh mục phim",
+            Font = new Font("Segoe UI", 13, FontStyle.Bold),
             ForeColor = Color.White,
             Dock = DockStyle.Top,
-            Height = 40
+            Height = 38
         };
 
-        Button btnWatchNow = CreateSidebarButton("▶  Watch Now", true);
-        Button btnBrowse = CreateSidebarButton("☰  Browse", false);
-        Button btnLiked = CreateSidebarButton("♡  Liked", false);
+        btnWatchNow = CreateSidebarButton("▶  Đang chiếu", true);
+        btnComingSoon = CreateSidebarButton("🕒  Sắp chiếu", false);
+        btnBrowseAll = CreateSidebarButton("☰  Tất cả phim", false);
 
         btnWatchNow.Click += (s, e) =>
         {
+            _selectedStatusFilter = MovieStatus.Showing;
             _selectedGenreFilter = null;
-            txtSearch.Text = "";
+            lblTitle.Text = "Phim Đang Chiếu";
+            lblSubTitle.Text = "Chọn phim bạn yêu thích hoặc nhấn 'Đặt vé ngay' để chọn suất chiếu.";
+            SetActiveSidebarButton(btnWatchNow);
+            BuildDynamicGenresList();
             ApplyFilter();
         };
-        btnBrowse.Click += (s, e) =>
+
+        btnComingSoon.Click += (s, e) =>
         {
+            _selectedStatusFilter = MovieStatus.ComingSoon;
             _selectedGenreFilter = null;
+            lblTitle.Text = "Phim Sắp Chiếu";
+            lblSubTitle.Text = "Những bộ phim chuẩn bị ra mắt tại rạp trong thời gian tới.";
+            SetActiveSidebarButton(btnComingSoon);
+            BuildDynamicGenresList();
             ApplyFilter();
         };
-        btnLiked.Click += (s, e) =>
+
+        btnBrowseAll.Click += (s, e) =>
         {
+            _selectedStatusFilter = null;
             _selectedGenreFilter = null;
+            lblTitle.Text = "Tất Cả Phim Tại Rạp";
+            lblSubTitle.Text = "Toàn bộ danh sách phim đang chiếu và sắp khởi chiếu.";
+            SetActiveSidebarButton(btnBrowseAll);
+            BuildDynamicGenresList();
             ApplyFilter();
         };
 
         Label lblGenresHeader = new Label
         {
-            Text = "Genres",
-            Font = new Font("Segoe UI", 12, FontStyle.Bold),
+            Text = "Thể loại",
+            Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(150, 150, 170),
-            Location = new Point(15, 180),
+            Location = new Point(15, 185),
             AutoSize = true
         };
 
-        // Danh sách Thể loại Phim
-        Panel pnlGenresList = new Panel
+        pnlGenresList = new Panel
         {
-            Location = new Point(15, 210),
-            Size = new Size(190, 300),
+            Location = new Point(15, 215),
+            Size = new Size(190, 350),
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left,
             AutoScroll = true
         };
 
-        (string Display, string? FilterKey)[] genres =
-        {
-            ("All Movies", null),
-            ("Action", "Action"),
-            ("Sci-Fi", "Sci-Fi"),
-            ("Musical", "Musical"),
-            ("Romance", "Romance"),
-            ("Drama", "Drama")
-        };
-
-        int yOffset = 0;
-        foreach (var genre in genres)
-        {
-            Label lblGenreItem = new Label
-            {
-                Text = genre.Display,
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = Color.FromArgb(180, 180, 200),
-                Location = new Point(5, yOffset),
-                AutoSize = true,
-                Cursor = Cursors.Hand
-            };
-            lblGenreItem.MouseEnter += (s, e) => lblGenreItem.ForeColor = Color.FromArgb(229, 9, 20); // Red Accent
-            lblGenreItem.MouseLeave += (s, e) => lblGenreItem.ForeColor = Color.FromArgb(180, 180, 200);
-            lblGenreItem.Click += (s, e) =>
-            {
-                _selectedGenreFilter = genre.FilterKey;
-                ApplyFilter();
-            };
-
-            pnlGenresList.Controls.Add(lblGenreItem);
-            yOffset += 30;
-        }
-
         pnlSidebar.Controls.Add(pnlGenresList);
         pnlSidebar.Controls.Add(lblGenresHeader);
-        pnlSidebar.Controls.Add(btnLiked);
-        pnlSidebar.Controls.Add(btnBrowse);
+        pnlSidebar.Controls.Add(btnBrowseAll);
+        pnlSidebar.Controls.Add(btnComingSoon);
         pnlSidebar.Controls.Add(btnWatchNow);
         pnlSidebar.Controls.Add(lblLibraryHeader);
 
         // -------------------------------------------------------------
-        // 2. KHU VỰC NỘI DUNG CHÍNH BÊN PHẢI (MAIN CONTENT)
+        // 2. KHU VỰC NỘI DUNG CHÍNH BÊN PHẢI
         // -------------------------------------------------------------
         pnlMainContent = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(25),
-            AutoScroll = true
+            Padding = new Padding(25, 20, 25, 20)
         };
 
-        // Top Header: Tiêu đề + Thanh tìm kiếm
         Panel pnlHeader = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 90
+            Height = 82
         };
 
-        Label lblTitle = new Label
+        lblTitle = new Label
         {
-            Text = "Watch Now",
+            Text = "Phim Đang Chiếu",
             Font = new Font("Segoe UI", 20, FontStyle.Bold),
             ForeColor = Color.White,
             Location = new Point(0, 0),
             AutoSize = true
         };
 
-        Label lblSubTitle = new Label
+        lblSubTitle = new Label
         {
-            Text = "Jump right into something new, chosen for you. Click a movie or 'Đặt vé ngay' to book.",
-            Font = new Font("Segoe UI", 10),
+            Text = "Chọn phim bạn yêu thích hoặc nhấn 'Đặt vé ngay' để chọn suất chiếu.",
+            Font = new Font("Segoe UI", 9.5f),
             ForeColor = Color.FromArgb(150, 150, 170),
-            Location = new Point(0, 38),
+            Location = new Point(2, 42),
             AutoSize = true
         };
 
-        // Ô tìm kiếm Phim
+        Panel pnlSearchBox = new Panel
+        {
+            Dock = DockStyle.Right,
+            Width = 345
+        };
+
         txtSearch = new TextBox
         {
-            Font = new Font("Segoe UI", 11),
-            PlaceholderText = "🔍 Search movies...",
-            Size = new Size(250, 35),
-            Location = new Point(550, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
+            Font = new Font("Segoe UI", 10.5f),
+            PlaceholderText = "🔍 Tìm tên phim, đạo diễn...",
+            Size = new Size(240, 32),
+            Location = new Point(0, 12)
         };
-        txtSearch.TextChanged += TxtSearch_TextChanged;
+        txtSearch.TextChanged += (s, e) => ApplyFilter();
+
+        Button btnRefresh = new Button
+        {
+            Text = "🔄 Làm mới",
+            Location = new Point(248, 11),
+            Size = new Size(95, 32),
+            BackColor = Color.FromArgb(40, 42, 60),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Cursor = Cursors.Hand
+        };
+        btnRefresh.FlatAppearance.BorderSize = 0;
+        btnRefresh.Click += (s, e) => RefreshMovies();
+
+        pnlSearchBox.Controls.Add(txtSearch);
+        pnlSearchBox.Controls.Add(btnRefresh);
 
         pnlHeader.Controls.Add(lblTitle);
         pnlHeader.Controls.Add(lblSubTitle);
-        pnlHeader.Controls.Add(txtSearch);
+        pnlHeader.Controls.Add(pnlSearchBox);
 
-        // Grid chứa các thẻ phim MovieCardUC
         flpMovieGrid = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -195,7 +216,6 @@ public partial class HomeUC : UserControl
         pnlMainContent.Controls.Add(flpMovieGrid);
         pnlMainContent.Controls.Add(pnlHeader);
 
-        // Add cả 2 Panel vào UserControl
         this.Controls.Add(pnlMainContent);
         this.Controls.Add(pnlSidebar);
     }
@@ -207,86 +227,114 @@ public partial class HomeUC : UserControl
             Text = text,
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
             ForeColor = isActive ? Color.White : Color.FromArgb(160, 160, 180),
-            BackColor = isActive ? Color.FromArgb(229, 9, 20) : Color.Transparent, // Đỏ CinemaAccent
+            BackColor = isActive ? Color.FromArgb(229, 9, 20) : Color.Transparent,
             FlatStyle = FlatStyle.Flat,
             Dock = DockStyle.Top,
             Height = 40,
             TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(0, 5, 0, 5),
+            Padding = new Padding(8, 0, 0, 0),
+            Margin = new Padding(0, 4, 0, 4),
             Cursor = Cursors.Hand
         };
         btn.FlatAppearance.BorderSize = 0;
         return btn;
     }
 
-    // Tải dữ liệu giả lập để hiển thị thử giao diện
-    private void LoadDummyData()
+    private void SetActiveSidebarButton(Button activeBtn)
     {
-        _allMovies = new List<Movie>
+        foreach (var btn in new[] { btnWatchNow, btnComingSoon, btnBrowseAll })
         {
-            new Movie
-            {
-                Id = 1,
-                Title = "Die Hard",
-                Genre = "Action",
-                Director = "John McTiernan",
-                DurationMinutes = 132,
-                ReleaseDate = new DateTime(1988, 7, 15),
-                Description = "Sĩ quan cảnh sát New York John McClane một mình đối đầu với nhóm khủng bố chiếm giữ tòa nhà Nakatomi Plaza vào đêm Giáng Sinh."
-            },
-            new Movie
-            {
-                Id = 2,
-                Title = "Grease",
-                Genre = "Musical",
-                Director = "Randal Kleiser",
-                DurationMinutes = 110,
-                ReleaseDate = new DateTime(1978, 6, 16),
-                Description = "Chuyện tình mùa hè đầy âm nhạc và vũ đạo sôi động giữa chàng trai Danny Zuko và cô nàng Sandy Olsson."
-            },
-            new Movie
-            {
-                Id = 3,
-                Title = "La La Land",
-                Genre = "Romance",
-                Director = "Damien Chazelle",
-                DurationMinutes = 128,
-                ReleaseDate = new DateTime(2016, 12, 9),
-                Description = "Một nghệ sĩ dương cầm nhạc Jazz và một nữ diễn viên đầy tham vọng đem lòng yêu nhau khi cùng theo đuổi ước mơ tại Los Angeles."
-            },
-            new Movie
-            {
-                Id = 4,
-                Title = "Avatar: The Way of Water",
-                Genre = "Sci-Fi",
-                Director = "James Cameron",
-                DurationMinutes = 192,
-                ReleaseDate = new DateTime(2022, 12, 16),
-                Description = "Jake Sully và Ney'tiri phải rời bỏ quê hương và khám phá các vùng biển của Pandora để bảo vệ gia đình trước mối đe dọa mới."
-            },
-            new Movie
-            {
-                Id = 5,
-                Title = "Oppenheimer",
-                Genre = "Drama",
-                Director = "Christopher Nolan",
-                DurationMinutes = 180,
-                ReleaseDate = new DateTime(2023, 7, 21),
-                Description = "Câu chuyện kịch tính về nhà vật lý J. Robert Oppenheimer và vai trò dẫn dắt Dự án Manhattan chế tạo bom nguyên tử."
-            },
-            new Movie
-            {
-                Id = 6,
-                Title = "Spider-Man: Across The Spider-Verse",
-                Genre = "Action",
-                Director = "Joaquim Dos Santos",
-                DurationMinutes = 140,
-                ReleaseDate = new DateTime(2023, 6, 2),
-                Description = "Miles Morales du hành qua Đa vũ trụ và gặp gỡ Đội quân Người Nhện bảo vệ sự tồn tại của mọi thế giới."
-            }
+            bool isSelected = btn == activeBtn;
+            btn.BackColor = isSelected ? Color.FromArgb(229, 9, 20) : Color.Transparent;
+            btn.ForeColor = isSelected ? Color.White : Color.FromArgb(160, 160, 180);
+        }
+    }
+
+    // =============================================================
+    // 3. TẢI & LỌC DỮ LIỆU PHIM QUA MovieRepository
+    // =============================================================
+
+    public void RefreshMovies()
+    {
+        try
+        {
+            // Khách hàng chỉ xem phim Đang chiếu hoặc Sắp chiếu
+            _allMovies = _movieRepository.GetAll()
+                .Where(m => m.Status == MovieStatus.Showing || m.Status == MovieStatus.ComingSoon)
+                .ToList();
+
+            BuildDynamicGenresList();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            _allMovies.Clear();
+            flpMovieGrid.Controls.Clear();
+
+            MessageBox.Show(
+                "Không thể tải danh sách phim từ hệ thống.\n\n" + ex.Message,
+                "Lỗi tải phim",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
+    }
+
+    private void BuildDynamicGenresList()
+    {
+        pnlGenresList.Controls.Clear();
+
+        var distinctGenres = _allMovies
+            .SelectMany(m => (m.Genre ?? string.Empty)
+                .Split(new[] { ',', '/', '|' }, StringSplitOptions.RemoveEmptyEntries))
+            .Select(g => g.Trim())
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g)
+            .ToList();
+
+        var genreItems = new List<(string Display, string? FilterKey)>
+        {
+            ("Tất cả thể loại", null)
         };
 
-        DisplayMovies(_allMovies);
+        foreach (var g in distinctGenres)
+        {
+            genreItems.Add((g, g));
+        }
+
+        int yOffset = 0;
+        foreach (var genre in genreItems)
+        {
+            bool isSelected = string.Equals(_selectedGenreFilter, genre.FilterKey, StringComparison.OrdinalIgnoreCase);
+
+            Label lblGenreItem = new Label
+            {
+                Text = genre.Display,
+                Font = new Font("Segoe UI", 9.5f, isSelected ? FontStyle.Bold : FontStyle.Regular),
+                ForeColor = isSelected ? Color.FromArgb(229, 9, 20) : Color.FromArgb(180, 180, 200),
+                Location = new Point(5, yOffset),
+                AutoSize = true,
+                Cursor = Cursors.Hand
+            };
+
+            lblGenreItem.MouseEnter += (s, e) => lblGenreItem.ForeColor = Color.FromArgb(229, 9, 20);
+            lblGenreItem.MouseLeave += (s, e) =>
+            {
+                bool active = string.Equals(_selectedGenreFilter, genre.FilterKey, StringComparison.OrdinalIgnoreCase);
+                lblGenreItem.ForeColor = active ? Color.FromArgb(229, 9, 20) : Color.FromArgb(180, 180, 200);
+            };
+
+            lblGenreItem.Click += (s, e) =>
+            {
+                _selectedGenreFilter = genre.FilterKey;
+                BuildDynamicGenresList();
+                ApplyFilter();
+            };
+
+            pnlGenresList.Controls.Add(lblGenreItem);
+            yOffset += 30;
+        }
     }
 
     private void DisplayMovies(List<Movie> movies)
@@ -294,20 +342,42 @@ public partial class HomeUC : UserControl
         flpMovieGrid.SuspendLayout();
         flpMovieGrid.Controls.Clear();
 
+        if (movies.Count == 0)
+        {
+            Label lblEmpty = new Label
+            {
+                Text = _allMovies.Count == 0
+                    ? "🎬 Hiện chưa có phim nào trong hệ thống.\nVui lòng đăng nhập tài khoản Admin -> Quản lý Phim để thêm phim mới."
+                    : "🔍 Không tìm thấy phim phù hợp với điều kiện lọc.",
+                Font = new Font("Segoe UI", 11.5f),
+                ForeColor = Color.FromArgb(160, 165, 190),
+                AutoSize = true,
+                Padding = new Padding(12, 30, 0, 0)
+            };
+            flpMovieGrid.Controls.Add(lblEmpty);
+            flpMovieGrid.ResumeLayout();
+            return;
+        }
+
         foreach (var movie in movies)
         {
             MovieCardUC card = new MovieCardUC(movie);
 
-            // Sự kiện click vào thẻ phim -> xem chi tiết phim (MovieDetailUC)
             card.MovieSelected += (s, selectedMovie) =>
             {
                 OnMovieClicked?.Invoke(this, selectedMovie);
             };
 
-            // Sự kiện click nút "Đặt vé ngay" -> sang thẳng chọn suất chiếu (ShowtimeUC)
             card.OnBookNowClicked += (s, selectedMovie) =>
             {
-                OnBookNowClicked?.Invoke(this, selectedMovie);
+                if (selectedMovie.Status == MovieStatus.ComingSoon)
+                {
+                    OnMovieClicked?.Invoke(this, selectedMovie);
+                }
+                else
+                {
+                    OnBookNowClicked?.Invoke(this, selectedMovie);
+                }
             };
 
             flpMovieGrid.Controls.Add(card);
@@ -321,23 +391,25 @@ public partial class HomeUC : UserControl
         string keyword = txtSearch.Text.Trim();
         IEnumerable<Movie> filtered = _allMovies;
 
+        if (_selectedStatusFilter.HasValue)
+        {
+            filtered = filtered.Where(m => m.Status == _selectedStatusFilter.Value);
+        }
+
         if (!string.IsNullOrEmpty(_selectedGenreFilter))
         {
-            filtered = filtered.Where(m => m.Genre.Contains(_selectedGenreFilter, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(m =>
+                (m.Genre ?? string.Empty).Contains(_selectedGenreFilter, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.IsNullOrEmpty(keyword))
         {
             filtered = filtered.Where(m =>
-                m.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
-                m.Genre.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+                (m.Title ?? string.Empty).Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                (m.Genre ?? string.Empty).Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                (m.Director ?? string.Empty).Contains(keyword, StringComparison.OrdinalIgnoreCase));
         }
 
         DisplayMovies(filtered.ToList());
-    }
-
-    private void TxtSearch_TextChanged(object? sender, EventArgs e)
-    {
-        ApplyFilter();
     }
 }
