@@ -20,6 +20,7 @@ public partial class RoomManagementUC : UserControl
 
     private long? selectedRoomId;
     private int? selectedSeatId;
+    private Room? currentSeatMapRoom;
     private bool refreshingGrid = false;
 
     // CÁC CONTROL
@@ -648,6 +649,18 @@ public partial class RoomManagementUC : UserControl
             Margin = new Padding(0)
         };
 
+        // Khi vùng quản trị thay đổi kích thước, dựng lại sơ đồ để ghế
+        // luôn đủ rộng và mã A10/B11... không bị cắt.
+        seatMapHost.SizeChanged += (s, e) =>
+        {
+            if (currentSeatMapRoom != null &&
+                !seatMapHost.IsDisposed &&
+                seatMapHost.ClientSize.Width > 0)
+            {
+                RenderSeatMap(currentSeatMapRoom);
+            }
+        };
+
         lblSeatInfo = new Label
         {
             Text = "Chưa chọn ghế nào.",
@@ -929,8 +942,12 @@ public partial class RoomManagementUC : UserControl
     // 12. HIỂN THỊ SƠ ĐỒ GHẾ
     private void RenderSeatMap(Room? room)
     {
-        seatMapHost.Controls.Clear();
+        if (seatMapHost == null || seatMapHost.IsDisposed)
+            return;
 
+        currentSeatMapRoom = room;
+        seatMapHost.SuspendLayout();
+        seatMapHost.Controls.Clear();
         lblSeatInfo.Text = "Chưa chọn ghế nào.";
 
         if (room == null)
@@ -943,64 +960,68 @@ public partial class RoomManagementUC : UserControl
                 Font = new Font("Segoe UI", 10),
                 Margin = new Padding(15)
             };
-
             seatMapHost.Controls.Add(empty);
+            seatMapHost.ResumeLayout();
             return;
         }
 
+        int cols = Math.Max(1, room.TotalColumns);
+        int rows = Math.Max(1, room.TotalRows);
+        int hostWidth = Math.Max(180, seatMapHost.ClientSize.Width -
+            seatMapHost.Padding.Horizontal - 24);
+
+        const int rowHeaderWidth = 34;
+        const int horizontalGap = 4;
+        const int verticalGap = 4;
+        const int horizontalPadding = 8;
+
+        int usableWidth = hostWidth - rowHeaderWidth -
+            horizontalPadding * 2 - horizontalGap * cols;
+
+        // Mã ghế dạng A10/B12 cần tối thiểu 48px để đọc rõ.
+        // Khi màn hình hẹp, giữ kích thước tối thiểu và cho cuộn ngang.
+        int cellWidth = Math.Clamp(usableWidth / cols, 48, 64);
+        int cellHeight = Math.Clamp(
+            (seatMapHost.ClientSize.Height - 100) / Math.Max(rows, 1),
+            34, 46);
+
+        int gridWidth = rowHeaderWidth + horizontalPadding * 2 +
+            cols * cellWidth + cols * horizontalGap;
+        int gridHeight = 42 + rows * (cellHeight + verticalGap) + 12;
+
         TableLayoutPanel grid = new()
         {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = room.TotalColumns + 1,
-            RowCount = room.TotalRows + 1,
+            AutoSize = false,
+            Size = new Size(gridWidth, gridHeight),
+            ColumnCount = cols + 1,
+            RowCount = rows + 1,
             BackColor = backgroundColor,
-            Padding = new Padding(5)
+            Padding = new Padding(4),
+            Margin = new Padding(Math.Max(4, (hostWidth - gridWidth) / 2), 8, 8, 8)
         };
 
-        grid.ColumnStyles.Add(
-            new ColumnStyle(SizeType.Absolute, 35)
-        );
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, rowHeaderWidth));
+        for (int col = 0; col < cols; col++)
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, cellWidth + horizontalGap));
 
-        for (int col = 0; col < room.TotalColumns; col++)
-        {
-            grid.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Absolute, 50)
-            );
-        }
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        for (int row = 0; row < rows; row++)
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, cellHeight + verticalGap));
 
-        grid.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 35)
-        );
-
-        for (int row = 0; row < room.TotalRows; row++)
-        {
-            grid.RowStyles.Add(
-                new RowStyle(SizeType.Absolute, 42)
-            );
-        }
-
-        // MÀN HÌNH
         Label lblScreen = new()
         {
-            Text = "M À N  H Ì N H",
-            BackColor = Color.FromArgb(51, 65, 85),
+            Text = "MÀN HÌNH CHIẾU",
+            BackColor = Color.FromArgb(41, 128, 185),
             ForeColor = Color.White,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            Margin = new Padding(3, 3, 3, 10)
+            Margin = new Padding(2, 2, 2, 8)
         };
-
         grid.Controls.Add(lblScreen, 1, 0);
+        grid.SetColumnSpan(lblScreen, cols);
 
-        grid.SetColumnSpan(
-            lblScreen,
-            room.TotalColumns
-        );
-
-        // HIỂN THỊ TỪNG HÀNG GHẾ
-        for (int row = 0; row < room.TotalRows; row++)
+        for (int row = 0; row < rows; row++)
         {
             string rowName = ((char)('A' + row)).ToString();
 
@@ -1010,65 +1031,63 @@ public partial class RoomManagementUC : UserControl
                 ForeColor = Color.White,
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Margin = new Padding(0)
             };
-
             grid.Controls.Add(lblRow, 0, row + 1);
 
-            for (int col = 0; col < room.TotalColumns; col++)
+            for (int col = 0; col < cols; col++)
             {
                 Seat? seat = seats.FirstOrDefault(
-                    s => s.RowIndex == row &&
-                         s.ColumnIndex == col
-                );
+                    item => item.RowIndex == row &&
+                            item.ColumnIndex == col);
 
                 if (seat == null)
                     continue;
 
                 Seat currentSeat = seat;
+                // Tạo nhãn từ tọa độ hàng/cột để giao diện không bị ảnh hưởng
+                // nếu dữ liệu SeatNumber cũ trong database bị sai định dạng.
+                string displaySeatCode = $"{rowName}{col + 1}";
 
                 Button seatButton = new()
                 {
-                    Text = seat.SeatNumber,
-                    Size = new Size(44, 34),
+                    Text = displaySeatCode,
+                    Size = new Size(cellWidth, cellHeight),
+                    Dock = DockStyle.Fill,
                     BackColor = GetSeatColor(seat.Type),
                     ForeColor = Color.White,
-                    Font = new Font("Segoe UI", 8, FontStyle.Bold),
+                    Font = new Font("Segoe UI", cellWidth >= 56 ? 9f : 8f, FontStyle.Bold),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    UseVisualStyleBackColor = false,
                     FlatStyle = FlatStyle.Flat,
                     Cursor = Cursors.Hand,
                     Margin = new Padding(2),
+                    Padding = new Padding(0),
                     Tag = seat.Id
                 };
 
                 seatButton.FlatAppearance.BorderColor =
-                    selectedSeatId == seat.Id
-                        ? Color.White
-                        : panelColor;
-
+                    selectedSeatId == seat.Id ? Color.White : panelColor;
                 seatButton.FlatAppearance.BorderSize =
                     selectedSeatId == seat.Id ? 3 : 1;
 
                 seatButton.Click += (s, e) =>
                 {
                     selectedSeatId = currentSeat.Id;
-
                     RenderSeatMap(room);
-
                     lblSeatInfo.Text =
-                        $"Ghế: {currentSeat.SeatNumber}  |  " +
+                        $"Ghế: {displaySeatCode}  |  " +
                         $"Loại: {GetSeatTypeText(currentSeat.Type)}  |  " +
                         $"Hệ số giá: {currentSeat.PriceMultiplier}";
                 };
 
-                grid.Controls.Add(
-                    seatButton,
-                    col + 1,
-                    row + 1
-                );
+                grid.Controls.Add(seatButton, col + 1, row + 1);
             }
         }
 
         seatMapHost.Controls.Add(grid);
+        seatMapHost.ResumeLayout();
     }
 
     // 13. LẤY MÀU THEO LOẠI GHẾ
