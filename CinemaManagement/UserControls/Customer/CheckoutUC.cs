@@ -1634,6 +1634,8 @@ public partial class CheckoutUC : UserControl
                     int Qty,
                     string ImgPath)>(FoodCart),
 
+                TicketAmount = ticketSubTotal,
+                FoodAmount = foodSubTotal,
                 TotalAmount = totalAmount,
                 PromotionCode = _appliedPromotion?.Code ?? string.Empty,
                 DiscountAmount = discountAmount,
@@ -1687,6 +1689,13 @@ public class BookingResultEventArgs : EventArgs
     public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart
         { get; set; } = new();
 
+    // Tổng tiền vé trước khi áp dụng khuyến mãi.
+    public decimal TicketAmount { get; set; }
+
+    // Tổng tiền bắp nước.
+    public decimal FoodAmount { get; set; }
+
+    // Tổng tiền khách phải thanh toán sau khi trừ khuyến mãi.
     public decimal TotalAmount { get; set; }
 
     public string PromotionCode { get; set; } = string.Empty;

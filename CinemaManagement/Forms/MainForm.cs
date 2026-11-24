@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -1044,14 +1043,21 @@ namespace CinemaManagement
 
                 try
                 {
-                    // 1. Trừ tồn kho bắp nước trong SQLite.
-                    FoodService foodService = new FoodService();
-                    foodService.DeductStockForOrder(_bookingContext.FoodCart);
+                    // 1. Lưu đơn đặt vé, từng ghế và sản phẩm bắp nước vào SQLite.
+                    // BookingService chỉ trả về khi giao dịch lưu thành công.
+                    var bookingService = new BookingService();
+                    long bookingId = bookingService.CreateBooking(result);
 
-                    // 2. Ghi nhận đơn đặt vé.
+                    if (bookingId <= 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Không thể lưu đơn đặt vé vào cơ sở dữ liệu.");
+                    }
+
+                    // 2. Chỉ cập nhật lịch sử trong bộ nhớ sau khi SQLite lưu thành công.
                     UserSession.AddBooking(result);
 
-                    // 3. Chuyển đến màn hình vé.
+                    // 3. Chuyển sang màn hình vé điện tử.
                     OpenTicketView(result);
                 }
                 catch (InvalidOperationException ex)
