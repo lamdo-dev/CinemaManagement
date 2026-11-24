@@ -358,11 +358,6 @@ namespace CinemaManagement
                     NavIconType.Schedule,
                     () => OpenShowtimeView(_bookingContext.Movie));
 
-                AddNavButton(
-                    "Đặt vé liên hoàn",
-                    NavIconType.Ticket,
-                    StartBookingFlow);
-
                 _navCustomerSeat = AddNavButton(
                     "Chọn ghế đặt vé",
                     NavIconType.Seat,
@@ -1204,12 +1199,6 @@ namespace CinemaManagement
             }
 
             SwitchView("Hoàn tất & Xuất vé điện tử", ticketUC);
-        }
-
-        private void StartBookingFlow()
-        {
-            _bookingContext.Clear();
-            OpenHomeView();
         }
 
         // =========================================================
