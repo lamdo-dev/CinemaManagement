@@ -68,7 +68,10 @@ namespace CinemaManagement
 
         private readonly UserRole currentRole;
 
-        // Dữ liệu dùng chung trong toàn bộ quy trình đặt vé
+        // Tránh xử lý Resize khi giao diện chưa khởi tạo xong.
+        private bool _responsiveReady;
+
+        // Dữ liệu dùng chung trong toàn bộ quy trình đặt vé.
         private readonly BookingContext _bookingContext = new();
 
         // =========================================================
@@ -83,7 +86,17 @@ namespace CinemaManagement
         {
             InitializeComponent();
             currentRole = role;
+
+            // WinForms tự co giãn theo DPI của Windows.
+            AutoScaleMode = AutoScaleMode.Dpi;
+
             SetupFullUILayout();
+
+            // Chỉ bật responsive sau khi giao diện đã được tạo.
+            SizeChanged += MainForm_SizeChanged;
+            _responsiveReady = true;
+
+            UpdateResponsiveLayout();
         }
 
         public MainForm(string roleName)
@@ -123,6 +136,7 @@ namespace CinemaManagement
             {
                 Dock = DockStyle.Left,
                 Width = 256,
+                MinimumSize = new Size(190, 0),
                 BackColor = ColSidebarBg,
                 Padding = new Padding(0, 0, 1, 0)
             };
@@ -210,7 +224,8 @@ namespace CinemaManagement
                 ForeColor = Color.FromArgb(30, 41, 59),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(22, 0, 0, 0)
+                Padding = new Padding(22, 0, 10, 0),
+                AutoEllipsis = true
             };
 
             panelHeader.Controls.Add(lblHeaderTitle);
@@ -223,8 +238,7 @@ namespace CinemaManagement
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(241, 242, 246)
             };
-
-            // =====================================================
+// =====================================================
             // MENU ITEMS (PHÂN QUYỀN ĐẦY ĐỦ)
             // =====================================================
 
@@ -368,7 +382,10 @@ namespace CinemaManagement
 
             AddNavButton("Đăng xuất", NavIconType.Logout, () =>
             {
+                // Xóa lượt đặt vé chưa hoàn tất.
                 _bookingContext.Clear();
+
+                // Chỉ đăng xuất, không xóa lịch sử đặt vé.
                 UserSession.Logout();
 
                 Hide();
@@ -422,7 +439,11 @@ namespace CinemaManagement
             flpNavContainer.Controls.Add(lblGroup);
         }
 
-        private Panel AddNavButton(string text, NavIconType iconType, Action onClick, bool isDanger = false)
+        private Panel AddNavButton(
+            string text,
+            NavIconType iconType,
+            Action onClick,
+            bool isDanger = false)
         {
             var state = new NavItemState
             {
@@ -434,13 +455,14 @@ namespace CinemaManagement
             var item = new Panel
             {
                 Tag = state,
-                Width = 224,
-                Height = 42,
+                Width = Math.Max(180, flpNavContainer.ClientSize.Width - 24),
+                Height = 44,
                 Margin = new Padding(0, 2, 0, 2),
                 BackColor = ColSidebarBg,
                 Cursor = Cursors.Hand
             };
 
+            // Bật DoubleBuffered để hạn chế nhấp nháy khi vẽ Sidebar.
             typeof(Control).InvokeMember(
                 "DoubleBuffered",
                 System.Reflection.BindingFlags.SetProperty |
@@ -450,65 +472,102 @@ namespace CinemaManagement
                 item,
                 new object[] { true });
 
-            item.Paint += (s, e) =>
+            item.Paint += (sender, e) =>
             {
-                if (item.Tag is not NavItemState st) return;
+                if (item.Tag is not NavItemState itemState)
+                    return;
 
-                var g = e.Graphics;
+                Graphics g = e.Graphics;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
 
-                var pillRect = new Rectangle(1, 1, item.Width - 3, item.Height - 3);
-                if (st.IsActive || st.IsHovered)
+                Rectangle pillRect = new Rectangle(
+                    1, 1,
+                    Math.Max(0, item.Width - 3),
+                    Math.Max(0, item.Height - 3));
+
+                if (itemState.IsActive || itemState.IsHovered)
                 {
                     using var path = CreateRoundedPath(pillRect, 12);
-                    Color bg = st.IsActive ? ColItemActiveBg : ColItemHoverBg;
-                    using var bgBrush = new SolidBrush(bg);
-                    g.FillPath(bgBrush, path);
+                    Color background = itemState.IsActive
+                        ? ColItemActiveBg
+                        : ColItemHoverBg;
+
+                    using var backgroundBrush = new SolidBrush(background);
+                    g.FillPath(backgroundBrush, path);
                 }
 
-                Color iconColor = st.IsDanger
+                Color iconColor = itemState.IsDanger
                     ? Color.FromArgb(220, 38, 38)
                     : ColEmeraldIcon;
 
-                var iconRect = new Rectangle(14, (item.Height - 18) / 2, 18, 18);
-                DrawVectorIcon(g, st.IconType, iconRect, iconColor);
+                Rectangle iconRect = new Rectangle(
+                    14,
+                    (item.Height - 18) / 2,
+                    18,
+                    18);
 
-                Color textColor = st.IsDanger
+                DrawVectorIcon(g, itemState.IconType, iconRect, iconColor);
+
+                Color textColor = itemState.IsDanger
                     ? Color.FromArgb(220, 38, 38)
-                    : (st.IsActive ? Color.FromArgb(15, 23, 42) : ColItemText);
+                    : itemState.IsActive
+                        ? Color.FromArgb(15, 23, 42)
+                        : ColItemText;
 
-                using var textFont = new Font("Segoe UI", 9.5F, st.IsActive ? FontStyle.Bold : FontStyle.Regular);
+                using var textFont = new Font(
+                    "Segoe UI",
+                    9.5F,
+                    itemState.IsActive ? FontStyle.Bold : FontStyle.Regular);
+
                 using var textBrush = new SolidBrush(textColor);
-                using var sf = new StringFormat
+                using var stringFormat = new StringFormat
                 {
                     Alignment = StringAlignment.Near,
                     LineAlignment = StringAlignment.Center,
                     Trimming = StringTrimming.EllipsisCharacter
                 };
 
-                var textRect = new Rectangle(44, 0, item.Width - 52, item.Height);
-                g.DrawString(st.Label, textFont, textBrush, textRect, sf);
+                Rectangle textRect = new Rectangle(
+                    44,
+                    0,
+                    Math.Max(0, item.Width - 52),
+                    item.Height);
+
+                g.DrawString(
+                    itemState.Label,
+                    textFont,
+                    textBrush,
+                    textRect,
+                    stringFormat);
             };
 
-            item.MouseEnter += (s, e) =>
+            item.MouseEnter += (sender, e) =>
             {
-                if (item.Tag is NavItemState st) st.IsHovered = true;
+                if (item.Tag is NavItemState itemState)
+                    itemState.IsHovered = true;
+
                 item.Invalidate();
             };
-            item.MouseLeave += (s, e) =>
+
+            item.MouseLeave += (sender, e) =>
             {
-                if (item.Tag is NavItemState st) st.IsHovered = false;
+                if (item.Tag is NavItemState itemState)
+                    itemState.IsHovered = false;
+
                 item.Invalidate();
             };
-            item.Click += (s, e) =>
+
+            item.Click += (sender, e) =>
             {
-                if (item.Tag is NavItemState st && !st.IsDanger)
+                if (item.Tag is NavItemState itemState && !itemState.IsDanger)
                     SetActiveNav(item);
+
                 onClick();
             };
 
             _navPanels.Add(item);
             flpNavContainer.Controls.Add(item);
+
             return item;
         }
 
@@ -704,6 +763,7 @@ namespace CinemaManagement
 
             lblHeaderTitle.Text = title;
 
+            // Giải phóng màn hình cũ.
             foreach (Control c in panelContent.Controls)
             {
                 c.Dispose();
@@ -711,13 +771,55 @@ namespace CinemaManagement
 
             panelContent.Controls.Clear();
 
+            // Hiển thị màn hình mới.
             control.Dock = DockStyle.Fill;
             panelContent.Controls.Add(control);
             control.BringToFront();
         }
 
         // =========================================================
-        // 6. CUSTOMER BOOKING FLOW
+        // 6. RESPONSIVE LAYOUT
+        // =========================================================
+
+        /// <summary>
+        /// Tự điều chỉnh chiều rộng Sidebar theo cửa sổ.
+        /// Không thay đổi Font của các control.
+        /// </summary>
+        
+        private void UpdateResponsiveLayout()
+        {
+            if (panelSidebar == null || panelSidebar.IsDisposed)
+                return;
+
+            int availableWidth = ClientSize.Width;
+
+            // Sidebar chiếm khoảng 18% chiều rộng cửa sổ.
+            int sidebarWidth = (int)(availableWidth * 0.18f);
+
+            // Giới hạn để Sidebar không chiếm quá nhiều diện tích.
+            if (availableWidth < 1100)
+            {
+                sidebarWidth = Math.Clamp(sidebarWidth, 180, 210);
+            }
+            else
+            {
+                sidebarWidth = Math.Clamp(sidebarWidth, 210, 250);
+            }
+
+            panelSidebar.Width = sidebarWidth;
+        }
+
+
+        private void MainForm_SizeChanged(object? sender, EventArgs e)
+        {
+            if (!_responsiveReady || IsDisposed)
+                return;
+
+            UpdateResponsiveLayout();
+        }
+
+        // =========================================================
+        // 7. CUSTOMER BOOKING FLOW
         // =========================================================
 
         public void OpenHomeView()
@@ -900,6 +1002,10 @@ namespace CinemaManagement
             SwitchView("Chọn bắp nước & Combo", foodUC);
         }
 
+        // ---------------------------------------------------------
+        // STEP 5: CHECKOUT
+        // ---------------------------------------------------------
+
         private void OpenCheckoutView()
         {
             if (!_bookingContext.CanCheckout)
@@ -937,14 +1043,21 @@ namespace CinemaManagement
 
                 try
                 {
-                    // 1. Trừ tồn kho bắp nước trong SQLite
-                    FoodService foodService = new FoodService();
-                    foodService.DeductStockForOrder(_bookingContext.FoodCart);
+                    // 1. Lưu đơn đặt vé, từng ghế và sản phẩm bắp nước vào SQLite.
+                    // BookingService chỉ trả về khi giao dịch lưu thành công.
+                    var bookingService = new BookingService();
+                    long bookingId = bookingService.CreateBooking(result);
 
-                    // 2. Ghi nhận đơn đặt vé
+                    if (bookingId <= 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Không thể lưu đơn đặt vé vào cơ sở dữ liệu.");
+                    }
+
+                    // 2. Chỉ cập nhật lịch sử trong bộ nhớ sau khi SQLite lưu thành công.
                     UserSession.AddBooking(result);
 
-                    // 3. Chuyển đến màn hình vé
+                    // 3. Chuyển sang màn hình vé điện tử.
                     OpenTicketView(result);
                 }
                 catch (InvalidOperationException ex)
@@ -968,7 +1081,7 @@ namespace CinemaManagement
             SwitchView("Thanh toán", checkoutUC);
         }
 
-        public void OpenTicketView(BookingResultEventArgs? bookingData = null)
+                public void OpenTicketView(BookingResultEventArgs? bookingData = null)
         {
             bookingData ??= UserSession.LatestBooking;
 
@@ -980,10 +1093,15 @@ namespace CinemaManagement
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
 
-                if (currentRole == UserRole.Staff || currentRole == UserRole.Admin)
+                if (currentRole == UserRole.Staff ||
+                    currentRole == UserRole.Admin)
+                {
                     OpenPOSView();
+                }
                 else
+                {
                     OpenHomeView();
+                }
 
                 return;
             }
@@ -994,10 +1112,15 @@ namespace CinemaManagement
             {
                 _bookingContext.Clear();
 
-                if (currentRole == UserRole.Staff || currentRole == UserRole.Admin)
+                if (currentRole == UserRole.Staff ||
+                    currentRole == UserRole.Admin)
+                {
                     OpenPOSView();
+                }
                 else
+                {
                     OpenHomeView();
+                }
             };
 
             SwitchView("Hoàn tất & Xuất vé điện tử", ticketUC);
@@ -1010,7 +1133,7 @@ namespace CinemaManagement
         }
 
         // =========================================================
-        // 7. STAFF / ADMIN POS
+        // 8. STAFF / ADMIN POS
         // =========================================================
 
         public void OpenPOSView()
@@ -1054,7 +1177,7 @@ namespace CinemaManagement
         }
 
         // =========================================================
-        // 8. TICKET SCANNER
+        // 9. TICKET SCANNER
         // =========================================================
 
         public void OpenTicketScannerView(string? prefillCode = null)

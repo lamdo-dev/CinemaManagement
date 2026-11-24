@@ -35,6 +35,7 @@ namespace CinemaManagement.UserControls.Customer
         // ==========================================
 
         private readonly RoomRepository _roomRepository = new();
+        private readonly TicketRepository _ticketRepository = new();
 
         // ==========================================
         // 3. CÁC CONTROL GIAO DIỆN
@@ -225,10 +226,11 @@ namespace CinemaManagement.UserControls.Customer
                     return;
                 }
 
+                // Đọc ghế đã đặt trực tiếp từ SQLite theo suất chiếu.
+                // Không phụ thuộc UserSession nên vẫn đúng sau khi chạy lại ứng dụng.
                 HashSet<string> occupiedSeats =
-                    UserSession.GetBookedSeats(
-                        MovieData,
-                        ShowtimeData);
+                    _ticketRepository.GetBookedSeatNumbers(
+                        Convert.ToInt64(ShowtimeData.Id));
 
                 decimal ticketBasePrice =
                     ShowtimeData.BasePrice;
@@ -295,10 +297,7 @@ namespace CinemaManagement.UserControls.Customer
             Dock = DockStyle.Fill;
             BackColor = ColorBg;
 
-            // ==========================================
-            // HEADER RESPONSIVE (KHÔNG CẮT NÚT & STEPPER)
-            // ==========================================
-
+            // HEADER RESPONSIVE
             tlpHeader = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -328,9 +327,12 @@ namespace CinemaManagement.UserControls.Customer
                 Cursor = Cursors.Hand
             };
             btnBack.FlatAppearance.BorderSize = 0;
-            btnBack.MouseEnter += (s, e) => btnBack.BackColor = Color.FromArgb(52, 54, 74);
-            btnBack.MouseLeave += (s, e) => btnBack.BackColor = Color.FromArgb(35, 36, 50);
-            btnBack.Click += (s, e) => OnBackClicked?.Invoke(this, EventArgs.Empty);
+            btnBack.MouseEnter += (s, e) =>
+                btnBack.BackColor = Color.FromArgb(52, 54, 74);
+            btnBack.MouseLeave += (s, e) =>
+                btnBack.BackColor = Color.FromArgb(35, 36, 50);
+            btnBack.Click += (s, e) =>
+                OnBackClicked?.Invoke(this, EventArgs.Empty);
 
             var flpStepper = new FlowLayoutPanel
             {
@@ -355,10 +357,7 @@ namespace CinemaManagement.UserControls.Customer
             tlpHeader.Controls.Add(btnBack, 0, 0);
             tlpHeader.Controls.Add(flpStepper, 1, 0);
 
-            // ==========================================
-            // BẢNG CHÚ THÍCH GHẾ BÊN TRÁI (TỰ GIÃN THEO DPI)
-            // ==========================================
-
+            // BẢNG CHÚ THÍCH GHẾ BÊN TRÁI
             pnlLeftLegend = new Panel
             {
                 Dock = DockStyle.Left,
@@ -379,6 +378,7 @@ namespace CinemaManagement.UserControls.Customer
                 Margin = new Padding(0)
             };
             tlpLegend.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
             for (int i = 0; i < 7; i++)
             {
                 tlpLegend.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -394,11 +394,21 @@ namespace CinemaManagement.UserControls.Customer
             };
 
             tlpLegend.Controls.Add(lblLegendTitle, 0, 0);
-            tlpLegend.Controls.Add(CreateLegendItem("Ghế Thường (Standard)", "Hệ số giá: x1.0", SeatMatrixUC.ColorStandard), 0, 1);
-            tlpLegend.Controls.Add(CreateLegendItem("Ghế VIP", "Hệ số giá: x1.2", SeatMatrixUC.ColorVIP), 0, 2);
-            tlpLegend.Controls.Add(CreateLegendItem("Ghế Đôi (Couple)", "Hệ số giá: x2.0", SeatMatrixUC.ColorPlus), 0, 3);
-            tlpLegend.Controls.Add(CreateLegendItem("Ghế Đang chọn", "Đã chọn", SeatMatrixUC.ColorSelected), 0, 4);
-            tlpLegend.Controls.Add(CreateLegendItem("Ghế Đã bán", "Không trống", SeatMatrixUC.ColorOccupied), 0, 5);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Thường (Standard)", "Hệ số giá: x1.0",
+                    SeatMatrixUC.ColorStandard), 0, 1);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế VIP", "Hệ số giá: x1.2",
+                    SeatMatrixUC.ColorVIP), 0, 2);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Đôi (Couple)", "Hệ số giá: x2.0",
+                    SeatMatrixUC.ColorPlus), 0, 3);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Đang chọn", "Đã chọn",
+                    SeatMatrixUC.ColorSelected), 0, 4);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Đã bán", "Không trống",
+                    SeatMatrixUC.ColorOccupied), 0, 5);
 
             lblContextInfo = new Label
             {
@@ -413,10 +423,7 @@ namespace CinemaManagement.UserControls.Customer
             tlpLegend.Controls.Add(lblContextInfo, 0, 6);
             pnlLeftLegend.Controls.Add(tlpLegend);
 
-            // ==========================================
-            // THANH TỔNG TIỀN & NÚT TIẾP TỤC RESPONSIVE
-            // ==========================================
-
+            // THANH TỔNG TIỀN VÀ NÚT TIẾP TỤC
             tlpBottomBar = new TableLayoutPanel
             {
                 Dock = DockStyle.Bottom,
@@ -482,7 +489,8 @@ namespace CinemaManagement.UserControls.Customer
                 Cursor = Cursors.Hand
             };
             btnContinue.FlatAppearance.BorderSize = 0;
-            btnContinue.FlatAppearance.MouseOverBackColor = Color.FromArgb(220, 180, 105);
+            btnContinue.FlatAppearance.MouseOverBackColor =
+                Color.FromArgb(220, 180, 105);
             btnContinue.Click += BtnContinue_Click;
 
             tlpBottomBar.Controls.Add(tlpSummaryLeft, 0, 0);
@@ -490,17 +498,17 @@ namespace CinemaManagement.UserControls.Customer
 
             tlpBottomBar.SizeChanged += (s, e) =>
             {
-                int availableWidth = tlpBottomBar.ClientSize.Width - btnContinue.Width - 60;
+                int availableWidth =
+                    tlpBottomBar.ClientSize.Width - btnContinue.Width - 60;
+
                 if (availableWidth > 180)
                 {
-                    lblSelectedSeats.MaximumSize = new Size(availableWidth, 0);
+                    lblSelectedSeats.MaximumSize =
+                        new Size(availableWidth, 0);
                 }
             };
 
-            // ==========================================
             // SƠ ĐỒ GHẾ
-            // ==========================================
-
             seatMatrix = new SeatMatrixUC
             {
                 Dock = DockStyle.Fill
@@ -519,7 +527,7 @@ namespace CinemaManagement.UserControls.Customer
         }
 
         // ==========================================
-        // 11. TẠO LABEL STEPPER & CHÚ THÍCH BẢNG GIÁ
+        // 11. TẠO LABEL STEPPER VÀ CHÚ THÍCH
         // ==========================================
 
         private Label CreateStepLabel(string text, bool isActive)
@@ -626,7 +634,6 @@ namespace CinemaManagement.UserControls.Customer
                 return;
 
             _bookingContext.SetSeats(seats);
-
             _bookingContext.SetTicketAmount(currentTotal);
         }
 

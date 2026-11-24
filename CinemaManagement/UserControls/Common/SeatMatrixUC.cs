@@ -41,6 +41,9 @@ namespace CinemaManagement.UserControls.Common
         private Panel pnlMatrixContainer = null!;
 
         private readonly List<Button> seatButtons = new();
+        private readonly List<Label> rowLabels = new();
+        private int matrixRows;
+        private int matrixColumns;
 
         // Lưu hệ số giá của từng ghế
         private readonly Dictionary<string, decimal> seatMultipliers =
@@ -74,13 +77,13 @@ namespace CinemaManagement.UserControls.Common
         {
             Dock = DockStyle.Fill;
             BackColor = ColorBackground;
-            AutoScroll = true;
+            AutoScroll = false;
 
             pnlScreen = new Panel
             {
-                Size = new Size(600, 32),
-                Location = new Point(100, 15),
-                BackColor = Color.FromArgb(41, 128, 185)
+                Height = 32,
+                BackColor = Color.FromArgb(41, 128, 185),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             Label lblScreen = new Label
@@ -91,22 +94,117 @@ namespace CinemaManagement.UserControls.Common
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter
             };
-
             pnlScreen.Controls.Add(lblScreen);
 
             pnlMatrixContainer = new Panel
             {
-                Location = new Point(20, 65),
-                Size = new Size(760, 480),
+                BackColor = Color.Transparent,
                 AutoScroll = true,
-                BackColor = Color.Transparent
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom |
+                         AnchorStyles.Left | AnchorStyles.Right
             };
 
             Controls.Add(pnlScreen);
             Controls.Add(pnlMatrixContainer);
+            Resize += (s, e) => LayoutMatrix();
 
-            // Sơ đồ mặc định để tương thích với code cũ
             GenerateSeatMatrix(10, 14);
+        }
+
+        // Căn chỉnh sơ đồ theo kích thước vùng hiển thị hiện tại.
+        // Nếu màn hình quá hẹp, chỉ vùng sơ đồ cuộn ngang; không làm méo ghế.
+        private void LayoutMatrix()
+        {
+            if (pnlScreen == null || pnlMatrixContainer == null)
+                return;
+
+            int width = Math.Max(100, ClientSize.Width);
+            int height = Math.Max(100, ClientSize.Height);
+
+            int sidePadding = Math.Clamp((int)(width * 0.035), 12, 32);
+            pnlScreen.SetBounds(sidePadding, 15,
+                Math.Max(100, width - sidePadding * 2), 32);
+
+            pnlMatrixContainer.SetBounds(8, 58,
+                Math.Max(80, width - 16), Math.Max(80, height - 66));
+
+            if (matrixRows <= 0 || matrixColumns <= 0)
+                return;
+
+            int viewportWidth = Math.Max(80, pnlMatrixContainer.ClientSize.Width);
+            int viewportHeight = Math.Max(80, pnlMatrixContainer.ClientSize.Height);
+
+            const int rowLabelWidth = 28;
+            const int leftPadding = 8;
+            const int rightPadding = 12;
+            const int topPadding = 12;
+            const int bottomPadding = 12;
+
+            int gap = viewportWidth < 520 ? 4 : 7;
+
+            // Ưu tiên đủ rộng để hiển thị mã ghế A10, B11...
+            // Nếu không đủ chỗ, giữ nguyên kích thước tối thiểu và cho cuộn ngang.
+            int availableSeatWidth = viewportWidth - rowLabelWidth -
+                leftPadding - rightPadding - gap * (matrixColumns - 1);
+
+            int seatWidth = Math.Clamp(
+                availableSeatWidth / matrixColumns, 46, 60);
+
+            int availableSeatHeight = viewportHeight - topPadding -
+                bottomPadding - gap * (matrixRows - 1);
+
+            int seatHeight = Math.Clamp(
+                availableSeatHeight / matrixRows, 32, 46);
+
+            int gridWidth = matrixColumns * seatWidth +
+                (matrixColumns - 1) * gap;
+            int gridHeight = matrixRows * seatHeight +
+                (matrixRows - 1) * gap;
+
+            int contentWidth = rowLabelWidth + leftPadding +
+                gridWidth + rightPadding;
+
+            int startX = contentWidth <= viewportWidth
+                ? Math.Max(rowLabelWidth + leftPadding,
+                    (viewportWidth - gridWidth) / 2)
+                : rowLabelWidth + leftPadding;
+
+            int startY = Math.Max(topPadding,
+                (viewportHeight - gridHeight) / 2);
+
+            for (int r = 0; r < rowLabels.Count; r++)
+            {
+                rowLabels[r].SetBounds(3,
+                    startY + r * (seatHeight + gap),
+                    rowLabelWidth, seatHeight);
+            }
+
+            foreach (Button button in seatButtons)
+            {
+                string code = button.Name;
+                if (code.Length < 2 ||
+                    !int.TryParse(code.Substring(1), out int column))
+                    continue;
+
+                int row = char.ToUpperInvariant(code[0]) - 'A';
+                if (row < 0 || row >= matrixRows ||
+                    column < 1 || column > matrixColumns)
+                    continue;
+
+                button.SetBounds(
+                    startX + (column - 1) * (seatWidth + gap),
+                    startY + row * (seatHeight + gap),
+                    seatWidth, seatHeight);
+
+                button.Font = new Font("Segoe UI",
+                    seatWidth >= 54 ? 9f : 8f, FontStyle.Bold);
+                button.TextAlign = ContentAlignment.MiddleCenter;
+                button.Padding = Padding.Empty;
+            }
+
+            pnlMatrixContainer.AutoScrollMinSize = new Size(
+                Math.Max(viewportWidth, contentWidth),
+                Math.Max(viewportHeight, startY + gridHeight + bottomPadding));
         }
 
         // ==========================================
@@ -151,10 +249,9 @@ namespace CinemaManagement.UserControls.Common
                 extraOccupiedSeats ?? Enumerable.Empty<string>(),
                 StringComparer.OrdinalIgnoreCase);
 
-            int seatSize = 32;
-            int gap = 8;
-            int startX = 50;
-            int startY = 20;
+            matrixRows = rows;
+            matrixColumns = cols;
+            rowLabels.Clear();
 
             for (int r = 0; r < rows; r++)
             {
@@ -168,13 +265,11 @@ namespace CinemaManagement.UserControls.Common
                         9.5f,
                         FontStyle.Bold),
                     ForeColor = Color.White,
-                    Size = new Size(30, seatSize),
-                    Location = new Point(
-                        10,
-                        startY + r * (seatSize + gap)),
+                    Size = new Size(28, 32),
                     TextAlign = ContentAlignment.MiddleCenter
                 };
 
+                rowLabels.Add(lblRow);
                 pnlMatrixContainer.Controls.Add(lblRow);
 
                 for (int c = 1; c <= cols; c++)
@@ -191,20 +286,21 @@ namespace CinemaManagement.UserControls.Common
 
                     Button btnSeat = new Button
                     {
-                        Text = c.ToString(),
+                        // Hiển thị mã ghế đầy đủ để tránh nhầm 10, 11, 12 thành 1.
+                        // Name giữ nguyên mã ghế để tương thích database và đặt vé.
+                        Text = seatCode,
                         Name = seatCode,
-                        Size = new Size(seatSize, seatSize),
-                        Location = new Point(
-                            startX + (c - 1) * (seatSize + gap),
-                            startY + r * (seatSize + gap)),
-                        Font = new Font(
-                            "Segoe UI",
-                            8,
-                            FontStyle.Bold),
+                        Size = new Size(40, 34),
+                        MinimumSize = new Size(38, 30),
+                        Padding = new Padding(0),
+                        Margin = new Padding(0),
+                        Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                         ForeColor = Color.White,
+                        TextAlign = ContentAlignment.MiddleCenter,
                         BackColor = isOccupied
                             ? ColorOccupied
                             : seatColor,
+                        UseVisualStyleBackColor = false,
                         Enabled = !isOccupied,
                         FlatStyle = FlatStyle.Flat,
                         Cursor = isOccupied
@@ -228,6 +324,7 @@ namespace CinemaManagement.UserControls.Common
 
             // Khôi phục lựa chọn cũ nếu ghế vẫn còn khả dụng
             RestoreSelectedSeats(previousSelection);
+            LayoutMatrix();
         }
 
         // ==========================================
@@ -360,6 +457,9 @@ namespace CinemaManagement.UserControls.Common
             pnlMatrixContainer.Controls.Clear();
 
             seatButtons.Clear();
+            rowLabels.Clear();
+            pnlMatrixContainer.AutoScrollMinSize = Size.Empty;
+            pnlMatrixContainer.AutoScrollPosition = Point.Empty;
 
             seatMultipliers.Clear();
 

@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -12,7 +11,9 @@ namespace CinemaManagement.UserControls.Admin;
 
 public partial class ShowtimeManagementUC : UserControl
 {
+    // =========================================
     // 1. REPOSITORY VÀ DỮ LIỆU
+    // =========================================
 
     private readonly MovieRepository _movieRepository = new();
     private readonly RoomRepository _roomRepository = new();
@@ -24,7 +25,9 @@ public partial class ShowtimeManagementUC : UserControl
 
     private int? _editingShowtimeId;
 
+    // =========================================
     // 2. CÁC THÀNH PHẦN GIAO DIỆN
+    // =========================================
 
     private DataGridView _dgvShowtimes = null!;
     private TextBox _txtSearch = null!;
@@ -50,6 +53,19 @@ public partial class ShowtimeManagementUC : UserControl
     private Button _btnCancel = null!;
     private Button _btnDelete = null!;
 
+    private Panel _scrollHost = null!;
+    private TableLayoutPanel _mainLayout = null!;
+    private TableLayoutPanel _statisticsPanel = null!;
+    private Panel _cardTotal = null!;
+    private Panel _cardToday = null!;
+    private Panel _cardRooms = null!;
+    private FlowLayoutPanel _filterPanel = null!;
+    private Panel _editorPanel = null!;
+    private TableLayoutPanel _fieldsPanel = null!;
+    private FlowLayoutPanel _actionPanel = null!;
+
+    private bool _isApplyingResponsiveLayout;
+
     private readonly Color _backgroundColor =
         Color.FromArgb(15, 23, 42);
 
@@ -62,16 +78,23 @@ public partial class ShowtimeManagementUC : UserControl
     private readonly Color _textColor =
         Color.FromArgb(226, 232, 240);
 
+    // =========================================
     // 3. CONSTRUCTOR
+    // =========================================
 
     public ShowtimeManagementUC()
     {
         InitializeComponent();
 
+        AutoScaleMode = AutoScaleMode.Dpi;
         Dock = DockStyle.Fill;
         BackColor = _backgroundColor;
 
         BuildInterface();
+
+        SizeChanged += ShowtimeManagementUC_SizeChanged;
+
+        ApplyResponsiveLayout();
 
         LoadDatabaseData();
         LoadComboBoxes();
@@ -85,65 +108,87 @@ public partial class ShowtimeManagementUC : UserControl
 
     private void BuildInterface()
     {
-        TableLayoutPanel mainLayout = new TableLayoutPanel
+        // Vùng cuộn dọc bao toàn bộ nội dung UserControl.
+        // Khi màn hình thấp, người dùng có thể cuộn từ tiêu đề đến bảng dữ liệu.
+        _scrollHost = new Panel
         {
             Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = _backgroundColor,
+            Margin = new Padding(0),
+            Padding = new Padding(0)
+        };
+
+        _mainLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.None,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             ColumnCount = 1,
             RowCount = 6,
             BackColor = _backgroundColor,
             Padding = new Padding(0)
         };
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 85));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 130));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 64));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 205));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 32));
 
-        // HEADER
-
-        Panel headerPanel = new Panel
+        // HEADER - dùng TableLayoutPanel để chữ không bị cắt khi thay đổi DPI
+        TableLayoutPanel headerPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            BackColor = _backgroundColor
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = _backgroundColor,
+            Padding = new Padding(10, 5, 8, 4),
+            Margin = new Padding(0)
         };
+        headerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        headerPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
+        headerPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
 
         Label lblTitle = new Label
         {
             Text = "QUẢN LÝ SUẤT CHIẾU",
-            Font = new Font("Segoe UI", 21, FontStyle.Bold),
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 21F, FontStyle.Bold),
             ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(5, 10)
+            Margin = new Padding(0)
         };
 
         Label lblDescription = new Label
         {
             Text = "Lập lịch chiếu phim và kiểm tra lịch phòng",
-            Font = new Font("Segoe UI", 9),
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular),
             ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(7, 52)
+            Margin = new Padding(0)
         };
 
-        headerPanel.Controls.Add(lblTitle);
-        headerPanel.Controls.Add(lblDescription);
+        headerPanel.Controls.Add(lblTitle, 0, 0);
+        headerPanel.Controls.Add(lblDescription, 0, 1);
 
         // THỐNG KÊ
 
-        TableLayoutPanel statisticsPanel = new TableLayoutPanel
+        _statisticsPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
@@ -153,47 +198,48 @@ public partial class ShowtimeManagementUC : UserControl
 
         for (int i = 0; i < 3; i++)
         {
-            statisticsPanel.ColumnStyles.Add(
+            _statisticsPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 33.33f));
         }
 
-        statisticsPanel.RowStyles.Add(
+        _statisticsPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        Panel cardTotal = CreateStatisticCard(
+        _cardTotal = CreateStatisticCard(
             "TỔNG SUẤT CHIẾU",
             Color.FromArgb(37, 99, 235),
             out _lblTotal
         );
 
-        Panel cardToday = CreateStatisticCard(
+        _cardToday = CreateStatisticCard(
             "SUẤT CHIẾU HÔM NAY",
             Color.FromArgb(16, 185, 129),
             out _lblToday
         );
 
-        Panel cardRooms = CreateStatisticCard(
+        _cardRooms = CreateStatisticCard(
             "PHÒNG ĐANG QUẢN LÝ",
             Color.FromArgb(139, 92, 246),
             out _lblRooms
         );
 
-        cardTotal.Margin = new Padding(0, 5, 10, 5);
-        cardToday.Margin = new Padding(5, 5, 5, 5);
-        cardRooms.Margin = new Padding(10, 5, 0, 5);
+        _cardTotal.Margin = new Padding(0, 5, 10, 5);
+        _cardToday.Margin = new Padding(5, 5, 5, 5);
+        _cardRooms.Margin = new Padding(10, 5, 0, 5);
 
-        statisticsPanel.Controls.Add(cardTotal, 0, 0);
-        statisticsPanel.Controls.Add(cardToday, 1, 0);
-        statisticsPanel.Controls.Add(cardRooms, 2, 0);
+        _statisticsPanel.Controls.Add(_cardTotal, 0, 0);
+        _statisticsPanel.Controls.Add(_cardToday, 1, 0);
+        _statisticsPanel.Controls.Add(_cardRooms, 2, 0);
 
         // TÌM KIẾM VÀ LỌC
 
-        FlowLayoutPanel filterPanel = new FlowLayoutPanel
+        _filterPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = _panelColor,
             Padding = new Padding(12, 12, 5, 0),
-            WrapContents = false
+            WrapContents = true,
+            AutoScroll = true
         };
 
         Label lblSearch = CreateLabel("Tìm kiếm:", 10);
@@ -218,18 +264,19 @@ public partial class ShowtimeManagementUC : UserControl
             Margin = new Padding(0, 2, 10, 0)
         };
 
-        filterPanel.Controls.Add(lblSearch);
-        filterPanel.Controls.Add(_txtSearch);
-        filterPanel.Controls.Add(lblFilterDate);
-        filterPanel.Controls.Add(_dtpFilterDate);
+        _filterPanel.Controls.Add(lblSearch);
+        _filterPanel.Controls.Add(_txtSearch);
+        _filterPanel.Controls.Add(lblFilterDate);
+        _filterPanel.Controls.Add(_dtpFilterDate);
 
         // FORM THÔNG TIN SUẤT CHIẾU
 
-        Panel editorPanel = new Panel
+        _editorPanel = new Panel
         {
             Dock = DockStyle.Fill,
             BackColor = _panelColor,
-            Padding = new Padding(12)
+            Padding = new Padding(12),
+            AutoScroll = true
         };
 
         Label lblEditorTitle = new Label
@@ -241,9 +288,9 @@ public partial class ShowtimeManagementUC : UserControl
             Height = 28
         };
 
-        // Bố cục nhập liệu: 4 cột x 2 hàng
+        // BỐ CỤC NHẬP LIỆU
 
-        TableLayoutPanel fieldsPanel = new TableLayoutPanel
+        _fieldsPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
@@ -255,19 +302,17 @@ public partial class ShowtimeManagementUC : UserControl
 
         for (int i = 0; i < 4; i++)
         {
-            fieldsPanel.ColumnStyles.Add(
+            _fieldsPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 25));
         }
 
-        fieldsPanel.RowStyles.Add(
+        _fieldsPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 50));
 
-        fieldsPanel.RowStyles.Add(
+        _fieldsPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 50));
 
-        // HÀNG 1
-
-        // Phim
+        // PHIM
 
         _cboMovie = new ComboBox
         {
@@ -275,10 +320,10 @@ public partial class ShowtimeManagementUC : UserControl
             Font = new Font("Segoe UI", 9)
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Phim:", _cboMovie, 230), 0, 0);
 
-        // Phòng chiếu
+        // PHÒNG CHIẾU
 
         _cboRoom = new ComboBox
         {
@@ -286,10 +331,10 @@ public partial class ShowtimeManagementUC : UserControl
             Font = new Font("Segoe UI", 9)
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Phòng chiếu:", _cboRoom, 180), 1, 0);
 
-        // Ngày chiếu
+        // NGÀY CHIẾU
 
         _dtpDate = new DateTimePicker
         {
@@ -299,10 +344,10 @@ public partial class ShowtimeManagementUC : UserControl
             Value = DateTime.Today.AddDays(1)
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Ngày chiếu:", _dtpDate, 150), 2, 0);
 
-        // Giờ bắt đầu
+        // GIỜ BẮT ĐẦU
 
         _dtpStartTime = new DateTimePicker
         {
@@ -313,12 +358,10 @@ public partial class ShowtimeManagementUC : UserControl
             Value = DateTime.Today.AddHours(9)
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Giờ bắt đầu:", _dtpStartTime, 130), 3, 0);
 
-        // HÀNG 2
-
-        // Định dạng
+        // ĐỊNH DẠNG
 
         _cboFormat = new ComboBox
         {
@@ -334,10 +377,10 @@ public partial class ShowtimeManagementUC : UserControl
 
         _cboFormat.SelectedIndex = 0;
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Định dạng:", _cboFormat, 130), 0, 1);
 
-        // Giá vé
+        // GIÁ VÉ
 
         _numPrice = new NumericUpDown
         {
@@ -349,10 +392,10 @@ public partial class ShowtimeManagementUC : UserControl
             Font = new Font("Segoe UI", 9)
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Giá vé (VNĐ):", _numPrice, 150), 1, 1);
 
-        // Giờ kết thúc dự kiến
+        // GIỜ KẾT THÚC DỰ KIẾN
 
         _lblEndPreview = new Label
         {
@@ -362,13 +405,13 @@ public partial class ShowtimeManagementUC : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField(
                 "Giờ kết thúc dự kiến:",
                 _lblEndPreview,
                 180), 2, 1);
 
-        // Trạng thái kiểm tra lịch
+        // KIỂM TRA LỊCH
 
         Label lblScheduleInfo = new Label
         {
@@ -379,7 +422,7 @@ public partial class ShowtimeManagementUC : UserControl
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField(
                 "Kiểm tra lịch:",
                 lblScheduleInfo,
@@ -387,12 +430,13 @@ public partial class ShowtimeManagementUC : UserControl
 
         // CÁC NÚT CHỨC NĂNG
 
-        FlowLayoutPanel actionPanel = new FlowLayoutPanel
+        _actionPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
             Height = 43,
             FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
+            WrapContents = true,
+            AutoScroll = true,
             BackColor = _panelColor,
             Padding = new Padding(0, 4, 0, 0)
         };
@@ -415,16 +459,14 @@ public partial class ShowtimeManagementUC : UserControl
 
         _btnCancel.Visible = false;
 
-        actionPanel.Controls.Add(_btnDelete);
-        actionPanel.Controls.Add(_btnCancel);
-        actionPanel.Controls.Add(_btnEdit);
-        actionPanel.Controls.Add(_btnSave);
+        _actionPanel.Controls.Add(_btnDelete);
+        _actionPanel.Controls.Add(_btnCancel);
+        _actionPanel.Controls.Add(_btnEdit);
+        _actionPanel.Controls.Add(_btnSave);
 
-        // Ghép các khu vực
-
-        editorPanel.Controls.Add(fieldsPanel);
-        editorPanel.Controls.Add(actionPanel);
-        editorPanel.Controls.Add(lblEditorTitle);
+        _editorPanel.Controls.Add(_fieldsPanel);
+        _editorPanel.Controls.Add(_actionPanel);
+        _editorPanel.Controls.Add(lblEditorTitle);
 
         // BẢNG DANH SÁCH SUẤT CHIẾU
 
@@ -442,7 +484,9 @@ public partial class ShowtimeManagementUC : UserControl
             SelectionMode =
                 DataGridViewSelectionMode.FullRowSelect,
             RowHeadersVisible = false,
-            EnableHeadersVisualStyles = false
+            EnableHeadersVisualStyles = false,
+            ScrollBars = ScrollBars.Both,
+            MinimumSize = new Size(0, 120)
         };
 
         _dgvShowtimes.ColumnHeadersDefaultCellStyle.BackColor =
@@ -473,11 +517,7 @@ public partial class ShowtimeManagementUC : UserControl
         _dgvShowtimes.AlternatingRowsDefaultCellStyle.BackColor =
             Color.FromArgb(37, 49, 68);
 
-        _dgvShowtimes.AllowUserToAddRows = false;
         _dgvShowtimes.ColumnHeadersHeight = 44;
-
-        _dgvShowtimes.AutoSizeColumnsMode =
-            DataGridViewAutoSizeColumnsMode.Fill;
 
         _dgvShowtimes.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleLeft;
@@ -504,14 +544,17 @@ public partial class ShowtimeManagementUC : UserControl
 
         // GHÉP GIAO DIỆN
 
-        mainLayout.Controls.Add(headerPanel, 0, 0);
-        mainLayout.Controls.Add(statisticsPanel, 0, 1);
-        mainLayout.Controls.Add(filterPanel, 0, 2);
-        mainLayout.Controls.Add(editorPanel, 0, 3);
-        mainLayout.Controls.Add(_dgvShowtimes, 0, 4);
-        mainLayout.Controls.Add(_lblResult, 0, 5);
+        _mainLayout.Controls.Add(headerPanel, 0, 0);
+        _mainLayout.Controls.Add(_statisticsPanel, 0, 1);
+        _mainLayout.Controls.Add(_filterPanel, 0, 2);
+        _mainLayout.Controls.Add(_editorPanel, 0, 3);
+        _mainLayout.Controls.Add(_dgvShowtimes, 0, 4);
+        _mainLayout.Controls.Add(_lblResult, 0, 5);
 
-        Controls.Add(mainLayout);
+        _scrollHost.Controls.Add(_mainLayout);
+        Controls.Add(_scrollHost);
+
+        _scrollHost.SizeChanged += (_, _) => ApplyResponsiveLayout();
 
         // GẮN SỰ KIỆN
 
@@ -536,7 +579,195 @@ public partial class ShowtimeManagementUC : UserControl
         _btnDelete.Click += BtnDelete_Click;
     }
 
-    // 5. TẠO LABEL
+    // =========================================
+    // 5. RESPONSIVE LAYOUT
+    // =========================================
+
+    private void ShowtimeManagementUC_SizeChanged(
+        object? sender,
+        EventArgs e)
+    {
+        ApplyResponsiveLayout();
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_scrollHost == null || _mainLayout == null || _fieldsPanel == null ||
+            _filterPanel == null || _editorPanel == null ||
+            _actionPanel == null || _dgvShowtimes == null ||
+            _statisticsPanel == null || _isApplyingResponsiveLayout)
+            return;
+
+        _isApplyingResponsiveLayout = true;
+        try
+        {
+            int width = Math.Max(320, _scrollHost.ClientSize.Width);
+            int viewportHeight = Math.Max(320, _scrollHost.ClientSize.Height);
+            bool narrow = width < 560;
+            bool compact = width < 1050;
+
+            _mainLayout.SuspendLayout();
+            _statisticsPanel.SuspendLayout();
+            _fieldsPanel.SuspendLayout();
+            _filterPanel.SuspendLayout();
+            _actionPanel.SuspendLayout();
+
+            _mainLayout.RowStyles[0].Height = narrow ? 82 : 88;
+            _mainLayout.RowStyles[1].Height = narrow ? 300 : 132;
+            _mainLayout.RowStyles[2].Height = narrow ? 112 : (compact ? 82 : 64);
+            _mainLayout.RowStyles[3].Height = narrow ? 610 : (compact ? 370 : 250);
+            _mainLayout.RowStyles[4].SizeType = SizeType.Percent;
+            _mainLayout.RowStyles[4].Height = 100;
+            _mainLayout.RowStyles[5].Height = 32;
+
+            // Chiều cao nội dung tối thiểu để không ép các khu vực vào màn hình thấp.
+            // Phần bảng vẫn co giãn và có thanh cuộn riêng khi cần.
+            int fixedContentHeight = narrow
+                ? 82 + 300 + 112 + 610 + 32
+                : compact
+                    ? 88 + 132 + 82 + 370 + 32
+                    : 88 + 132 + 64 + 250 + 32;
+            int minimumGridHeight = narrow ? 300 : 280;
+            int desiredContentHeight = fixedContentHeight + minimumGridHeight;
+            _mainLayout.Width = Math.Max(320,
+                _scrollHost.ClientSize.Width -
+                (desiredContentHeight > viewportHeight ? SystemInformation.VerticalScrollBarWidth : 0));
+            _mainLayout.Height = Math.Max(viewportHeight, desiredContentHeight);
+            _mainLayout.Location = new Point(0, 0);
+
+            // Thẻ thống kê: 3 cột trên màn hình rộng, xếp dọc trên màn hình hẹp.
+            _statisticsPanel.Controls.Clear();
+            _statisticsPanel.ColumnStyles.Clear();
+            _statisticsPanel.RowStyles.Clear();
+            if (narrow)
+            {
+                _statisticsPanel.ColumnCount = 1;
+                _statisticsPanel.RowCount = 3;
+                _statisticsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                for (int i = 0; i < 3; i++)
+                    _statisticsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333f));
+
+                _cardTotal.Margin = new Padding(0, 3, 0, 3);
+                _cardToday.Margin = new Padding(0, 3, 0, 3);
+                _cardRooms.Margin = new Padding(0, 3, 0, 3);
+                _statisticsPanel.Controls.Add(_cardTotal, 0, 0);
+                _statisticsPanel.Controls.Add(_cardToday, 0, 1);
+                _statisticsPanel.Controls.Add(_cardRooms, 0, 2);
+            }
+            else
+            {
+                _statisticsPanel.ColumnCount = 3;
+                _statisticsPanel.RowCount = 1;
+                for (int i = 0; i < 3; i++)
+                    _statisticsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333f));
+                _statisticsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+                _cardTotal.Margin = new Padding(0, 4, 6, 4);
+                _cardToday.Margin = new Padding(3, 4, 3, 4);
+                _cardRooms.Margin = new Padding(6, 4, 0, 4);
+                _statisticsPanel.Controls.Add(_cardTotal, 0, 0);
+                _statisticsPanel.Controls.Add(_cardToday, 1, 0);
+                _statisticsPanel.Controls.Add(_cardRooms, 2, 0);
+            }
+
+            // Biểu mẫu: 4 cột, 2 cột hoặc 1 cột tùy chiều rộng.
+            _fieldsPanel.Controls.Cast<Control>().ToList().ForEach(c =>
+                _fieldsPanel.SetCellPosition(c, new TableLayoutPanelCellPosition(0, 0)));
+            _fieldsPanel.ColumnStyles.Clear();
+            _fieldsPanel.RowStyles.Clear();
+
+            int columns = narrow ? 1 : (compact ? 2 : 4);
+            int rows = 8 / columns;
+            _fieldsPanel.ColumnCount = columns;
+            _fieldsPanel.RowCount = rows;
+
+            for (int i = 0; i < columns; i++)
+                _fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / columns));
+            for (int i = 0; i < rows; i++)
+                _fieldsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / rows));
+
+            for (int i = 0; i < _fieldsPanel.Controls.Count; i++)
+            {
+                Control field = _fieldsPanel.Controls[i];
+                _fieldsPanel.SetCellPosition(field,
+                    new TableLayoutPanelCellPosition(i % columns, i / columns));
+                field.MinimumSize = new Size(0, 0);
+                field.Margin = new Padding(5, 3, 5, 3);
+            }
+
+            // Tìm kiếm và lọc ngày: tự xuống dòng khi không đủ chỗ.
+            _filterPanel.Controls.Clear();
+            _filterPanel.WrapContents = true;
+            _filterPanel.AutoScroll = true;
+            _filterPanel.Padding = new Padding(12, 8, 8, 6);
+
+            int searchWidth = narrow ? Math.Max(180, width - 150)
+                : compact ? Math.Max(220, width - 360)
+                : Math.Max(280, width - 520);
+
+            _txtSearch.Width = searchWidth;
+            _txtSearch.Height = 30;
+            _txtSearch.Font = new Font("Segoe UI", 10F);
+            _dtpFilterDate.Width = narrow ? Math.Max(170, width - 150) : 170;
+
+            Label searchLabel = CreateLabel("Tìm kiếm:", 8);
+            Label dateLabel = CreateLabel("Lọc ngày:", 8);
+            searchLabel.Margin = new Padding(3, 8, 8, 3);
+            _txtSearch.Margin = new Padding(0, 3, 18, 3);
+            dateLabel.Margin = new Padding(3, 8, 8, 3);
+            _dtpFilterDate.Margin = new Padding(0, 3, 8, 3);
+
+            _filterPanel.Controls.Add(searchLabel);
+            _filterPanel.Controls.Add(_txtSearch);
+            _filterPanel.Controls.Add(dateLabel);
+            _filterPanel.Controls.Add(_dtpFilterDate);
+
+            // Các nút thao tác.
+            _actionPanel.Height = narrow ? 82 : (compact ? 76 : 43);
+            _actionPanel.WrapContents = true;
+            _actionPanel.AutoScroll = true;
+            _actionPanel.FlowDirection = FlowDirection.RightToLeft;
+            foreach (Control control in _actionPanel.Controls)
+            {
+                control.Margin = new Padding(4, 3, 4, 3);
+                control.Width = narrow ? Math.Max(115, (width - 55) / 2) : 140;
+                control.Height = 35;
+                control.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            }
+
+            // Bảng dữ liệu: giữ đủ chiều rộng cột và cho cuộn ngang ở màn hình nhỏ.
+            _dgvShowtimes.AutoSizeColumnsMode = compact
+                ? DataGridViewAutoSizeColumnsMode.None
+                : DataGridViewAutoSizeColumnsMode.Fill;
+            _dgvShowtimes.DefaultCellStyle.Font =
+                new Font("Segoe UI", narrow ? 8.5F : 9.5F);
+            _dgvShowtimes.ColumnHeadersDefaultCellStyle.Font =
+                new Font("Segoe UI", narrow ? 8.5F : 9.5F, FontStyle.Bold);
+            _dgvShowtimes.ColumnHeadersHeight = 44;
+            _dgvShowtimes.RowTemplate.Height = 40;
+
+            if (compact)
+            {
+                int[] widths = { 75, 190, 125, 110, 100, 100, 85, 115 };
+                for (int i = 0; i < _dgvShowtimes.Columns.Count && i < widths.Length; i++)
+                    _dgvShowtimes.Columns[i].Width = widths[i];
+            }
+
+            _fieldsPanel.ResumeLayout(true);
+            _filterPanel.ResumeLayout(true);
+            _actionPanel.ResumeLayout(true);
+            _statisticsPanel.ResumeLayout(true);
+            _mainLayout.ResumeLayout(true);
+        }
+        finally
+        {
+            _isApplyingResponsiveLayout = false;
+        }
+    }
+
+    // =========================================
+    // 6. TẠO LABEL
+    // =========================================
 
     private Label CreateLabel(string text, int marginRight)
     {
@@ -550,7 +781,9 @@ public partial class ShowtimeManagementUC : UserControl
         };
     }
 
-    // 6. TẠO Ô NHẬP LIỆU CÓ TIÊU ĐỀ
+    // =========================================
+    // 7. TẠO Ô NHẬP LIỆU
+    // =========================================
 
     private Panel CreateEditorField(
         string title,
@@ -562,7 +795,9 @@ public partial class ShowtimeManagementUC : UserControl
             Dock = DockStyle.Fill,
             Height = 65,
             BackColor = _panelColor,
-            Margin = new Padding(6, 2, 6, 2)
+            Margin = new Padding(6, 2, 6, 2),
+            MinimumSize = new Size(0, 0),
+            Padding = new Padding(2, 1, 2, 2)
         };
 
         Label label = new Label
@@ -571,12 +806,13 @@ public partial class ShowtimeManagementUC : UserControl
             ForeColor = _textColor,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
             Dock = DockStyle.Top,
-            Height = 23,
-            TextAlign = ContentAlignment.MiddleLeft
+            Height = 25,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
         };
 
         input.Dock = DockStyle.Bottom;
-        input.Height = 30;
+        input.Height = 32;
         input.Margin = new Padding(0);
 
         field.Controls.Add(input);
@@ -585,7 +821,9 @@ public partial class ShowtimeManagementUC : UserControl
         return field;
     }
 
-    // 7. TẠO NÚT
+    // =========================================
+    // 8. TẠO NÚT
+    // =========================================
 
     private Button CreateButton(string text, Color color)
     {
@@ -606,7 +844,9 @@ public partial class ShowtimeManagementUC : UserControl
         return button;
     }
 
-    // 8. TẠO THẺ THỐNG KÊ
+    // =========================================
+    // 9. TẠO THẺ THỐNG KÊ
+    // =========================================
 
     private Panel CreateStatisticCard(
         string title,
@@ -617,10 +857,9 @@ public partial class ShowtimeManagementUC : UserControl
         {
             Dock = DockStyle.Fill,
             BackColor = _panelColor,
-            Margin = new Padding(0)
+            Margin = new Padding(0),
+            MinimumSize = new Size(0, 0)
         };
-
-        // Thanh màu bên trái
 
         Panel accentBar = new Panel
         {
@@ -629,66 +868,75 @@ public partial class ShowtimeManagementUC : UserControl
             BackColor = cardAccentColor
         };
 
-        // Tiêu đề
+        string description = title switch
+        {
+            "TỔNG SUẤT CHIẾU" => "Tất cả lịch chiếu đã tạo",
+            "SUẤT CHIẾU HÔM NAY" => "Số suất chiếu trong ngày",
+            "PHÒNG ĐANG QUẢN LÝ" => "Tổng số phòng chiếu hiện có",
+            _ => "Thông tin thống kê"
+        };
+
+        TableLayoutPanel textLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            BackColor = _panelColor,
+            Padding = new Padding(16, 7, 62, 6),
+            Margin = new Padding(0)
+        };
+        textLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        textLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
+        textLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
+        textLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 28));
 
         Label lblTitle = new Label
         {
             Text = title,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            AutoSize = true,
-            Location = new Point(20, 10)
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            ForeColor = Color.FromArgb(226, 232, 240),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
+            Margin = new Padding(0)
         };
-
-        // Số liệu
 
         valueLabel = new Label
         {
             Text = "0",
-            Font = new Font("Segoe UI", 24, FontStyle.Bold),
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            Font = new Font("Segoe UI", 23F, FontStyle.Bold),
             ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(20, 32)
-        };
-
-        // Mô tả
-
-        string description = title switch
-        {
-            "TỔNG SUẤT CHIẾU" =>
-                "Tất cả lịch chiếu đã tạo",
-
-            "SUẤT CHIẾU HÔM NAY" =>
-                "Số suất chiếu trong ngày",
-
-            "PHÒNG ĐANG QUẢN LÝ" =>
-                "Tổng số phòng chiếu hiện có",
-
-            _ => "Thông tin thống kê"
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         Label lblDescription = new Label
         {
             Text = description,
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Color.FromArgb(203, 213, 225),
+            Dock = DockStyle.Fill,
             AutoSize = false,
-            Size = new Size(350, 20),
-            Location = new Point(22, 81),
-            TextAlign = ContentAlignment.MiddleLeft
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(203, 213, 225),
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
+            Margin = new Padding(0)
         };
 
-        // Biểu tượng
+        textLayout.Controls.Add(lblTitle, 0, 0);
+        textLayout.Controls.Add(valueLabel, 0, 1);
+        textLayout.Controls.Add(lblDescription, 0, 2);
 
         Color iconBackground = Color.FromArgb(
             (30 + cardAccentColor.R) / 2,
             (41 + cardAccentColor.G) / 2,
-            (59 + cardAccentColor.B) / 2
-        );
+            (59 + cardAccentColor.B) / 2);
 
         Panel iconPanel = new Panel
         {
-            Size = new Size(48, 48),
+            Size = new Size(42, 42),
             BackColor = iconBackground,
             Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
@@ -705,63 +953,37 @@ public partial class ShowtimeManagementUC : UserControl
         {
             Text = iconText,
             Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Symbol", 22, FontStyle.Bold),
+            Font = new Font("Segoe UI Symbol", 21F, FontStyle.Bold),
             ForeColor = cardAccentColor,
             TextAlign = ContentAlignment.MiddleCenter
         };
-
         iconPanel.Controls.Add(lblIcon);
 
-        // Căn giữa biểu tượng theo chiều dọc
-
-        void UpdateIconPosition()
+        void PositionIcon()
         {
-            accentBar.Height = card.ClientSize.Height;
-
             iconPanel.Location = new Point(
-                card.ClientSize.Width - iconPanel.Width - 18,
-                (card.ClientSize.Height - iconPanel.Height) / 2
-            );
-
-            lblDescription.Width = Math.Max(
-                150,
-                card.ClientSize.Width - 110
-            );
+                Math.Max(8, card.ClientSize.Width - iconPanel.Width - 12),
+                Math.Max(4, (card.ClientSize.Height - iconPanel.Height) / 2));
         }
 
-        card.Resize += (s, e) => UpdateIconPosition();
-
-        // Thêm thành phần
-
-        card.Controls.Add(lblTitle);
-        card.Controls.Add(valueLabel);
-        card.Controls.Add(lblDescription);
+        card.Resize += (s, e) => PositionIcon();
+        card.Controls.Add(textLayout);
         card.Controls.Add(iconPanel);
         card.Controls.Add(accentBar);
-
-        UpdateIconPosition();
-
-        // Viền thẻ
+        PositionIcon();
 
         card.Paint += (s, e) =>
         {
-            using Pen pen = new Pen(
-                Color.FromArgb(51, 65, 85));
-
-            e.Graphics.DrawRectangle(
-                pen,
-                0,
-                0,
-                card.Width - 1,
-                card.Height - 1
-            );
+            using Pen pen = new Pen(Color.FromArgb(51, 65, 85));
+            e.Graphics.DrawRectangle(pen, 0, 0,
+                Math.Max(0, card.Width - 1), Math.Max(0, card.Height - 1));
         };
 
         return card;
     }
 
     // =========================================
-    // 9. TẢI DỮ LIỆU TỪ SQLITE
+    // 10. TẢI DỮ LIỆU TỪ SQLITE
     // =========================================
 
     private void LoadDatabaseData()
@@ -788,7 +1010,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 10. ĐỔ DỮ LIỆU VÀO COMBOBOX
+    // 11. ĐỔ DỮ LIỆU VÀO COMBOBOX
     // =========================================
 
     private void LoadComboBoxes()
@@ -818,7 +1040,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 11. CẬP NHẬT GIỜ KẾT THÚC DỰ KIẾN
+    // 12. CẬP NHẬT GIỜ KẾT THÚC DỰ KIẾN
     // =========================================
 
     private void UpdateEndPreview()
@@ -842,7 +1064,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 12. LÀM MỚI BẢNG SUẤT CHIẾU
+    // 13. LÀM MỚI BẢNG SUẤT CHIẾU
     // =========================================
 
     private void RefreshShowtimeTable()
@@ -887,7 +1109,6 @@ public partial class ShowtimeManagementUC : UserControl
                 r => r.Id == showtime.RoomId
             );
 
-            // Lấy định dạng trực tiếp từ database.
             string format = showtime.Format;
 
             _dgvShowtimes.Rows.Add(
@@ -909,7 +1130,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 13. CẬP NHẬT THỐNG KÊ
+    // 14. CẬP NHẬT THỐNG KÊ
     // =========================================
 
     private void UpdateStatistics()
@@ -924,7 +1145,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 14. TẠO HOẶC CẬP NHẬT SUẤT CHIẾU
+    // 15. TẠO HOẶC CẬP NHẬT SUẤT CHIẾU
     // =========================================
 
     private void BtnSave_Click(object? sender, EventArgs e)
@@ -962,7 +1183,6 @@ public partial class ShowtimeManagementUC : UserControl
 
         try
         {
-            // Room.Id là long, còn Showtime.RoomId là int.
             roomId = checked((int)room.Id);
         }
         catch (OverflowException)
@@ -978,11 +1198,9 @@ public partial class ShowtimeManagementUC : UserControl
 
         try
         {
-            // Lấy dữ liệu mới nhất từ SQLite.
             _showtimes.Clear();
             _showtimes.AddRange(_showtimeRepository.GetAll());
 
-            // Kiểm tra trùng lịch trực tiếp trong SQLite.
             bool hasConflict = _showtimeRepository.HasScheduleConflict(
                 roomId,
                 start,
@@ -1003,13 +1221,12 @@ public partial class ShowtimeManagementUC : UserControl
 
                 LoadDatabaseData();
                 RefreshShowtimeTable();
+
                 return;
             }
 
             if (_editingShowtimeId.HasValue)
             {
-                // CẬP NHẬT SUẤT CHIẾU
-
                 Showtime? current = _showtimes.FirstOrDefault(
                     s => s.Id == _editingShowtimeId.Value
                 );
@@ -1038,6 +1255,7 @@ public partial class ShowtimeManagementUC : UserControl
                     MessageBox.Show(
                         "Không thể cập nhật suất chiếu!"
                     );
+
                     return;
                 }
 
@@ -1050,8 +1268,6 @@ public partial class ShowtimeManagementUC : UserControl
             }
             else
             {
-                // TẠO SUẤT CHIẾU MỚI
-
                 Showtime newShowtime = new Showtime
                 {
                     MovieId = movie.Id,
@@ -1072,8 +1288,6 @@ public partial class ShowtimeManagementUC : UserControl
                 );
             }
 
-            // Tải lại dữ liệu từ SQLite.
-
             LoadDatabaseData();
             LoadComboBoxes();
             RefreshShowtimeTable();
@@ -1091,7 +1305,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 15. CHỌN SUẤT CHIẾU ĐỂ SỬA
+    // 16. CHỌN SUẤT CHIẾU ĐỂ SỬA
     // =========================================
 
     private void BtnEdit_Click(object? sender, EventArgs e)
@@ -1126,6 +1340,7 @@ public partial class ShowtimeManagementUC : UserControl
             MessageBox.Show(
                 "Không tìm thấy phim hoặc phòng chiếu!"
             );
+
             return;
         }
 
@@ -1146,7 +1361,6 @@ public partial class ShowtimeManagementUC : UserControl
             _numPrice.Maximum
         );
 
-        // Lấy định dạng đã lưu trong database.
         _cboFormat.SelectedItem = showtime.Format;
 
         _btnSave.Text = "Cập nhật suất chiếu";
@@ -1156,7 +1370,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 16. HỦY CHẾ ĐỘ CHỈNH SỬA
+    // 17. HỦY CHẾ ĐỘ CHỈNH SỬA
     // =========================================
 
     private void BtnCancel_Click(object? sender, EventArgs e)
@@ -1189,7 +1403,7 @@ public partial class ShowtimeManagementUC : UserControl
     }
 
     // =========================================
-    // 17. XÓA SUẤT CHIẾU
+    // 18. XÓA SUẤT CHIẾU
     // =========================================
 
     private void BtnDelete_Click(object? sender, EventArgs e)
@@ -1223,6 +1437,7 @@ public partial class ShowtimeManagementUC : UserControl
                 MessageBox.Show(
                     "Không tìm thấy suất chiếu để xóa!"
                 );
+
                 return;
             }
 

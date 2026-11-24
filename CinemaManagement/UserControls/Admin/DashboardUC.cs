@@ -1,5 +1,3 @@
-﻿namespace CinemaManagement.UserControls.Admin;
-
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -10,6 +8,9 @@ using System.Linq;
 using System.Reflection;
 using System.Windows.Forms;
 using CinemaManagement.Data;
+
+namespace CinemaManagement.UserControls.Admin;
+
 
 public partial class DashboardUC : UserControl
 {
@@ -126,6 +127,7 @@ public partial class DashboardUC : UserControl
     private Button btnRefresh = null!;
     private Label lblLastUpdated = null!;
     private Label lblDemoBadge = null!;
+    private Label lblMovieTitle = null!;
 
     // KPI Cards
     private readonly Panel[] _kpiCards = new Panel[6];
@@ -171,15 +173,17 @@ public partial class DashboardUC : UserControl
             _animTimer?.Stop();
             _animTimer?.Dispose();
         };
-    }
+
+        }
 
     // =========================================================
     // 5. XÂY DỰNG BỐ CỤC 6 HÀNG CHUẨN
     // =========================================================
     private void BuildDashboardUI()
     {
-        this.Dock = DockStyle.Fill;
-        this.BackColor = ColBgMain;
+        Dock = DockStyle.Fill;
+        AutoScaleMode = AutoScaleMode.Dpi;
+            BackColor = ColBgMain;
         this.AutoScroll = true;
         this.Padding = new Padding(20, 16, 20, 24);
 
@@ -258,7 +262,6 @@ public partial class DashboardUC : UserControl
         row6.Controls.Add(pnlChartTimeSlots, 0, 0);
         row6.Controls.Add(pnlRecentActivities, 1, 0);
         tlpRoot.Controls.Add(row6, 0, 5);
-
         this.Controls.Add(tlpRoot);
     }
 
@@ -327,7 +330,18 @@ public partial class DashboardUC : UserControl
             using var accentBrush = new LinearGradientBrush(new Rectangle(16, 18, 4, 46), ColNeonCyan, ColNeonPurple, 90F);
             e.Graphics.FillRectangle(accentBrush, 16, 18, 4, 46);
         };
+        
 
+        lblMovieTitle = new Label
+        {
+            Text = "THE MAGICIAN'S ELEPHANT",
+            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Dock = DockStyle.Top,
+            Height = 40,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        };
         var lblTitle = new Label
         {
             Text = "CINEMA ANALYTICS PRO",
@@ -442,6 +456,7 @@ public partial class DashboardUC : UserControl
         cboCinemaFilter.SelectedIndex = 0;
         cboCinemaFilter.SelectedIndexChanged += (s, e) => LoadAndAnimateData();
 
+
         btnRefresh = new Button
         {
             Text = "⟳ Làm mới",
@@ -511,9 +526,9 @@ public partial class DashboardUC : UserControl
             var card = new Panel
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(6, 0, 6, 0),
-                BackColor = ColCardBg,
-                Cursor = Cursors.Hand
+                BackColor = Color.FromArgb(24, 29, 44),
+                Padding = new Padding(20),
+                Margin = new Padding(0, 5, 0, 0)
             };
             EnableDoubleBuffering(card);
             card.Paint += (s, e) => PaintSingleKpiCard(e.Graphics, card, idx);
@@ -1686,6 +1701,7 @@ public partial class DashboardUC : UserControl
             snap.SoldSeries.Add(sold);
             snap.CanceledSeries.Add(can);
         }
+
 
         snap.TopMovies = new List<MovieRankItem>
         {

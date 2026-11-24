@@ -1,5 +1,4 @@
-﻿﻿using System;
-using System.IO;
+﻿using System;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -12,12 +11,10 @@ public static class DatabaseInitializer
         using var connection = DatabaseConnection.GetConnection();
         connection.Open();
 
-        Console.WriteLine("DATABASE PATH:");
-        Console.WriteLine(Path.GetFullPath("cinema.db"));
-
-        // Bật kiểm tra khóa ngoại cho kết nối hiện tại.
+        // Bật khóa ngoại
         connection.Execute("PRAGMA foreign_keys = ON;");
 
+        // Các bảng hiện có
         CreateUsersTable(connection);
         CreateMoviesTable(connection);
         CreateRoomsTable(connection);
@@ -25,29 +22,17 @@ public static class DatabaseInitializer
         CreateShowtimesTable(connection);
         CreateProductsTable(connection);
 
-        // Tạo bảng quản lý giá vé
+        // Các bảng đặt vé
+        CreateBookingsTable(connection);
+        CreateTicketsTable(connection);
+        CreateBookingDetailProductsTable(connection);
+
+        // Quản lý giá vé và khuyến mãi
         CreatePricingRulesTable(connection);
-        // Tạo bảng quản lý khuyến mãi
         CreatePromotionsTable(connection);
 
+        // Tạo chỉ mục
         CreateIndexes(connection);
-
-        Console.WriteLine("Database initialized successfully!");
-
-        var tables = connection.Query<string>(@"
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name NOT LIKE 'sqlite_%'
-            ORDER BY name;
-        ");
-
-        Console.WriteLine("DANH SÁCH BẢNG DATABASE:");
-
-        foreach (var table in tables)
-        {
-            Console.WriteLine(table);
-        }
     }
 
     // =========================================
@@ -57,20 +42,19 @@ public static class DatabaseInitializer
     private static void CreatePromotionsTable(SqliteConnection connection)
     {
         connection.Execute(@"
-        CREATE TABLE IF NOT EXISTS Promotions
-        (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Code TEXT NOT NULL COLLATE NOCASE UNIQUE,
-            Name TEXT NOT NULL,
-            DiscountType TEXT NOT NULL,
-            DiscountValue NUMERIC NOT NULL DEFAULT 0,
-            MaxDiscount NUMERIC NOT NULL DEFAULT 0,
-            MinimumOrder NUMERIC NOT NULL DEFAULT 0,
-            StartDate TEXT NOT NULL,
-            EndDate TEXT NOT NULL,
-            IsEnabled INTEGER NOT NULL DEFAULT 1
-        );
-    ");
+            CREATE TABLE IF NOT EXISTS Promotions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                Name TEXT NOT NULL,
+                DiscountType TEXT NOT NULL,
+                DiscountValue NUMERIC NOT NULL DEFAULT 0,
+                MaxDiscount NUMERIC NOT NULL DEFAULT 0,
+                MinimumOrder NUMERIC NOT NULL DEFAULT 0,
+                StartDate TEXT NOT NULL,
+                EndDate TEXT NOT NULL,
+                IsEnabled INTEGER NOT NULL DEFAULT 1
+            );
+        ");
     }
 
     // =========================================
@@ -201,24 +185,23 @@ public static class DatabaseInitializer
     private static void CreateShowtimesTable(SqliteConnection connection)
     {
         connection.Execute(@"
-        CREATE TABLE IF NOT EXISTS Showtimes (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            MovieId INTEGER NOT NULL,
-            RoomId INTEGER NOT NULL,
-            StartTime TEXT NOT NULL,
-            EndTime TEXT NOT NULL,
-            BasePrice NUMERIC NOT NULL DEFAULT 0,
-            Format TEXT NOT NULL DEFAULT '2D',
+            CREATE TABLE IF NOT EXISTS Showtimes (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                MovieId INTEGER NOT NULL,
+                RoomId INTEGER NOT NULL,
+                StartTime TEXT NOT NULL,
+                EndTime TEXT NOT NULL,
+                BasePrice NUMERIC NOT NULL DEFAULT 0,
+                Format TEXT NOT NULL DEFAULT '2D',
 
-            FOREIGN KEY (MovieId)
-                REFERENCES Movies(Id),
+                FOREIGN KEY (MovieId)
+                    REFERENCES Movies(Id),
 
-            FOREIGN KEY (RoomId)
-                REFERENCES Rooms(Id)
-        );
-    ");
+                FOREIGN KEY (RoomId)
+                    REFERENCES Rooms(Id)
+            );
+        ");
 
-        // Bổ sung cột Format cho database cũ
         AddColumnIfNotExists(
             connection,
             "Showtimes",
@@ -242,6 +225,108 @@ public static class DatabaseInitializer
                 StockQuantity INTEGER NOT NULL DEFAULT 0,
                 ImageUrl TEXT DEFAULT '',
                 IsActive INTEGER NOT NULL DEFAULT 1
+            );
+        ");
+    }
+
+    // =========================================
+    // BOOKINGS - ĐƠN ĐẶT VÉ
+    // =========================================
+
+    private static void CreateBookingsTable(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS Bookings (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                UserId INTEGER NULL,
+                BookingCode TEXT NOT NULL UNIQUE,
+
+                BookingTime TEXT NOT NULL DEFAULT
+                    (datetime('now', 'localtime')),
+
+                TotalAmount NUMERIC NOT NULL DEFAULT 0,
+                DiscountAmount NUMERIC NOT NULL DEFAULT 0,
+                FinalAmount NUMERIC NOT NULL DEFAULT 0,
+
+                PaymentMethod TEXT DEFAULT '',
+                PaymentStatus TEXT NOT NULL DEFAULT 'PENDING',
+                BookingStatus TEXT NOT NULL DEFAULT 'CONFIRMED',
+
+                PromotionCode TEXT DEFAULT '',
+
+                FOREIGN KEY (UserId)
+                    REFERENCES Users(Id)
+                    ON DELETE SET NULL
+            );
+        ");
+    }
+
+    // =========================================
+    // TICKETS - VÉ ĐIỆN TỬ
+    // =========================================
+
+    private static void CreateTicketsTable(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS Tickets (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                BookingId INTEGER NOT NULL,
+                ShowtimeId INTEGER NOT NULL,
+                SeatId INTEGER NOT NULL,
+
+                TicketCode TEXT NOT NULL UNIQUE,
+                SeatNumber TEXT NOT NULL,
+
+                Price NUMERIC NOT NULL DEFAULT 0,
+                Status TEXT NOT NULL DEFAULT 'BOOKED',
+
+                CreatedAt TEXT NOT NULL DEFAULT
+                    (datetime('now', 'localtime')),
+
+                FOREIGN KEY (BookingId)
+                    REFERENCES Bookings(Id)
+                    ON DELETE CASCADE,
+
+                FOREIGN KEY (ShowtimeId)
+                    REFERENCES Showtimes(Id),
+
+                FOREIGN KEY (SeatId)
+                    REFERENCES Seats(Id),
+
+                UNIQUE (ShowtimeId, SeatId)
+            );
+        ");
+    }
+
+    // =========================================
+    // BOOKING DETAIL PRODUCTS - BẮP NƯỚC
+    // =========================================
+
+    private static void CreateBookingDetailProductsTable(
+        SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS BookingDetailProducts (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                BookingId INTEGER NOT NULL,
+                ProductId INTEGER NULL,
+
+                ProductName TEXT NOT NULL,
+                Quantity INTEGER NOT NULL DEFAULT 1,
+
+                UnitPrice NUMERIC NOT NULL DEFAULT 0,
+                TotalPrice NUMERIC NOT NULL DEFAULT 0,
+
+                FOREIGN KEY (BookingId)
+                    REFERENCES Bookings(Id)
+                    ON DELETE CASCADE,
+
+                FOREIGN KEY (ProductId)
+                    REFERENCES Products(Id)
+                    ON DELETE SET NULL
             );
         ");
     }
@@ -295,6 +380,20 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS IX_Promotions_StartDate_EndDate
             ON Promotions(StartDate, EndDate);
 
+            CREATE INDEX IF NOT EXISTS IX_Bookings_UserId
+            ON Bookings(UserId);
+
+            CREATE INDEX IF NOT EXISTS IX_Bookings_BookingTime
+            ON Bookings(BookingTime);
+
+            CREATE INDEX IF NOT EXISTS IX_Tickets_BookingId
+            ON Tickets(BookingId);
+
+            CREATE INDEX IF NOT EXISTS IX_Tickets_ShowtimeId
+            ON Tickets(ShowtimeId);
+
+            CREATE INDEX IF NOT EXISTS IX_BookingDetailProducts_BookingId
+            ON BookingDetailProducts(BookingId);
         ");
     }
 
