@@ -234,18 +234,32 @@ namespace CinemaManagement.UserControls.Customer
             pnlSearchBox = new Panel
             {
                 Dock = DockStyle.Right,
-                Width = 350,
+                Width = 390,
                 Height = 60,
-                BackColor = Color.Transparent
+                BackColor = Color.Transparent,
+                Padding = new Padding(0, 8, 0, 0)
             };
+
+            var tlpSearchRow = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+            tlpSearchRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tlpSearchRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            tlpSearchRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             txtSearch = new TextBox
             {
+                Dock = DockStyle.Fill,
                 Font = new Font("Segoe UI", 10F),
                 PlaceholderText = "🔍 Tìm tên phim, đạo diễn...",
-                Location = new Point(0, 12),
-                Size = new Size(240, 34),
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Margin = new Padding(0, 4, 8, 0)
             };
             txtSearch.TextChanged += (sender, e) => ApplyFilter();
 
@@ -256,9 +270,10 @@ namespace CinemaManagement.UserControls.Customer
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(40, 42, 60),
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(96, 34),
-                Location = new Point(248, 12),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(12, 5, 12, 5),
+                Margin = new Padding(0),
                 Cursor = Cursors.Hand
             };
             btnRefresh.FlatAppearance.BorderSize = 0;
@@ -266,8 +281,9 @@ namespace CinemaManagement.UserControls.Customer
             btnRefresh.MouseLeave += (sender, e) => btnRefresh.BackColor = Color.FromArgb(40, 42, 60);
             btnRefresh.Click += (sender, e) => RefreshMovies();
 
-            pnlSearchBox.Controls.Add(txtSearch);
-            pnlSearchBox.Controls.Add(btnRefresh);
+            tlpSearchRow.Controls.Add(txtSearch, 0, 0);
+            tlpSearchRow.Controls.Add(btnRefresh, 1, 0);
+            pnlSearchBox.Controls.Add(tlpSearchRow);
 
             pnlHeader.Controls.Add(lblTitle);
             pnlHeader.Controls.Add(lblSubTitle);
@@ -338,37 +354,14 @@ namespace CinemaManagement.UserControls.Customer
                 pnlMainContent.Padding = new Padding(15);
 
                 // Header chuyển thành 2 hàng.
-                pnlHeader.Height = 130;
+                pnlHeader.Height = 136;
 
                 // Search chuyển xuống dưới tiêu đề.
                 pnlSearchBox.Dock = DockStyle.None;
-
+                pnlSearchBox.Padding = Padding.Empty;
                 pnlSearchBox.Location = new Point(0, 82);
-
-                pnlSearchBox.Width =
-                    Math.Max(250, pnlHeader.ClientSize.Width);
-
-                pnlSearchBox.Height = 42;
-
-                // Tìm kiếm chiếm phần lớn chiều ngang.
-                txtSearch.Location = new Point(0, 3);
-
-                txtSearch.Width = Math.Max(
-                    120,
-                    pnlSearchBox.ClientSize.Width - 108);
-
-                txtSearch.Anchor =
-                    AnchorStyles.Top |
-                    AnchorStyles.Left |
-                    AnchorStyles.Right;
-
-                btnRefresh.Location = new Point(
-                    pnlSearchBox.ClientSize.Width - 98,
-                    2);
-
-                btnRefresh.Anchor =
-                    AnchorStyles.Top |
-                    AnchorStyles.Right;
+                pnlSearchBox.Width = Math.Max(260, pnlHeader.ClientSize.Width);
+                pnlSearchBox.Height = 48;
 
                 // Giới hạn chiều rộng tiêu đề.
                 lblTitle.MaximumSize = new Size(
@@ -385,24 +378,24 @@ namespace CinemaManagement.UserControls.Customer
 
                 pnlHeader.Height = 92;
 
-                // Search trở lại bên phải.
-                pnlSearchBox.Dock = DockStyle.Right;
+                // Search trở lại bên phải, tự co giãn theo nút AutoSize.
+                int searchBoxWidth = Math.Clamp(
+                    (int)(pnlHeader.ClientSize.Width * 0.42f),
+                    390,
+                    460);
 
+                pnlSearchBox.Dock = DockStyle.Right;
+                pnlSearchBox.Padding = new Padding(0, 8, 0, 0);
                 pnlSearchBox.Location = Point.Empty;
-                pnlSearchBox.Width = 350;
+                pnlSearchBox.Width = searchBoxWidth;
                 pnlSearchBox.Height = 60;
 
-                txtSearch.Location = new Point(0, 12);
-                txtSearch.Width = 240;
-
-                btnRefresh.Location = new Point(248, 11);
-
                 lblTitle.MaximumSize = new Size(
-                    Math.Max(200, pnlHeader.ClientSize.Width - 370),
+                    Math.Max(200, pnlHeader.ClientSize.Width - searchBoxWidth - 20),
                     0);
 
                 lblSubTitle.MaximumSize = new Size(
-                    Math.Max(200, pnlHeader.ClientSize.Width - 370),
+                    Math.Max(200, pnlHeader.ClientSize.Width - searchBoxWidth - 20),
                     0);
             }
 
