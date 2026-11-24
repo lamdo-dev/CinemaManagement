@@ -150,6 +150,7 @@ public class PromotionListUC : UserControl
             var promotions = _service.GetAll()
                 .Where(p =>
                     p.IsEnabled &&
+                    (p.UsageLimit <= 0 || p.UsedCount < p.UsageLimit) &&
                     p.StartDate.Date <= today &&
                     p.EndDate.Date >= today)
                 .OrderBy(p => p.EndDate)
@@ -237,9 +238,13 @@ public class PromotionListUC : UserControl
             Margin = new Padding(0, 0, 0, 6)
         };
 
+        string conditionText = promotion.DiscountType == "Phần trăm" && promotion.MaxDiscount > 0
+            ? $"Đơn tối thiểu: {promotion.MinimumOrder:N0} đ • Tối đa: {promotion.MaxDiscount:N0} đ"
+            : $"Đơn tối thiểu: {promotion.MinimumOrder:N0} đ";
+
         var lblCondition = new Label
         {
-            Text = $"Đơn tối thiểu: {promotion.MinimumOrder:N0} đ",
+            Text = conditionText,
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.Silver,
             AutoSize = true,
@@ -248,7 +253,7 @@ public class PromotionListUC : UserControl
 
         var lblDate = new Label
         {
-            Text = $"Hạn dùng: {promotion.EndDate:dd/MM/yyyy}",
+            Text = $"Hạn dùng: {promotion.EndDate:dd/MM/yyyy} • Còn {promotion.RemainingUses}/{promotion.UsageLimit} lượt",
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.Silver,
             AutoSize = true,

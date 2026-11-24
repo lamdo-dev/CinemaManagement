@@ -16,6 +16,12 @@ public class Promotion
 
     public decimal MinimumOrder { get; set; }
 
+    public int UsageLimit { get; set; } = 100;
+
+    public int UsedCount { get; set; }
+
+    public int RemainingUses => Math.Max(0, UsageLimit - UsedCount);
+
     public DateTime StartDate { get; set; }
 
     public DateTime EndDate { get; set; }

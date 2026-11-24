@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Windows.Forms;
 
 using CinemaManagement.Models;
@@ -370,7 +371,7 @@ namespace CinemaManagement
                 AddNavButton(
                     "Vé của tôi",
                     NavIconType.Ticket,
-                    () => OpenTicketView(UserSession.LatestBooking));
+                    () => OpenTicketView());
 
                 SetActiveNav(itemHome);
             }
@@ -1054,8 +1055,9 @@ namespace CinemaManagement
                             "Không thể lưu đơn đặt vé vào cơ sở dữ liệu.");
                     }
 
-                    // 2. Chỉ cập nhật lịch sử trong bộ nhớ sau khi SQLite lưu thành công.
-                    UserSession.AddBooking(result);
+                    // 2. Xóa ngay dữ liệu tạm của lượt đặt vé vừa hoàn tất
+                    // để tránh còn lưu ghế/giỏ hàng cũ nếu khách bấm sang menu khác.
+                    _bookingContext.Clear();
 
                     // 3. Chuyển sang màn hình vé điện tử.
                     OpenTicketView(result);
@@ -1067,6 +1069,36 @@ namespace CinemaManagement
                         "Không thể hoàn tất đơn hàng",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
+
+                    // Nếu suất chiếu đã qua giờ thì đưa khách về chọn lại suất chiếu
+                    if (_bookingContext.Showtime != null &&
+                        _bookingContext.Showtime.StartTime <= DateTime.Now)
+                    {
+                        Movie? currentMovie = _bookingContext.Movie;
+                        _bookingContext.ClearAfterMovieChange();
+                        OpenShowtimeView(currentMovie);
+                        return;
+                    }
+
+                    // Nếu có ghế vừa bị người khác đặt thì đưa khách về sơ đồ ghế để chọn lại
+                    if (_bookingContext.Showtime != null &&
+                        _bookingContext.Seats.Count > 0)
+                    {
+                        try
+                        {
+                            var bookedSeats = new Repositories.TicketRepository()
+                                .GetBookedSeatNumbers(_bookingContext.Showtime.Id);
+
+                            if (_bookingContext.Seats.Any(s => bookedSeats.Contains(s)))
+                            {
+                                OpenSeatSelectionView();
+                            }
+                        }
+                        catch
+                        {
+                            // Giữ người dùng ở lại màn thanh toán với nút đã mở khóa
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1081,17 +1113,41 @@ namespace CinemaManagement
             SwitchView("Thanh toán", checkoutUC);
         }
 
-                public void OpenTicketView(BookingResultEventArgs? bookingData = null)
+        public void OpenTicketView(BookingResultEventArgs? bookingData = null)
         {
-            bookingData ??= UserSession.LatestBooking;
+            if (bookingData == null)
+            {
+                if (currentRole == UserRole.Customer)
+                {
+                    try
+                    {
+                        bookingData = new BookingService().GetCurrentUserLatestBooking();
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(
+                            "Không thể tải thông tin vé từ cơ sở dữ liệu:\n" + ex.Message,
+                            "Lỗi tải vé",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    bookingData = UserSession.LatestBooking;
+                }
+            }
 
             if (bookingData == null)
             {
                 MessageBox.Show(
-                    "Không tìm thấy thông tin vé.",
+                    currentRole == UserRole.Customer
+                        ? "Tài khoản của bạn chưa có vé nào đã đặt."
+                        : "Không tìm thấy thông tin vé.",
                     "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Information);
 
                 if (currentRole == UserRole.Staff ||
                     currentRole == UserRole.Admin)

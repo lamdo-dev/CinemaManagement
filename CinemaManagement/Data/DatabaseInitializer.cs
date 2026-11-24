@@ -50,11 +50,25 @@ public static class DatabaseInitializer
                 DiscountValue NUMERIC NOT NULL DEFAULT 0,
                 MaxDiscount NUMERIC NOT NULL DEFAULT 0,
                 MinimumOrder NUMERIC NOT NULL DEFAULT 0,
+                UsageLimit INTEGER NOT NULL DEFAULT 100,
+                UsedCount INTEGER NOT NULL DEFAULT 0,
                 StartDate TEXT NOT NULL,
                 EndDate TEXT NOT NULL,
                 IsEnabled INTEGER NOT NULL DEFAULT 1
             );
         ");
+
+        AddColumnIfNotExists(
+            connection,
+            "Promotions",
+            "UsageLimit",
+            "INTEGER NOT NULL DEFAULT 100");
+
+        AddColumnIfNotExists(
+            connection,
+            "Promotions",
+            "UsedCount",
+            "INTEGER NOT NULL DEFAULT 0");
     }
 
     // =========================================
@@ -254,12 +268,26 @@ public static class DatabaseInitializer
                 BookingStatus TEXT NOT NULL DEFAULT 'CONFIRMED',
 
                 PromotionCode TEXT DEFAULT '',
+                Channel TEXT DEFAULT 'Online',
+                CustomerName TEXT DEFAULT '',
 
                 FOREIGN KEY (UserId)
                     REFERENCES Users(Id)
                     ON DELETE SET NULL
             );
         ");
+
+        AddColumnIfNotExists(
+            connection,
+            "Bookings",
+            "Channel",
+            "TEXT DEFAULT 'Online'");
+
+        AddColumnIfNotExists(
+            connection,
+            "Bookings",
+            "CustomerName",
+            "TEXT DEFAULT ''");
     }
 
     // =========================================
@@ -293,11 +321,74 @@ public static class DatabaseInitializer
                     REFERENCES Showtimes(Id),
 
                 FOREIGN KEY (SeatId)
-                    REFERENCES Seats(Id),
-
-                UNIQUE (ShowtimeId, SeatId)
+                    REFERENCES Seats(Id)
             );
         ");
+
+        MigrateTicketsUniqueConstraintIfNeeded(connection);
+    }
+
+    /// <summary>
+    /// Nếu bảng Tickets cũ dùng UNIQUE (ShowtimeId, SeatId) cứng trên toàn bảng,
+    /// chuyển sang bảng mới để kết hợp với partial unique index (bỏ qua vé CANCELLED).
+    /// </summary>
+    private static void MigrateTicketsUniqueConstraintIfNeeded(
+        SqliteConnection connection)
+    {
+        string? createSql = connection.ExecuteScalar<string?>(@"
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'Tickets';
+        ");
+
+        bool hasTableLevelSeatUnique =
+            !string.IsNullOrWhiteSpace(createSql) &&
+            (createSql.Contains("UNIQUE (ShowtimeId, SeatId)", StringComparison.OrdinalIgnoreCase) ||
+             createSql.Contains("UNIQUE(ShowtimeId, SeatId)", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasTableLevelSeatUnique)
+            return;
+
+        connection.Execute("PRAGMA foreign_keys = OFF;");
+        try
+        {
+            using var tx = connection.BeginTransaction();
+
+            connection.Execute(@"
+                CREATE TABLE Tickets_new (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    BookingId INTEGER NOT NULL,
+                    ShowtimeId INTEGER NOT NULL,
+                    SeatId INTEGER NOT NULL,
+                    TicketCode TEXT NOT NULL UNIQUE,
+                    SeatNumber TEXT NOT NULL,
+                    Price NUMERIC NOT NULL DEFAULT 0,
+                    Status TEXT NOT NULL DEFAULT 'BOOKED',
+                    CreatedAt TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    FOREIGN KEY (BookingId) REFERENCES Bookings(Id) ON DELETE CASCADE,
+                    FOREIGN KEY (ShowtimeId) REFERENCES Showtimes(Id),
+                    FOREIGN KEY (SeatId) REFERENCES Seats(Id)
+                );
+
+                INSERT INTO Tickets_new (
+                    Id, BookingId, ShowtimeId, SeatId,
+                    TicketCode, SeatNumber, Price, Status, CreatedAt
+                )
+                SELECT
+                    Id, BookingId, ShowtimeId, SeatId,
+                    TicketCode, SeatNumber, Price, Status, CreatedAt
+                FROM Tickets;
+
+                DROP TABLE Tickets;
+                ALTER TABLE Tickets_new RENAME TO Tickets;
+            ", transaction: tx);
+
+            tx.Commit();
+        }
+        finally
+        {
+            connection.Execute("PRAGMA foreign_keys = ON;");
+        }
     }
 
     // =========================================
@@ -383,6 +474,9 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS IX_Bookings_UserId
             ON Bookings(UserId);
 
+            CREATE INDEX IF NOT EXISTS IX_Bookings_UserId_PromotionCode
+            ON Bookings(UserId, PromotionCode);
+
             CREATE INDEX IF NOT EXISTS IX_Bookings_BookingTime
             ON Bookings(BookingTime);
 
@@ -391,6 +485,10 @@ public static class DatabaseInitializer
 
             CREATE INDEX IF NOT EXISTS IX_Tickets_ShowtimeId
             ON Tickets(ShowtimeId);
+
+            CREATE UNIQUE INDEX IF NOT EXISTS UX_Tickets_ActiveShowtimeSeat
+            ON Tickets(ShowtimeId, SeatId)
+            WHERE UPPER(Status) <> 'CANCELLED';
 
             CREATE INDEX IF NOT EXISTS IX_BookingDetailProducts_BookingId
             ON BookingDetailProducts(BookingId);

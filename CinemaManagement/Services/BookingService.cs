@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using CinemaManagement.Models;
 using CinemaManagement.Repositories;
 using CinemaManagement.UserControls.Customer;
@@ -36,6 +37,11 @@ namespace CinemaManagement.Services
                     "Không thể lưu đơn đặt vé vào cơ sở dữ liệu.");
             }
 
+            if (currentUser != null && booking.EarnedPoints > 0)
+            {
+                currentUser.RewardPoints += booking.EarnedPoints;
+            }
+
             return bookingId;
         }
 
@@ -63,6 +69,43 @@ namespace CinemaManagement.Services
             }
 
             return bookingId;
+        }
+
+        /// <summary>
+        /// Lấy toàn bộ lịch sử đặt vé của tài khoản đang đăng nhập từ SQLite.
+        /// Không dùng dữ liệu chung trên RAM để tránh lộ vé giữa các tài khoản.
+        /// </summary>
+        public List<BookingResultEventArgs> GetCurrentUserBookings()
+        {
+            User? currentUser = UserSession.CurrentUser;
+            if (currentUser == null || currentUser.Id <= 0)
+            {
+                return new List<BookingResultEventArgs>();
+            }
+
+            return _bookingRepository.GetBookingsByUserId(currentUser.Id);
+        }
+
+        /// <summary>
+        /// Lấy đơn đặt vé gần nhất của tài khoản đang đăng nhập từ SQLite.
+        /// </summary>
+        public BookingResultEventArgs? GetCurrentUserLatestBooking()
+        {
+            User? currentUser = UserSession.CurrentUser;
+            if (currentUser == null || currentUser.Id <= 0)
+            {
+                return null;
+            }
+
+            return _bookingRepository.GetLatestBookingByUserId(currentUser.Id);
+        }
+
+        /// <summary>
+        /// Tìm đơn đặt vé theo mã BookingCode từ SQLite.
+        /// </summary>
+        public BookingResultEventArgs? GetBookingByCode(string bookingCode)
+        {
+            return _bookingRepository.GetBookingByCode(bookingCode);
         }
 
         private static void ValidateBooking(BookingResultEventArgs booking)
