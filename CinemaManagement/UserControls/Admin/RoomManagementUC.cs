@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -503,6 +502,16 @@ public partial class RoomManagementUC : UserControl
         dgvRooms.Columns.Add("Rows", "Hàng");
         dgvRooms.Columns.Add("Columns", "Cột");
         dgvRooms.Columns.Add("TotalSeats", "Số ghế");
+        dgvRooms.Columns.Insert(0, new DataGridViewTextBoxColumn
+        {
+            Name = "STT",
+            HeaderText = "STT",
+            ReadOnly = true,
+            MinimumWidth = 45,
+            FillWeight = 45,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
+        dgvRooms.Columns["Id"]!.Visible = false;
 
         dgvRooms.Columns["Id"]!.MinimumWidth = 45;
         dgvRooms.Columns["Name"]!.MinimumWidth = 100;
@@ -823,9 +832,11 @@ public partial class RoomManagementUC : UserControl
         {
             dgvRooms.Rows.Clear();
 
-            foreach (Room room in result)
+            for (int index = 0; index < result.Count; index++)
             {
+                Room room = result[index];
                 dgvRooms.Rows.Add(
+                    index + 1,
                     room.Id,
                     room.Name,
                     room.TotalRows,

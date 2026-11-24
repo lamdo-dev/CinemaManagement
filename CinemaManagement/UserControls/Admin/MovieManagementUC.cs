@@ -1,5 +1,4 @@
-﻿
-namespace CinemaManagement.UserControls.Admin;
+﻿namespace CinemaManagement.UserControls.Admin;
 
 using System;
 using System.Collections.Generic;
@@ -230,6 +229,16 @@ public partial class MovieManagementUC : UserControl
         dgvMovies.Columns.Add("Director", "Đạo diễn");
         dgvMovies.Columns.Add("ReleaseDate", "Ngày khởi chiếu");
         dgvMovies.Columns.Add("Status", "Trạng thái");
+        dgvMovies.Columns.Insert(0, new DataGridViewTextBoxColumn
+        {
+            Name = "STT",
+            HeaderText = "STT",
+            ReadOnly = true,
+            MinimumWidth = 50,
+            FillWeight = 45,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
+        dgvMovies.Columns["Id"]!.Visible = false;
 
         // Giới hạn chiều rộng tối thiểu để tránh cột quá nhỏ
         dgvMovies.Columns["Id"]!.MinimumWidth = 55;
@@ -422,9 +431,11 @@ public partial class MovieManagementUC : UserControl
 
         }).ToList();
 
-        foreach (Movie movie in result)
+        for (int index = 0; index < result.Count; index++)
         {
+            Movie movie = result[index];
             dgvMovies.Rows.Add(
+                index + 1,
                 movie.Id,
                 movie.Title,
                 movie.Genre,

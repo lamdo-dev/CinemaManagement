@@ -643,6 +643,15 @@ public partial class PricingUC : UserControl
         _dgvPricing.Columns.Add("BasePrice", "Giá cơ bản");
         _dgvPricing.Columns.Add("Surcharge", "Phụ thu");
         _dgvPricing.Columns.Add("FinalPrice", "Giá cuối cùng");
+        _dgvPricing.Columns.Insert(0, new DataGridViewTextBoxColumn
+        {
+            Name = "STT",
+            HeaderText = "STT",
+            ReadOnly = true,
+            Width = 55,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
+        _dgvPricing.Columns["Id"]!.Visible = false;
 
         // =====================================
         // 4.6 CHÂN TRANG
@@ -1387,9 +1396,11 @@ public partial class PricingUC : UserControl
         .ThenBy(r => r.TimeSlot)
         .ToList();
 
-        foreach (PricingRule rule in result)
+        for (int index = 0; index < result.Count; index++)
         {
+            PricingRule rule = result[index];
             _dgvPricing.Rows.Add(
+                index + 1,
                 rule.Id,
                 rule.Format,
                 rule.SeatType,
