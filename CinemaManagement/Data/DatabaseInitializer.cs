@@ -50,11 +50,25 @@ public static class DatabaseInitializer
                 DiscountValue NUMERIC NOT NULL DEFAULT 0,
                 MaxDiscount NUMERIC NOT NULL DEFAULT 0,
                 MinimumOrder NUMERIC NOT NULL DEFAULT 0,
+                UsageLimit INTEGER NOT NULL DEFAULT 100,
+                UsedCount INTEGER NOT NULL DEFAULT 0,
                 StartDate TEXT NOT NULL,
                 EndDate TEXT NOT NULL,
                 IsEnabled INTEGER NOT NULL DEFAULT 1
             );
         ");
+
+        AddColumnIfNotExists(
+            connection,
+            "Promotions",
+            "UsageLimit",
+            "INTEGER NOT NULL DEFAULT 100");
+
+        AddColumnIfNotExists(
+            connection,
+            "Promotions",
+            "UsedCount",
+            "INTEGER NOT NULL DEFAULT 0");
     }
 
     // =========================================
@@ -459,6 +473,9 @@ public static class DatabaseInitializer
 
             CREATE INDEX IF NOT EXISTS IX_Bookings_UserId
             ON Bookings(UserId);
+
+            CREATE INDEX IF NOT EXISTS IX_Bookings_UserId_PromotionCode
+            ON Bookings(UserId, PromotionCode);
 
             CREATE INDEX IF NOT EXISTS IX_Bookings_BookingTime
             ON Bookings(BookingTime);

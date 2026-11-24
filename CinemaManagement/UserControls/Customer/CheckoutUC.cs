@@ -1423,8 +1423,12 @@ public partial class CheckoutUC : UserControl
         try
         {
             decimal orderAmount = ticketSubTotal + foodSubTotal;
+            int? currentUserId = CinemaManagement.Utils.UserSession.CurrentUser?.Id;
             var (promotion, calculatedDiscount) =
-                _promotionService.ValidateAndCalculateDiscount(code, orderAmount);
+                _promotionService.ValidateAndCalculateDiscount(
+                    code,
+                    orderAmount,
+                    currentUserId);
 
             _appliedPromotion = promotion;
             discountAmount = calculatedDiscount;
@@ -1524,14 +1528,14 @@ public partial class CheckoutUC : UserControl
         CalculateTotal();
         UpdateUIWithData();
 
-        // Cho phép đơn 0 đồng khi áp dụng voucher giảm 100%
-        if (totalAmount < 0)
+        // Đơn hàng sau giảm giá luôn phải lớn hơn 0 đ để đảm bảo ngân sách
+        if (totalAmount <= 0m)
         {
-            ShowWarning("Tổng tiền thanh toán không hợp lệ.");
+            ShowWarning("Tổng tiền thanh toán sau giảm giá phải lớn hơn 0 đ.");
             return;
         }
 
-        if (_selectedPaymentMethod == PaymentMethodType.Card && totalAmount > 0m)
+        if (_selectedPaymentMethod == PaymentMethodType.Card)
         {
             if (!ValidateCardInputs(out string cardError))
             {

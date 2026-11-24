@@ -181,7 +181,7 @@ namespace CinemaManagement.Repositories
                         lineTotal));
                 }
 
-                // 6. Kiểm tra lại mã khuyến mãi và tính giảm giá trực tiếp trong transaction
+                // 6. Kiểm tra lại mã khuyến mãi, lượt dùng và giới hạn 1 lần/tài khoản trong transaction
                 decimal grossAmount = dbTicketAmount + dbFoodAmount;
                 decimal dbDiscountAmount = 0m;
                 string normalizedPromoCode = (booking.PromotionCode ?? string.Empty)
@@ -192,7 +192,10 @@ namespace CinemaManagement.Repositories
                 {
                     var dbPromotion = connection.QueryFirstOrDefault<Promotion>(@"
                         SELECT Id, Code, Name, DiscountType, DiscountValue,
-                               MaxDiscount, MinimumOrder, StartDate, EndDate, IsEnabled
+                               MaxDiscount, MinimumOrder,
+                               COALESCE(UsageLimit, 100) AS UsageLimit,
+                               COALESCE(UsedCount, 0) AS UsedCount,
+                               StartDate, EndDate, IsEnabled
                         FROM Promotions
                         WHERE UPPER(Code) = @Code;
                     ", new { Code = normalizedPromoCode }, transaction);
@@ -206,6 +209,45 @@ namespace CinemaManagement.Repositories
                         grossAmount);
 
                     normalizedPromoCode = dbPromotion.Code.Trim().ToUpperInvariant();
+
+                    if (userId.HasValue && userId.Value > 0)
+                    {
+                        bool alreadyUsedByUser = connection.ExecuteScalar<bool>(@"
+                            SELECT EXISTS(
+                                SELECT 1
+                                FROM Bookings
+                                WHERE UserId = @UserId
+                                  AND UPPER(PromotionCode) = @Code
+                                  AND UPPER(BookingStatus) <> 'CANCELLED'
+                            );
+                        ",
+                        new
+                        {
+                            UserId = userId.Value,
+                            Code = normalizedPromoCode
+                        }, transaction);
+
+                        if (alreadyUsedByUser)
+                        {
+                            throw new InvalidOperationException(
+                                $"Tài khoản của bạn đã sử dụng mã '{normalizedPromoCode}' trước đó (mỗi tài khoản chỉ được dùng 1 lần).");
+                        }
+                    }
+
+                    // Tăng lượt đã dùng một cách nguyên tử ngay trong transaction
+                    int promoAffected = connection.Execute(@"
+                        UPDATE Promotions
+                        SET UsedCount = COALESCE(UsedCount, 0) + 1
+                        WHERE Id = @PromotionId
+                          AND IsEnabled = 1
+                          AND (UsageLimit <= 0 OR COALESCE(UsedCount, 0) < UsageLimit);
+                    ", new { PromotionId = dbPromotion.Id }, transaction);
+
+                    if (promoAffected != 1)
+                    {
+                        throw new InvalidOperationException(
+                            "Voucher vừa hết lượt sử dụng hoặc đã bị tạm ngưng.");
+                    }
                 }
                 else if (booking.DiscountAmount > 0m)
                 {
@@ -213,7 +255,13 @@ namespace CinemaManagement.Repositories
                         "Không thể áp dụng giảm giá khi không có mã voucher hợp lệ.");
                 }
 
-                decimal dbFinalAmount = Math.Max(0m, grossAmount - dbDiscountAmount);
+                decimal dbFinalAmount = grossAmount - dbDiscountAmount;
+
+                if (dbFinalAmount <= 0m)
+                {
+                    throw new InvalidOperationException(
+                        "Tổng tiền thanh toán sau giảm giá phải lớn hơn 0 đ.");
+                }
 
                 if (Math.Abs(dbFinalAmount - booking.TotalAmount) > 0.01m)
                 {

@@ -28,6 +28,10 @@ internal sealed record PromotionDisplayItem
 
     public decimal MinimumOrder { get; init; }
 
+    public int UsageLimit { get; init; } = 100;
+
+    public int UsedCount { get; init; }
+
     public DateTime StartDate { get; init; }
 
     public DateTime EndDate { get; init; }
@@ -343,6 +347,7 @@ public partial class PromotionUC : UserControl
             "Tất cả",
             "Đang áp dụng",
             "Sắp diễn ra",
+            "Hết lượt",
             "Đã kết thúc",
             "Tạm ngưng"
         });
@@ -472,18 +477,20 @@ public partial class PromotionUC : UserControl
         _dgvPromotions.Columns.Add("Discount", "MỨC GIẢM");
         _dgvPromotions.Columns.Add("MaxDiscount", "GIẢM TỐI ĐA");
         _dgvPromotions.Columns.Add("MinOrder", "ĐƠN TỐI THIỂU");
+        _dgvPromotions.Columns.Add("Usage", "LƯỢT DÙNG");
         _dgvPromotions.Columns.Add("StartDate", "NGÀY BẮT ĐẦU");
         _dgvPromotions.Columns.Add("EndDate", "NGÀY KẾT THÚC");
         _dgvPromotions.Columns.Add("Status", "TRẠNG THÁI");
 
         _dgvPromotions.Columns["Code"]!.FillWeight = 90;
-        _dgvPromotions.Columns["Name"]!.FillWeight = 145;
-        _dgvPromotions.Columns["Discount"]!.FillWeight = 90;
-        _dgvPromotions.Columns["MaxDiscount"]!.FillWeight = 100;
-        _dgvPromotions.Columns["MinOrder"]!.FillWeight = 105;
-        _dgvPromotions.Columns["StartDate"]!.FillWeight = 105;
-        _dgvPromotions.Columns["EndDate"]!.FillWeight = 105;
-        _dgvPromotions.Columns["Status"]!.FillWeight = 110;
+        _dgvPromotions.Columns["Name"]!.FillWeight = 140;
+        _dgvPromotions.Columns["Discount"]!.FillWeight = 85;
+        _dgvPromotions.Columns["MaxDiscount"]!.FillWeight = 95;
+        _dgvPromotions.Columns["MinOrder"]!.FillWeight = 100;
+        _dgvPromotions.Columns["Usage"]!.FillWeight = 90;
+        _dgvPromotions.Columns["StartDate"]!.FillWeight = 100;
+        _dgvPromotions.Columns["EndDate"]!.FillWeight = 100;
+        _dgvPromotions.Columns["Status"]!.FillWeight = 105;
 
         _dgvPromotions.Columns["Code"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
@@ -496,6 +503,9 @@ public partial class PromotionUC : UserControl
 
         _dgvPromotions.Columns["MinOrder"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleRight;
+
+        _dgvPromotions.Columns["Usage"]!.DefaultCellStyle.Alignment =
+            DataGridViewContentAlignment.MiddleCenter;
 
         _dgvPromotions.Columns["StartDate"]!.DefaultCellStyle.Alignment =
             DataGridViewContentAlignment.MiddleCenter;
@@ -815,14 +825,15 @@ public partial class PromotionUC : UserControl
 
                     _dgvPromotions.ScrollBars = ScrollBars.Both;
 
-                    _dgvPromotions.Columns["Code"]!.Width = 120;
-                    _dgvPromotions.Columns["Name"]!.Width = 190;
-                    _dgvPromotions.Columns["Discount"]!.Width = 110;
-                    _dgvPromotions.Columns["MaxDiscount"]!.Width = 125;
-                    _dgvPromotions.Columns["MinOrder"]!.Width = 130;
-                    _dgvPromotions.Columns["StartDate"]!.Width = 120;
-                    _dgvPromotions.Columns["EndDate"]!.Width = 120;
-                    _dgvPromotions.Columns["Status"]!.Width = 125;
+                    _dgvPromotions.Columns["Code"]!.Width = 115;
+                    _dgvPromotions.Columns["Name"]!.Width = 185;
+                    _dgvPromotions.Columns["Discount"]!.Width = 105;
+                    _dgvPromotions.Columns["MaxDiscount"]!.Width = 120;
+                    _dgvPromotions.Columns["MinOrder"]!.Width = 125;
+                    _dgvPromotions.Columns["Usage"]!.Width = 105;
+                    _dgvPromotions.Columns["StartDate"]!.Width = 115;
+                    _dgvPromotions.Columns["EndDate"]!.Width = 115;
+                    _dgvPromotions.Columns["Status"]!.Width = 120;
                 }
                 else
                 {
@@ -994,6 +1005,8 @@ public partial class PromotionUC : UserControl
             DiscountValue = promotion.DiscountValue,
             MaxDiscount = promotion.MaxDiscount,
             MinimumOrder = promotion.MinimumOrder,
+            UsageLimit = promotion.UsageLimit > 0 ? promotion.UsageLimit : 100,
+            UsedCount = promotion.UsedCount,
             StartDate = promotion.StartDate,
             EndDate = promotion.EndDate,
             IsEnabled = promotion.IsEnabled
@@ -1011,6 +1024,8 @@ public partial class PromotionUC : UserControl
             DiscountValue = item.DiscountValue,
             MaxDiscount = item.MaxDiscount,
             MinimumOrder = item.MinimumOrder,
+            UsageLimit = item.UsageLimit,
+            UsedCount = item.UsedCount,
             StartDate = item.StartDate.Date,
             EndDate = item.EndDate.Date,
             IsEnabled = item.IsEnabled
@@ -1056,11 +1071,14 @@ public partial class PromotionUC : UserControl
         if (!item.IsEnabled)
             return "Tạm ngưng";
 
-        if (DateTime.Today < item.StartDate.Date)
-            return "Sắp diễn ra";
-
         if (DateTime.Today > item.EndDate.Date)
             return "Đã kết thúc";
+
+        if (item.UsageLimit > 0 && item.UsedCount >= item.UsageLimit)
+            return "Hết lượt";
+
+        if (DateTime.Today < item.StartDate.Date)
+            return "Sắp diễn ra";
 
         return "Đang áp dụng";
     }
@@ -1121,8 +1139,8 @@ public partial class PromotionUC : UserControl
 
         foreach (PromotionDisplayItem item in result)
         {
-            string maxDiscount = item.MaxDiscount <= 0
-                ? "Không giới hạn"
+            string maxDiscount = item.DiscountType == "Số tiền" || item.MaxDiscount <= 0
+                ? "--"
                 : item.MaxDiscount.ToString("N0") + " đ";
 
             _dgvPromotions.Rows.Add(
@@ -1132,6 +1150,7 @@ public partial class PromotionUC : UserControl
                 GetDiscountText(item),
                 maxDiscount,
                 item.MinimumOrder.ToString("N0") + " đ",
+                $"{item.UsedCount} / {item.UsageLimit}",
                 item.StartDate.ToString("dd/MM/yyyy"),
                 item.EndDate.ToString("dd/MM/yyyy"),
                 GetPromotionStatus(item)
@@ -1187,6 +1206,7 @@ public partial class PromotionUC : UserControl
         {
             "Đang áp dụng" => Color.FromArgb(52, 211, 153),
             "Sắp diễn ra" => Color.FromArgb(96, 165, 250),
+            "Hết lượt" => Color.FromArgb(245, 158, 11),
             "Đã kết thúc" => Color.FromArgb(248, 113, 113),
             "Tạm ngưng" => Color.FromArgb(148, 163, 184),
             _ => _textColor
@@ -1381,6 +1401,7 @@ internal sealed class PromotionEditDialog : Form
     private NumericUpDown _numDiscountValue = null!;
     private NumericUpDown _numMaxDiscount = null!;
     private NumericUpDown _numMinimumOrder = null!;
+    private NumericUpDown _numUsageLimit = null!;
 
     private DateTimePicker _dtpStartDate = null!;
     private DateTimePicker _dtpEndDate = null!;
@@ -1562,7 +1583,7 @@ internal sealed class PromotionEditDialog : Form
         _numDiscountValue = new NumericUpDown
         {
             Minimum = 1,
-            Maximum = 100,
+            Maximum = PromotionService.MaxPercentDiscount,
             Value = 20,
             DecimalPlaces = 0,
             ThousandsSeparator = true,
@@ -1572,7 +1593,7 @@ internal sealed class PromotionEditDialog : Form
         };
 
         fieldsPanel.Controls.Add(
-            CreateField("Giá trị giảm", _numDiscountValue),
+            CreateField("Giá trị giảm (Phần trăm <= 70%)", _numDiscountValue),
             1, 1
         );
 
@@ -1583,7 +1604,7 @@ internal sealed class PromotionEditDialog : Form
             Minimum = 0,
             Maximum = 10000000,
             Value = 50000,
-            Increment = 1000,
+            Increment = 5000,
             ThousandsSeparator = true,
             Font = new Font("Segoe UI", 10),
             BackColor = _background,
@@ -1591,7 +1612,7 @@ internal sealed class PromotionEditDialog : Form
         };
 
         fieldsPanel.Controls.Add(
-            CreateField("Giảm tối đa (VNĐ)", _numMaxDiscount),
+            CreateField("Giảm tối đa (VNĐ - bắt buộc với %)", _numMaxDiscount),
             0, 2
         );
 
@@ -1666,17 +1687,22 @@ internal sealed class PromotionEditDialog : Form
             0, 4
         );
 
-        Label lblHint = new Label
+        // GIỚI HẠN LƯỢT DÙNG (NGÂN SÁCH CHIẾN DỊCH)
+
+        _numUsageLimit = new NumericUpDown
         {
-            Text = "0 đồng ở mục giảm tối đa = không giới hạn.",
-            Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(148, 163, 184),
-            Font = new Font("Segoe UI", 8.5f),
-            TextAlign = ContentAlignment.MiddleLeft
+            Minimum = 1,
+            Maximum = 1000000,
+            Value = 100,
+            Increment = 10,
+            ThousandsSeparator = true,
+            Font = new Font("Segoe UI", 10),
+            BackColor = _background,
+            ForeColor = Color.White
         };
 
         fieldsPanel.Controls.Add(
-            CreateField("Ghi chú", lblHint),
+            CreateField("Giới hạn tổng lượt dùng *", _numUsageLimit),
             1, 4
         );
 
@@ -1711,14 +1737,20 @@ internal sealed class PromotionEditDialog : Form
         {
             if (_cboDiscountType.SelectedIndex == 0)
             {
-                _numDiscountValue.Maximum = 100;
+                _numDiscountValue.Maximum = PromotionService.MaxPercentDiscount;
 
-                if (_numDiscountValue.Value > 100)
-                    _numDiscountValue.Value = 100;
+                if (_numDiscountValue.Value > PromotionService.MaxPercentDiscount)
+                    _numDiscountValue.Value = PromotionService.MaxPercentDiscount;
+
+                _numMaxDiscount.Enabled = true;
+                if (_numMaxDiscount.Value <= 0)
+                    _numMaxDiscount.Value = 50000;
             }
             else
             {
                 _numDiscountValue.Maximum = 10000000;
+                _numMaxDiscount.Value = 0;
+                _numMaxDiscount.Enabled = false;
             }
         };
 
@@ -1816,9 +1848,15 @@ internal sealed class PromotionEditDialog : Form
 
         // Cập nhật giới hạn trước khi gán giá trị
         if (item.DiscountType == "Số tiền")
+        {
             _numDiscountValue.Maximum = 10000000;
+            _numMaxDiscount.Enabled = false;
+        }
         else
-            _numDiscountValue.Maximum = 100;
+        {
+            _numDiscountValue.Maximum = PromotionService.MaxPercentDiscount;
+            _numMaxDiscount.Enabled = true;
+        }
 
         _numDiscountValue.Value = Math.Clamp(
             item.DiscountValue,
@@ -1836,6 +1874,12 @@ internal sealed class PromotionEditDialog : Form
             item.MinimumOrder,
             _numMinimumOrder.Minimum,
             _numMinimumOrder.Maximum
+        );
+
+        _numUsageLimit.Value = Math.Clamp(
+            item.UsageLimit > 0 ? item.UsageLimit : 100,
+            _numUsageLimit.Minimum,
+            _numUsageLimit.Maximum
         );
 
         _dtpStartDate.Value = item.StartDate;
@@ -1890,6 +1934,64 @@ internal sealed class PromotionEditDialog : Form
             return;
         }
 
+        string selectedType =
+            _cboDiscountType.SelectedItem?.ToString()
+            ?? "Phần trăm";
+
+        if (selectedType == "Phần trăm")
+        {
+            if (_numDiscountValue.Value > PromotionService.MaxPercentDiscount)
+            {
+                MessageBox.Show(
+                    $"Mức giảm phần trăm tối đa là {PromotionService.MaxPercentDiscount:0}% để đảm bảo ngân sách!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+                _numDiscountValue.Focus();
+                return;
+            }
+
+            if (_numMaxDiscount.Value <= 0)
+            {
+                MessageBox.Show(
+                    "Vui lòng nhập Mức giảm tối đa (VNĐ) lớn hơn 0 đối với voucher Phần trăm!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+                _numMaxDiscount.Focus();
+                return;
+            }
+        }
+        else if (selectedType == "Số tiền")
+        {
+            if (_numMinimumOrder.Value <= _numDiscountValue.Value)
+            {
+                MessageBox.Show(
+                    "Đơn hàng tối thiểu bắt buộc phải lớn hơn Giá trị giảm để tránh âm ngân sách!\n" +
+                    $"(Ví dụ giảm {_numDiscountValue.Value:N0} đ thì đơn tối thiểu phải > {_numDiscountValue.Value:N0} đ)",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+                _numMinimumOrder.Focus();
+                return;
+            }
+        }
+
+        if ((int)_numUsageLimit.Value < PromotionData.UsedCount)
+        {
+            MessageBox.Show(
+                $"Giới hạn lượt dùng không được nhỏ hơn số lượt đã sử dụng ({PromotionData.UsedCount})!",
+                "Thông báo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+            _numUsageLimit.Focus();
+            return;
+        }
+
         PromotionData = new PromotionDisplayItem
         {
             Id = PromotionData.Id,
@@ -1898,15 +2000,17 @@ internal sealed class PromotionEditDialog : Form
 
             Name = _txtName.Text.Trim(),
 
-            DiscountType =
-                _cboDiscountType.SelectedItem?.ToString()
-                ?? "Phần trăm",
+            DiscountType = selectedType,
 
             DiscountValue = _numDiscountValue.Value,
 
-            MaxDiscount = _numMaxDiscount.Value,
+            MaxDiscount = selectedType == "Phần trăm" ? _numMaxDiscount.Value : 0m,
 
             MinimumOrder = _numMinimumOrder.Value,
+
+            UsageLimit = (int)_numUsageLimit.Value,
+
+            UsedCount = PromotionData.UsedCount,
 
             StartDate = _dtpStartDate.Value.Date,
 
