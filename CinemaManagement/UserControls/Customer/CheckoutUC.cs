@@ -1521,6 +1521,14 @@ public partial class CheckoutUC : UserControl
             return;
         }
 
+        if (ShowtimeData.StartTime <= DateTime.Now)
+        {
+            ShowWarning(
+                "Suất chiếu này đã bắt đầu hoặc đã kết thúc.\n" +
+                "Vui lòng quay lại chọn suất chiếu khác.");
+            return;
+        }
+
         if (SelectedSeats == null || SelectedSeats.Count == 0)
         {
             ShowWarning("Vui lòng chọn ít nhất một ghế.");
@@ -1651,10 +1659,15 @@ public partial class CheckoutUC : UserControl
         }
         catch (Exception ex)
         {
-            btnPayNow.Enabled = true;
-
             ShowWarning(
                 "Không thể hoàn tất quá trình đặt vé:\n" + ex.Message);
+        }
+        finally
+        {
+            if (!IsDisposed && btnPayNow != null && !btnPayNow.IsDisposed)
+            {
+                btnPayNow.Enabled = true;
+            }
         }
     }
 
@@ -1678,6 +1691,8 @@ public partial class CheckoutUC : UserControl
 
 public class BookingResultEventArgs : EventArgs
 {
+    public int? UserId { get; set; }
+
     public string BookingCode { get; set; } = string.Empty;
 
     public Movie? Movie { get; set; }

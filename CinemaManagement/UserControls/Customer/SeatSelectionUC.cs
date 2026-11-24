@@ -66,6 +66,9 @@ namespace CinemaManagement.UserControls.Customer
 
         private BookingContext? _bookingContext;
 
+        // Cờ chặn đồng bộ ngược vào BookingContext trong lúc đang dựng sơ đồ ghế
+        private bool _isLoadingSeats;
+
         // ==========================================
         // 5. EVENTS
         // ==========================================
@@ -240,18 +243,31 @@ namespace CinemaManagement.UserControls.Customer
                     ticketBasePrice = 90000m;
                 }
 
-                seatMatrix.GenerateSeatMatrix(
-                    room.TotalRows,
-                    room.TotalColumns,
-                    roomSeats,
-                    occupiedSeats,
-                    ticketBasePrice);
+                // Lưu lại danh sách ghế đang chọn trước khi GenerateSeatMatrix
+                // phát sự kiện rỗng làm xóa mất dữ liệu trong BookingContext.
+                List<string> seatsToRestore =
+                    _bookingContext != null && !isDifferentShowtime
+                        ? _bookingContext.Seats.ToList()
+                        : new List<string>();
 
-                if (_bookingContext != null &&
-                    !isDifferentShowtime)
+                _isLoadingSeats = true;
+                try
                 {
-                    seatMatrix.RestoreSelectedSeats(
-                        _bookingContext.Seats);
+                    seatMatrix.GenerateSeatMatrix(
+                        room.TotalRows,
+                        room.TotalColumns,
+                        roomSeats,
+                        occupiedSeats,
+                        ticketBasePrice);
+
+                    if (seatsToRestore.Count > 0)
+                    {
+                        seatMatrix.RestoreSelectedSeats(seatsToRestore);
+                    }
+                }
+                finally
+                {
+                    _isLoadingSeats = false;
                 }
 
                 UpdateSeatInformation();
@@ -615,10 +631,8 @@ namespace CinemaManagement.UserControls.Customer
             object? sender,
             List<string> selectedSeats)
         {
-            currentTotal = selectedSeats.Sum(
-                seat => seatMatrix.GetSeatPrice(seat));
-
-            SyncBookingContext(selectedSeats);
+            if (_isLoadingSeats)
+                return;
 
             UpdateSeatInformation();
         }
@@ -692,6 +706,18 @@ namespace CinemaManagement.UserControls.Customer
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
 
+                return;
+            }
+
+            if (ShowtimeData.StartTime <= DateTime.Now)
+            {
+                MessageBox.Show(
+                    "Suất chiếu đã bắt đầu hoặc đã qua giờ chiếu. Vui lòng chọn suất chiếu khác!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                OnBackClicked?.Invoke(this, EventArgs.Empty);
                 return;
             }
 

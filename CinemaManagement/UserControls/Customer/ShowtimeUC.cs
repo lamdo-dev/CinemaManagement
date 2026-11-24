@@ -332,8 +332,11 @@ public partial class ShowtimeUC : UserControl
         {
             flpShowtimeList.Controls.Clear();
 
+            DateTime now = DateTime.Now;
+
             IEnumerable<Showtime> query = _showtimes
-                .Where(s => s.StartTime.Date == selectedDate.Date);
+                .Where(s => s.StartTime.Date == selectedDate.Date &&
+                            s.StartTime > now);
 
             if (MovieData != null)
             {
@@ -346,11 +349,17 @@ public partial class ShowtimeUC : UserControl
 
             if (result.Count == 0)
             {
+                string emptyMessage = selectedDate.Date == DateTime.Today
+                    ? (MovieData == null
+                        ? "Không còn suất chiếu sắp diễn ra trong ngày hôm nay."
+                        : $"Phim {MovieData.Title} không còn suất chiếu sắp diễn ra trong ngày hôm nay.")
+                    : (MovieData == null
+                        ? "Không có suất chiếu trong ngày này."
+                        : $"Phim {MovieData.Title} không có suất chiếu trong ngày này.");
+
                 Label lblEmpty = new Label
                 {
-                    Text = MovieData == null
-                        ? "Không có suất chiếu trong ngày này."
-                        : $"Phim {MovieData.Title} không có suất chiếu trong ngày này.",
+                    Text = emptyMessage,
                     ForeColor = ColorTextMuted,
                     Font = new Font("Segoe UI", 11.5F),
                     AutoSize = true,
@@ -560,6 +569,18 @@ public partial class ShowtimeUC : UserControl
 
         btnTime.Click += (s, e) =>
         {
+            if (showtime.StartTime <= DateTime.Now)
+            {
+                MessageBox.Show(
+                    "Suất chiếu này vừa bắt đầu hoặc đã qua giờ chiếu. Vui lòng chọn suất chiếu khác.",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                RefreshShowtimes();
+                return;
+            }
+
             MovieData = movie;
             OnShowtimeSelected?.Invoke(this, showtime);
         };

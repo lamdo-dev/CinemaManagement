@@ -49,6 +49,10 @@ namespace CinemaManagement.Repositories
                     throw new InvalidOperationException(
                         "Suất chiếu không tồn tại hoặc đã bị thay đổi.");
 
+                if (showtime.StartTime <= DateTime.Now)
+                    throw new InvalidOperationException(
+                        "Suất chiếu đã bắt đầu hoặc đã qua giờ chiếu. Không thể đặt vé.");
+
                 // 2. Kiểm tra tài khoản
                 if (userId.HasValue)
                 {
@@ -80,6 +84,27 @@ namespace CinemaManagement.Repositories
                 if (seats.Count != booking.Seats.Count)
                     throw new InvalidOperationException(
                         "Một hoặc nhiều ghế không tồn tại trong phòng chiếu.");
+
+                // Kiểm tra ghế đã có người đặt trong cùng transaction
+                var alreadyBookedSeats = connection.Query<string>(@"
+                    SELECT SeatNumber
+                    FROM Tickets
+                    WHERE ShowtimeId = @ShowtimeId
+                      AND SeatId IN @SeatIds
+                      AND UPPER(Status) IN ('BOOKED', 'CONFIRMED', 'USED');
+                ",
+                new
+                {
+                    ShowtimeId = showtime.Id,
+                    SeatIds = seats.Select(s => s.Id).ToList()
+                }, transaction).ToList();
+
+                if (alreadyBookedSeats.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Ghế {string.Join(", ", alreadyBookedSeats)} đã được người khác đặt. " +
+                        "Vui lòng chọn lại ghế khác.");
+                }
 
                 // 4. Sử dụng số tiền gốc đã được CheckoutUC tính toán.
                 // TicketAmount và FoodAmount là giá trị trước khuyến mãi.
@@ -287,6 +312,7 @@ namespace CinemaManagement.Repositories
                 // 9. Hoàn tất giao dịch
                 transaction.Commit();
 
+                booking.UserId = userId;
                 return bookingId;
             }
             catch (SqliteException ex) when (
@@ -354,6 +380,373 @@ namespace CinemaManagement.Repositories
                         $"Thông tin sản phẩm {item.Value.Name} không hợp lệ.");
                 }
             }
+        }
+
+        // =========================================================
+        // TRUY VẤN ĐƠN ĐẶT VÉ TỪ SQLITE
+        // =========================================================
+
+        /// <summary>
+        /// Lấy toàn bộ lịch sử đặt vé của một tài khoản (mới nhất lên đầu).
+        /// </summary>
+        public List<BookingResultEventArgs> GetBookingsByUserId(int userId)
+        {
+            if (userId <= 0)
+                return new List<BookingResultEventArgs>();
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            var rows = connection.Query<BookingRow>(@"
+                SELECT
+                    b.Id,
+                    b.UserId,
+                    b.BookingCode,
+                    b.BookingTime,
+                    b.TotalAmount,
+                    b.DiscountAmount,
+                    b.FinalAmount,
+                    b.PaymentMethod,
+                    b.PromotionCode,
+                    COALESCE(u.FullName, '') AS CustomerName
+                FROM Bookings b
+                LEFT JOIN Users u ON u.Id = b.UserId
+                WHERE b.UserId = @UserId
+                ORDER BY b.Id DESC;
+            ", new { UserId = userId }).ToList();
+
+            return BuildBookingResults(connection, rows);
+        }
+
+        /// <summary>
+        /// Lấy đơn đặt vé gần nhất của một tài khoản.
+        /// </summary>
+        public BookingResultEventArgs? GetLatestBookingByUserId(int userId)
+        {
+            if (userId <= 0)
+                return null;
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            var row = connection.QueryFirstOrDefault<BookingRow>(@"
+                SELECT
+                    b.Id,
+                    b.UserId,
+                    b.BookingCode,
+                    b.BookingTime,
+                    b.TotalAmount,
+                    b.DiscountAmount,
+                    b.FinalAmount,
+                    b.PaymentMethod,
+                    b.PromotionCode,
+                    COALESCE(u.FullName, '') AS CustomerName
+                FROM Bookings b
+                LEFT JOIN Users u ON u.Id = b.UserId
+                WHERE b.UserId = @UserId
+                ORDER BY b.Id DESC
+                LIMIT 1;
+            ", new { UserId = userId });
+
+            if (row == null)
+                return null;
+
+            return BuildBookingResults(connection, new List<BookingRow> { row })
+                .FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Tìm đơn đặt vé theo mã BookingCode (dùng cho tra cứu / soát vé).
+        /// </summary>
+        public BookingResultEventArgs? GetBookingByCode(string bookingCode)
+        {
+            if (string.IsNullOrWhiteSpace(bookingCode))
+                return null;
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            var row = connection.QueryFirstOrDefault<BookingRow>(@"
+                SELECT
+                    b.Id,
+                    b.UserId,
+                    b.BookingCode,
+                    b.BookingTime,
+                    b.TotalAmount,
+                    b.DiscountAmount,
+                    b.FinalAmount,
+                    b.PaymentMethod,
+                    b.PromotionCode,
+                    COALESCE(u.FullName, '') AS CustomerName
+                FROM Bookings b
+                LEFT JOIN Users u ON u.Id = b.UserId
+                WHERE UPPER(b.BookingCode) = UPPER(@BookingCode)
+                LIMIT 1;
+            ", new { BookingCode = bookingCode.Trim() });
+
+            if (row == null)
+                return null;
+
+            return BuildBookingResults(connection, new List<BookingRow> { row })
+                .FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Lấy toàn bộ đơn có vé trong hệ thống (phục vụ màn hình soát vé).
+        /// </summary>
+        public List<BookingResultEventArgs> GetAllTicketBookings()
+        {
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            var rows = connection.Query<BookingRow>(@"
+                SELECT
+                    b.Id,
+                    b.UserId,
+                    b.BookingCode,
+                    b.BookingTime,
+                    b.TotalAmount,
+                    b.DiscountAmount,
+                    b.FinalAmount,
+                    b.PaymentMethod,
+                    b.PromotionCode,
+                    COALESCE(u.FullName, '') AS CustomerName
+                FROM Bookings b
+                LEFT JOIN Users u ON u.Id = b.UserId
+                WHERE EXISTS (
+                    SELECT 1 FROM Tickets t WHERE t.BookingId = b.Id
+                )
+                ORDER BY b.Id DESC;
+            ").ToList();
+
+            return BuildBookingResults(connection, rows);
+        }
+
+        /// <summary>
+        /// Kiểm tra đơn đặt vé trong SQLite đã được soát vé (USED) hay chưa.
+        /// </summary>
+        public bool IsBookingCheckedIn(string bookingCode)
+        {
+            if (string.IsNullOrWhiteSpace(bookingCode))
+                return false;
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            int usedCount = connection.ExecuteScalar<int>(@"
+                SELECT COUNT(1)
+                FROM Tickets t
+                INNER JOIN Bookings b ON b.Id = t.BookingId
+                WHERE UPPER(b.BookingCode) = UPPER(@BookingCode)
+                  AND UPPER(t.Status) = 'USED';
+            ", new { BookingCode = bookingCode.Trim() });
+
+            return usedCount > 0;
+        }
+
+        /// <summary>
+        /// Đánh dấu các vé thuộc đơn đã được soát (USED) trong SQLite.
+        /// </summary>
+        public bool MarkBookingCheckedIn(string bookingCode)
+        {
+            if (string.IsNullOrWhiteSpace(bookingCode))
+                return false;
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            int affected = connection.Execute(@"
+                UPDATE Tickets
+                SET Status = 'USED'
+                WHERE BookingId = (
+                    SELECT Id FROM Bookings
+                    WHERE UPPER(BookingCode) = UPPER(@BookingCode)
+                    LIMIT 1
+                )
+                AND UPPER(Status) IN ('BOOKED', 'CONFIRMED');
+            ", new { BookingCode = bookingCode.Trim() });
+
+            return affected > 0;
+        }
+
+        private static List<BookingResultEventArgs> BuildBookingResults(
+            SqliteConnection connection,
+            List<BookingRow> bookingRows)
+        {
+            if (bookingRows.Count == 0)
+                return new List<BookingResultEventArgs>();
+
+            var bookingIds = bookingRows.Select(b => b.Id).ToList();
+
+            var ticketRows = connection.Query<TicketRow>(@"
+                SELECT
+                    BookingId,
+                    ShowtimeId,
+                    SeatNumber,
+                    Price,
+                    Status
+                FROM Tickets
+                WHERE BookingId IN @BookingIds
+                ORDER BY Id;
+            ", new { BookingIds = bookingIds }).ToList();
+
+            var foodRows = connection.Query<FoodRow>(@"
+                SELECT
+                    d.BookingId,
+                    COALESCE(d.ProductId, 0) AS ProductId,
+                    d.ProductName,
+                    d.Quantity,
+                    d.UnitPrice,
+                    d.TotalPrice,
+                    COALESCE(p.ImageUrl, '') AS ImageUrl
+                FROM BookingDetailProducts d
+                LEFT JOIN Products p ON p.Id = d.ProductId
+                WHERE d.BookingId IN @BookingIds
+                ORDER BY d.Id;
+            ", new { BookingIds = bookingIds }).ToList();
+
+            var showtimeIds = ticketRows
+                .Select(t => t.ShowtimeId)
+                .Distinct()
+                .ToList();
+
+            var showtimeMap = showtimeIds.Count > 0
+                ? connection.Query<Showtime>(@"
+                    SELECT Id, MovieId, RoomId, StartTime, EndTime, BasePrice, Format
+                    FROM Showtimes
+                    WHERE Id IN @Ids;
+                ", new { Ids = showtimeIds }).ToDictionary(s => s.Id)
+                : new Dictionary<int, Showtime>();
+
+            var movieIds = showtimeMap.Values
+                .Select(s => s.MovieId)
+                .Distinct()
+                .ToList();
+
+            var movieMap = movieIds.Count > 0
+                ? connection.Query<Movie>(@"
+                    SELECT Id, Title, Description, DurationMinutes, Director,
+                           Genre, PosterUrl, ReleaseDate, Status
+                    FROM Movies
+                    WHERE Id IN @Ids;
+                ", new { Ids = movieIds }).ToDictionary(m => m.Id)
+                : new Dictionary<int, Movie>();
+
+            var ticketsByBooking = ticketRows
+                .GroupBy(t => t.BookingId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var foodsByBooking = foodRows
+                .GroupBy(f => f.BookingId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var results = new List<BookingResultEventArgs>(bookingRows.Count);
+
+            foreach (var row in bookingRows)
+            {
+                ticketsByBooking.TryGetValue(row.Id, out var tickets);
+                tickets ??= new List<TicketRow>();
+
+                foodsByBooking.TryGetValue(row.Id, out var foods);
+                foods ??= new List<FoodRow>();
+
+                Showtime? showtime = null;
+                Movie? movie = null;
+
+                if (tickets.Count > 0 &&
+                    showtimeMap.TryGetValue(tickets[0].ShowtimeId, out showtime))
+                {
+                    movieMap.TryGetValue(showtime.MovieId, out movie);
+                }
+
+                var foodCart = new Dictionary<int, (
+                    string Name,
+                    decimal Price,
+                    int Qty,
+                    string ImgPath)>();
+
+                int fallbackKey = -1;
+                foreach (var f in foods)
+                {
+                    int key = f.ProductId > 0 ? f.ProductId : fallbackKey--;
+                    if (foodCart.TryGetValue(key, out var existing))
+                    {
+                        foodCart[key] = (
+                            existing.Name,
+                            existing.Price,
+                            existing.Qty + f.Quantity,
+                            existing.ImgPath);
+                    }
+                    else
+                    {
+                        foodCart[key] = (
+                            f.ProductName,
+                            f.UnitPrice,
+                            f.Quantity,
+                            f.ImageUrl);
+                    }
+                }
+
+                decimal ticketAmount = tickets.Sum(t => t.Price);
+                decimal foodAmount = foods.Sum(f => f.TotalPrice);
+
+                results.Add(new BookingResultEventArgs
+                {
+                    UserId = row.UserId,
+                    BookingCode = row.BookingCode,
+                    Movie = movie,
+                    Showtime = showtime,
+                    Seats = tickets.Select(t => t.SeatNumber).ToList(),
+                    FoodCart = foodCart,
+                    TicketAmount = ticketAmount,
+                    FoodAmount = foodAmount,
+                    DiscountAmount = row.DiscountAmount,
+                    TotalAmount = row.FinalAmount,
+                    PromotionCode = row.PromotionCode ?? string.Empty,
+                    BookingTime = row.BookingTime,
+                    PaymentMethod = row.PaymentMethod ?? string.Empty,
+                    Channel = row.BookingCode.StartsWith("POS", StringComparison.OrdinalIgnoreCase)
+                        ? "POS"
+                        : "Online",
+                    CustomerName = row.CustomerName ?? string.Empty
+                });
+            }
+
+            return results;
+        }
+
+        private sealed class BookingRow
+        {
+            public long Id { get; set; }
+            public int? UserId { get; set; }
+            public string BookingCode { get; set; } = string.Empty;
+            public DateTime BookingTime { get; set; }
+            public decimal TotalAmount { get; set; }
+            public decimal DiscountAmount { get; set; }
+            public decimal FinalAmount { get; set; }
+            public string? PaymentMethod { get; set; }
+            public string? PromotionCode { get; set; }
+            public string? CustomerName { get; set; }
+        }
+
+        private sealed class TicketRow
+        {
+            public long BookingId { get; set; }
+            public int ShowtimeId { get; set; }
+            public string SeatNumber { get; set; } = string.Empty;
+            public decimal Price { get; set; }
+            public string Status { get; set; } = string.Empty;
+        }
+
+        private sealed class FoodRow
+        {
+            public long BookingId { get; set; }
+            public int ProductId { get; set; }
+            public string ProductName { get; set; } = string.Empty;
+            public int Quantity { get; set; }
+            public decimal UnitPrice { get; set; }
+            public decimal TotalPrice { get; set; }
+            public string ImageUrl { get; set; } = string.Empty;
         }
     }
 }
