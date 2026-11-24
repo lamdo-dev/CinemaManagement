@@ -16,6 +16,7 @@ public static class DatabaseInitializer
 
         // Các bảng hiện có
         CreateUsersTable(connection);
+        SeedAdminUser(connection);
         CreateMoviesTable(connection);
         CreateRoomsTable(connection);
         CreateSeatsTable(connection);
@@ -93,6 +94,26 @@ public static class DatabaseInitializer
             SET CreatedAt = datetime('now', 'localtime')
             WHERE CreatedAt IS NULL OR CreatedAt = '';
         ");
+    }
+
+    private static void SeedAdminUser(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            INSERT INTO Users (Username, PasswordHash, FullName, Role, CreatedAt)
+            SELECT @Username, @PasswordHash, @FullName, @Role,
+                   datetime('now', 'localtime')
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM Users
+                WHERE Username COLLATE NOCASE = @Username
+            );
+        ", new
+        {
+            Username = "admin",
+            PasswordHash = "admin123",
+            FullName = "Administrator",
+            Role = (int)CinemaManagement.Models.Enums.UserRole.Admin
+        });
     }
 
     // =========================================

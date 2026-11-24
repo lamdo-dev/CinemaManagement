@@ -34,6 +34,7 @@ public partial class CheckoutUC : UserControl
     private readonly Color ColorMoMoHover = Color.FromArgb(195, 15, 122);
     private readonly Color ColorTextMuted = Color.FromArgb(150, 150, 170);
     private readonly Color ColorInputBg = Color.FromArgb(34, 35, 48);
+    private readonly Color ColorTicketPaper = Color.FromArgb(245, 230, 180);
 
     private readonly CultureInfo ViCulture = new("vi-VN");
     private PaymentMethodType _selectedPaymentMethod = PaymentMethodType.Card;
@@ -925,7 +926,7 @@ public partial class CheckoutUC : UserControl
         Panel pnlTicketPass = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(245, 230, 180),
+            BackColor = ColorTicketPaper,
             Padding = new Padding(14)
         };
 
@@ -959,6 +960,7 @@ public partial class CheckoutUC : UserControl
             Text = "TÊN PHIM",
             Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
             ForeColor = Color.Black,
+            BackColor = ColorTicketPaper,
             Dock = DockStyle.Top,
             Height = 28,
             AutoEllipsis = true
@@ -969,6 +971,7 @@ public partial class CheckoutUC : UserControl
             Text = "Ngày: --/--/---- | Giờ: --:--",
             Font = new Font("Segoe UI", 9.2F),
             ForeColor = Color.FromArgb(60, 60, 60),
+            BackColor = ColorTicketPaper,
             Dock = DockStyle.Top,
             Height = 22
         };
@@ -978,6 +981,7 @@ public partial class CheckoutUC : UserControl
             Text = "Ghế: Chưa chọn",
             Font = new Font("Segoe UI", 9.8F, FontStyle.Bold),
             ForeColor = Color.Black,
+            BackColor = ColorTicketPaper,
             Dock = DockStyle.Top,
             Height = 24,
             AutoEllipsis = true
@@ -988,6 +992,7 @@ public partial class CheckoutUC : UserControl
             Text = "Tổng: 0 đ",
             Font = new Font("Segoe UI", 11.5F, FontStyle.Bold),
             ForeColor = Color.DarkRed,
+            BackColor = ColorTicketPaper,
             Dock = DockStyle.Top,
             Height = 28
         };
