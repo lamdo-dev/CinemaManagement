@@ -51,8 +51,7 @@ public partial class CheckoutUC : UserControl
 
     public List<string> SelectedSeats { get; private set; } = new();
 
-    public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart
-        { get; private set; } = new();
+    public Dictionary<int, CartItem> FoodCart { get; private set; } = new();
 
     private decimal ticketSubTotal;
     private decimal foodSubTotal;
@@ -187,11 +186,7 @@ public partial class CheckoutUC : UserControl
 
         SelectedSeats = context.Seats.ToList();
 
-        FoodCart = new Dictionary<int, (
-            string Name,
-            decimal Price,
-            int Qty,
-            string ImgPath)>(context.FoodCart);
+        FoodCart = new Dictionary<int, CartItem>(context.FoodCart);
 
         ticketSubTotal = context.TicketAmount;
         foodSubTotal = context.FoodAmount;
@@ -206,43 +201,6 @@ public partial class CheckoutUC : UserControl
         UpdateUIWithData();
 
         btnPayNow.Enabled = true;
-    }
-
-    // =========================================================
-    // 7. OLD METHOD - KEEP COMPATIBILITY
-    // =========================================================
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public void SetBookingData(
-        Movie movie,
-        Showtime showtime,
-        List<string> seats,
-        decimal ticketTotal,
-        Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> foodCart,
-        decimal foodTotal)
-    {
-        _bookingContext = null;
-
-        MovieData = movie;
-        ShowtimeData = showtime;
-
-        SelectedSeats = seats?.ToList() ?? new List<string>();
-
-        FoodCart = foodCart != null
-            ? new Dictionary<int,
-                (string Name, decimal Price, int Qty, string ImgPath)>(foodCart)
-            : new Dictionary<int,
-                (string Name, decimal Price, int Qty, string ImgPath)>();
-
-        ticketSubTotal = ticketTotal;
-        foodSubTotal = foodTotal;
-
-        discountAmount = 0m;
-        _appliedPromotion = null;
-
-        CalculateTotal();
-        UpdateUIWithData();
     }
 
     private void ClearDisplayData()
@@ -332,7 +290,7 @@ public partial class CheckoutUC : UserControl
 
         Label lblStep1 = new Label
         {
-            Text = "①  CHỌN SUẤT",
+            Text = "①  CHỌN SUẤT CHIẾU",
             Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorTextMuted,
             AutoSize = true,
@@ -341,7 +299,7 @@ public partial class CheckoutUC : UserControl
 
         Label lblDiv1 = new Label
         {
-            Text = "──────",
+            Text = "────",
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.FromArgb(70, 72, 95),
             AutoSize = true,
@@ -359,7 +317,7 @@ public partial class CheckoutUC : UserControl
 
         Label lblDiv2 = new Label
         {
-            Text = "──────",
+            Text = "────",
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.FromArgb(70, 72, 95),
             AutoSize = true,
@@ -368,7 +326,25 @@ public partial class CheckoutUC : UserControl
 
         Label lblStep3 = new Label
         {
-            Text = "③  THANH TOÁN",
+            Text = "③  BẮP NƯỚC",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+            ForeColor = ColorTextMuted,
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
+        };
+
+        Label lblDiv3 = new Label
+        {
+            Text = "────",
+            Font = new Font("Segoe UI", 9F),
+            ForeColor = Color.FromArgb(70, 72, 95),
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
+        };
+
+        Label lblStep4 = new Label
+        {
+            Text = "④  THANH TOÁN",
             Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorGold,
             AutoSize = true,
@@ -377,7 +353,7 @@ public partial class CheckoutUC : UserControl
 
         flpStepper.Controls.AddRange(new Control[]
         {
-            lblStep1, lblDiv1, lblStep2, lblDiv2, lblStep3
+            lblStep1, lblDiv1, lblStep2, lblDiv2, lblStep3, lblDiv3, lblStep4
         });
 
         tlpHeader.Controls.Add(btnBack, 0, 0);
@@ -1595,13 +1571,7 @@ public partial class CheckoutUC : UserControl
                 Movie = MovieData,
                 Showtime = ShowtimeData,
                 Seats = SelectedSeats.ToList(),
-
-                FoodCart = new Dictionary<int, (
-                    string Name,
-                    decimal Price,
-                    int Qty,
-                    string ImgPath)>(FoodCart),
-
+                FoodCart = new Dictionary<int, CartItem>(FoodCart),
                 TicketAmount = ticketSubTotal,
                 FoodAmount = foodSubTotal,
                 TotalAmount = totalAmount,
@@ -1731,50 +1701,4 @@ public partial class CheckoutUC : UserControl
             MessageBoxButtons.OK,
             MessageBoxIcon.Warning);
     }
-}
-
-// =============================================================
-// BOOKING RESULT EVENT ARGS
-// =============================================================
-
-public class BookingResultEventArgs : EventArgs
-{
-    public int? UserId { get; set; }
-
-    public string BookingCode { get; set; } = string.Empty;
-
-    public Movie? Movie { get; set; }
-
-    public Showtime? Showtime { get; set; }
-
-    public List<string> Seats { get; set; } = new();
-
-    public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart
-        { get; set; } = new();
-
-    // Tổng tiền vé trước khi áp dụng khuyến mãi.
-    public decimal TicketAmount { get; set; }
-
-    // Tổng tiền bắp nước.
-    public decimal FoodAmount { get; set; }
-
-    // Tổng tiền khách phải thanh toán sau khi trừ khuyến mãi.
-    public decimal TotalAmount { get; set; }
-
-    public string PromotionCode { get; set; } = string.Empty;
-
-    public decimal DiscountAmount { get; set; }
-
-    public DateTime BookingTime { get; set; }
-
-    // Online hoặc POS
-    public string Channel { get; set; } = "Online";
-
-    public string PaymentMethod { get; set; } = "Thanh toán mô phỏng";
-
-    public string PaymentStatus { get; set; } = "PAID";
-
-    public string CustomerName { get; set; } = string.Empty;
-
-    public int EarnedPoints { get; set; }
 }

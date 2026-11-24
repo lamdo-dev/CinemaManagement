@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using CinemaManagement.Models;
 using CinemaManagement.Repositories;
-using CinemaManagement.UserControls.Customer;
 using CinemaManagement.Utils;
 
 namespace CinemaManagement.Services

@@ -5,8 +5,8 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
+using CinemaManagement.Models;
 using CinemaManagement.Utils;
-using CinemaManagement.UserControls.Customer;
 
 namespace CinemaManagement.UserControls.Staff
 {

@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
-using CinemaManagement.Repositories;
+using CinemaManagement.Services;
 using CinemaManagement.UserControls.Common;
 
 namespace CinemaManagement.UserControls.Customer
@@ -19,7 +19,7 @@ namespace CinemaManagement.UserControls.Customer
         // 1. FIELDS
         // =========================================================
 
-        private readonly MovieRepository _movieRepository = new();
+        private readonly TicketService _ticketService = new();
 
         private Panel pnlSidebar = null!;
         private Panel pnlMainContent = null!;
@@ -464,11 +464,7 @@ namespace CinemaManagement.UserControls.Customer
         {
             try
             {
-                _allMovies = _movieRepository.GetAll()
-                    .Where(movie =>
-                        movie.Status == MovieStatus.Showing ||
-                        movie.Status == MovieStatus.ComingSoon)
-                    .ToList();
+                _allMovies = _ticketService.GetCustomerMovies();
 
                 BuildDynamicGenresList();
                 ApplyFilter();

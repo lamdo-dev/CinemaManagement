@@ -44,6 +44,8 @@ namespace CinemaManagement.UserControls.Common
 
         private readonly List<Button> seatButtons = new();
         private readonly List<Label> rowLabels = new();
+        private readonly Font _seatFontNormal = new("Segoe UI", 9f, FontStyle.Bold);
+        private readonly Font _seatFontCompact = new("Segoe UI", 8f, FontStyle.Bold);
         private int matrixRows;
         private int matrixColumns;
 
@@ -73,6 +75,12 @@ namespace CinemaManagement.UserControls.Common
         public SeatMatrixUC()
         {
             InitializeComponents();
+
+            Disposed += (s, e) =>
+            {
+                _seatFontNormal.Dispose();
+                _seatFontCompact.Dispose();
+            };
         }
 
         // ==========================================
@@ -202,8 +210,11 @@ namespace CinemaManagement.UserControls.Common
                     startY + row * (seatHeight + gap),
                     seatWidth, seatHeight);
 
-                button.Font = new Font("Segoe UI",
-                    seatWidth >= 54 ? 9f : 8f, FontStyle.Bold);
+                Font targetFont = seatWidth >= 54 ? _seatFontNormal : _seatFontCompact;
+                if (!ReferenceEquals(button.Font, targetFont))
+                {
+                    button.Font = targetFont;
+                }
                 button.TextAlign = ContentAlignment.MiddleCenter;
                 button.Padding = Padding.Empty;
             }
@@ -301,7 +312,7 @@ namespace CinemaManagement.UserControls.Common
                         MinimumSize = new Size(38, 30),
                         Padding = new Padding(0),
                         Margin = new Padding(0),
-                        Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                        Font = _seatFontCompact,
                         ForeColor = Color.White,
                         TextAlign = ContentAlignment.MiddleCenter,
                         BackColor = isOccupied

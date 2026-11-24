@@ -7,10 +7,8 @@ using System.Windows.Forms;
 
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
-using CinemaManagement.Repositories;
 using CinemaManagement.Services;
 using CinemaManagement.UserControls.Common;
-using CinemaManagement.Utils;
 
 namespace CinemaManagement.UserControls.Customer
 {
@@ -33,11 +31,10 @@ namespace CinemaManagement.UserControls.Customer
             Color.FromArgb(150, 150, 170);
 
         // ==========================================
-        // 2. REPOSITORY
+        // 2. SERVICES
         // ==========================================
 
-        private readonly RoomRepository _roomRepository = new();
-        private readonly TicketRepository _ticketRepository = new();
+        private readonly TicketService _ticketService = new();
         private readonly PricingService _pricingService = new();
 
         // ==========================================
@@ -94,14 +91,6 @@ namespace CinemaManagement.UserControls.Customer
             InitializeComponents();
         }
 
-        // Constructor tương thích code cũ
-        public SeatSelectionUC(
-            Movie? movie,
-            Showtime? showtime) : this()
-        {
-            SetBookingContext(movie, showtime);
-        }
-
         // Constructor sử dụng BookingContext
         public SeatSelectionUC(
             BookingContext bookingContext) : this()
@@ -113,19 +102,6 @@ namespace CinemaManagement.UserControls.Customer
             SetBookingContext(
                 bookingContext.Movie,
                 bookingContext.Showtime);
-        }
-
-        // Constructor đầy đủ
-        public SeatSelectionUC(
-            Movie? movie,
-            Showtime? showtime,
-            BookingContext bookingContext) : this()
-        {
-            _bookingContext = bookingContext
-                ?? throw new ArgumentNullException(
-                    nameof(bookingContext));
-
-            SetBookingContext(movie, showtime);
         }
 
         // ==========================================
@@ -203,8 +179,8 @@ namespace CinemaManagement.UserControls.Customer
 
             try
             {
-                Room? room = _roomRepository.GetById(
-                    Convert.ToInt64(ShowtimeData.RoomId));
+                var (room, roomSeats, occupiedSeats, seatPriceMap, pricingRules) =
+                    _ticketService.GetSeatSelectionData(ShowtimeData);
 
                 if (room == null)
                 {
@@ -223,10 +199,6 @@ namespace CinemaManagement.UserControls.Customer
                     return;
                 }
 
-                var roomSeats = _roomRepository
-                    .GetSeatsByRoomId(Convert.ToInt32(room.Id))
-                    .ToList();
-
                 if (roomSeats.Count == 0)
                 {
                     ShowSeatDataError(
@@ -235,41 +207,10 @@ namespace CinemaManagement.UserControls.Customer
                     return;
                 }
 
-                // Đọc ghế đã đặt trực tiếp từ SQLite theo suất chiếu.
-                // Không phụ thuộc UserSession nên vẫn đúng sau khi chạy lại ứng dụng.
-                HashSet<string> occupiedSeats =
-                    _ticketRepository.GetBookedSeatNumbers(
-                        Convert.ToInt64(ShowtimeData.Id));
-
                 decimal ticketBasePrice =
                     ShowtimeData.BasePrice > 0
                         ? ShowtimeData.BasePrice
                         : PricingService.DefaultBasePrice;
-
-                List<PricingRule> pricingRules;
-                try
-                {
-                    pricingRules = _pricingService.GetAll();
-                }
-                catch
-                {
-                    pricingRules = new List<PricingRule>();
-                }
-
-                var seatPriceMap = new Dictionary<string, decimal>(
-                    StringComparer.OrdinalIgnoreCase);
-
-                foreach (Seat seat in roomSeats)
-                {
-                    if (string.IsNullOrWhiteSpace(seat.SeatNumber))
-                        continue;
-
-                    seatPriceMap[seat.SeatNumber.Trim()] =
-                        _pricingService.CalculateSeatPrice(
-                            ShowtimeData,
-                            seat,
-                            pricingRules);
-                }
 
                 UpdateLegendPrices(ShowtimeData, roomSeats, pricingRules);
 
@@ -395,10 +336,12 @@ namespace CinemaManagement.UserControls.Customer
             flpStepper.Controls.AddRange(new Control[]
             {
                 CreateStepLabel("①  CHỌN SUẤT CHIẾU", false),
-                CreateDividerLabel("──────"),
+                CreateDividerLabel("────"),
                 CreateStepLabel("②  CHỌN GHẾ", true),
-                CreateDividerLabel("──────"),
-                CreateStepLabel("③  THANH TOÁN", false)
+                CreateDividerLabel("────"),
+                CreateStepLabel("③  BẮP NƯỚC", false),
+                CreateDividerLabel("────"),
+                CreateStepLabel("④  THANH TOÁN", false)
             });
 
             tlpHeader.Controls.Add(btnBack, 0, 0);
@@ -739,7 +682,7 @@ namespace CinemaManagement.UserControls.Customer
                     $"Ghế đã chọn: {string.Join(", ", seats)}";
 
                 currentTotal = seats.Sum(
-                    seat => seatMatrix.GetSeatPrice(seat));
+                    seat => seatMatrix!.GetSeatPrice(seat));
             }
 
             lblTotalPrice.Text =

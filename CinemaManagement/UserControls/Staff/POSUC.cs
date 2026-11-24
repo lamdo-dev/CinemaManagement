@@ -8,7 +8,6 @@ using System.Windows.Forms;
 
 using CinemaManagement.Models;
 using CinemaManagement.UserControls.Common;
-using CinemaManagement.UserControls.Customer;
 using CinemaManagement.Utils;
 
 namespace CinemaManagement.UserControls.Staff
@@ -122,9 +121,7 @@ namespace CinemaManagement.UserControls.Staff
 
         private decimal _ticketAmount;
 
-        private readonly Dictionary<int,
-            (string Name, decimal Price, int Qty, string ImgPath)>
-            _foodCart = new();
+        private readonly Dictionary<int, CartItem> _foodCart = new();
 
         // =====================================================
         // 4. CONTROLS
@@ -943,7 +940,7 @@ namespace CinemaManagement.UserControls.Staff
                 ? item.Qty + 1
                 : 1;
 
-            _foodCart[id] = (
+            _foodCart[id] = new CartItem(
                 name,
                 price,
                 qty,
@@ -970,11 +967,7 @@ namespace CinemaManagement.UserControls.Staff
                 }
                 else
                 {
-                    _foodCart[productId] = (
-                        item.Name,
-                        item.Price,
-                        item.Qty - 1,
-                        item.ImgPath);
+                    _foodCart[productId] = item with { Qty = item.Qty - 1 };
                 }
 
                 RefreshOrderView();
@@ -1229,9 +1222,7 @@ namespace CinemaManagement.UserControls.Staff
                 Movie = hasTicket ? _selectedMovie : null,
                 Showtime = hasTicket ? _selectedShowtime : null,
                 Seats = normalizedSeats,
-                FoodCart = new Dictionary<int,
-                    (string Name, decimal Price, int Qty, string ImgPath)>
-                    (_foodCart),
+                FoodCart = new Dictionary<int, CartItem>(_foodCart),
                 TotalAmount = TotalAmount,
                 BookingTime = DateTime.Now,
                 Channel = "POS",
