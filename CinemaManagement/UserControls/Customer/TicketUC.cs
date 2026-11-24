@@ -668,11 +668,22 @@ public partial class TicketUC : UserControl
                 "🍿 Bắp nước: Không kèm bắp nước";
         }
 
-        // Total
+        // Total & Points
+        string paymentState = string.Equals(
+            BookingData.PaymentStatus,
+            "PENDING",
+            StringComparison.OrdinalIgnoreCase)
+            ? "Chờ thanh toán tại quầy"
+            : "Đã thanh toán";
+
+        string pointsSuffix = BookingData.EarnedPoints > 0
+            ? $"  (+{BookingData.EarnedPoints:N0} điểm)"
+            : string.Empty;
+
         lblTotalAmount.Text =
-            $"💳 Tổng thanh toán: " +
-            $"{BookingData.TotalAmount.ToString(
-                "N0", new CultureInfo("vi-VN"))} đ";
+            $"💳 {paymentState}: " +
+            $"{BookingData.TotalAmount.ToString("N0", new CultureInfo("vi-VN"))} đ" +
+            pointsSuffix;
 
         picQRCode.Invalidate();
     }

@@ -613,18 +613,13 @@ namespace CinemaManagement.UserControls.Customer
                     OnMovieClicked?.Invoke(this, selectedMovie);
                 };
 
-                // Phim sắp chiếu: mở chi tiết.
-                // Phim đang chiếu: chuyển sang chọn suất chiếu.
+                // Cả phim đang chiếu và sắp chiếu đều cho phép chọn suất đặt vé.
                 card.OnBookNowClicked += (sender, selectedMovie) =>
                 {
-                    if (selectedMovie.Status == MovieStatus.ComingSoon)
-                    {
-                        OnMovieClicked?.Invoke(this, selectedMovie);
-                    }
-                    else
-                    {
-                        OnBookNowClicked?.Invoke(this, selectedMovie);
-                    }
+                    if (selectedMovie.Status == MovieStatus.Ended)
+                        return;
+
+                    OnBookNowClicked?.Invoke(this, selectedMovie);
                 };
 
                 flpMovieGrid.Controls.Add(card);

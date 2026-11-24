@@ -6,7 +6,9 @@ using System.Linq;
 using System.Windows.Forms;
 
 using CinemaManagement.Models;
+using CinemaManagement.Models.Enums;
 using CinemaManagement.Repositories;
+using CinemaManagement.Services;
 using CinemaManagement.UserControls.Common;
 using CinemaManagement.Utils;
 
@@ -36,6 +38,7 @@ namespace CinemaManagement.UserControls.Customer
 
         private readonly RoomRepository _roomRepository = new();
         private readonly TicketRepository _ticketRepository = new();
+        private readonly PricingService _pricingService = new();
 
         // ==========================================
         // 3. CÁC CONTROL GIAO DIỆN
@@ -44,6 +47,9 @@ namespace CinemaManagement.UserControls.Customer
         private TableLayoutPanel tlpHeader = null!;
         private Button btnBack = null!;
         private Panel pnlLeftLegend = null!;
+        private Label lblLegendStandardPrice = null!;
+        private Label lblLegendVipPrice = null!;
+        private Label lblLegendCouplePrice = null!;
         private TableLayoutPanel tlpBottomBar = null!;
         private Label lblContextInfo = null!;
 
@@ -236,12 +242,36 @@ namespace CinemaManagement.UserControls.Customer
                         Convert.ToInt64(ShowtimeData.Id));
 
                 decimal ticketBasePrice =
-                    ShowtimeData.BasePrice;
+                    ShowtimeData.BasePrice > 0
+                        ? ShowtimeData.BasePrice
+                        : PricingService.DefaultBasePrice;
 
-                if (ticketBasePrice <= 0)
+                List<PricingRule> pricingRules;
+                try
                 {
-                    ticketBasePrice = 90000m;
+                    pricingRules = _pricingService.GetAll();
                 }
+                catch
+                {
+                    pricingRules = new List<PricingRule>();
+                }
+
+                var seatPriceMap = new Dictionary<string, decimal>(
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (Seat seat in roomSeats)
+                {
+                    if (string.IsNullOrWhiteSpace(seat.SeatNumber))
+                        continue;
+
+                    seatPriceMap[seat.SeatNumber.Trim()] =
+                        _pricingService.CalculateSeatPrice(
+                            ShowtimeData,
+                            seat,
+                            pricingRules);
+                }
+
+                UpdateLegendPrices(ShowtimeData, roomSeats, pricingRules);
 
                 // Lưu lại danh sách ghế đang chọn trước khi GenerateSeatMatrix
                 // phát sự kiện rỗng làm xóa mất dữ liệu trong BookingContext.
@@ -258,7 +288,8 @@ namespace CinemaManagement.UserControls.Customer
                         room.TotalColumns,
                         roomSeats,
                         occupiedSeats,
-                        ticketBasePrice);
+                        ticketBasePrice,
+                        seatPriceMap);
 
                     if (seatsToRestore.Count > 0)
                     {
@@ -411,20 +442,20 @@ namespace CinemaManagement.UserControls.Customer
 
             tlpLegend.Controls.Add(lblLegendTitle, 0, 0);
             tlpLegend.Controls.Add(
-                CreateLegendItem("Ghế Thường (Standard)", "Hệ số giá: x1.0",
-                    SeatMatrixUC.ColorStandard), 0, 1);
+                CreateLegendItem("Ghế Thường (Standard)", "Theo suất chiếu",
+                    SeatMatrixUC.ColorStandard, out lblLegendStandardPrice), 0, 1);
             tlpLegend.Controls.Add(
-                CreateLegendItem("Ghế VIP", "Hệ số giá: x1.2",
-                    SeatMatrixUC.ColorVIP), 0, 2);
+                CreateLegendItem("Ghế VIP", "Theo suất chiếu",
+                    SeatMatrixUC.ColorVIP, out lblLegendVipPrice), 0, 2);
             tlpLegend.Controls.Add(
-                CreateLegendItem("Ghế Đôi (Couple)", "Hệ số giá: x2.0",
-                    SeatMatrixUC.ColorPlus), 0, 3);
+                CreateLegendItem("Ghế Đôi (Couple)", "Theo suất chiếu",
+                    SeatMatrixUC.ColorPlus, out lblLegendCouplePrice), 0, 3);
             tlpLegend.Controls.Add(
                 CreateLegendItem("Ghế Đang chọn", "Đã chọn",
-                    SeatMatrixUC.ColorSelected), 0, 4);
+                    SeatMatrixUC.ColorSelected, out _), 0, 4);
             tlpLegend.Controls.Add(
                 CreateLegendItem("Ghế Đã bán", "Không trống",
-                    SeatMatrixUC.ColorOccupied), 0, 5);
+                    SeatMatrixUC.ColorOccupied, out _), 0, 5);
 
             lblContextInfo = new Label
             {
@@ -573,7 +604,8 @@ namespace CinemaManagement.UserControls.Customer
         private Control CreateLegendItem(
             string title,
             string price,
-            Color color)
+            Color color,
+            out Label priceLabel)
         {
             var tlpItem = new TableLayoutPanel
             {
@@ -615,12 +647,45 @@ namespace CinemaManagement.UserControls.Customer
                 Margin = new Padding(0)
             };
 
+            priceLabel = lblP;
+
             tlpItem.Controls.Add(box, 0, 0);
             tlpItem.SetRowSpan(box, 2);
             tlpItem.Controls.Add(lblT, 1, 0);
             tlpItem.Controls.Add(lblP, 1, 1);
 
             return tlpItem;
+        }
+
+        private void UpdateLegendPrices(
+            Showtime showtime,
+            List<Seat> roomSeats,
+            IReadOnlyCollection<PricingRule> pricingRules)
+        {
+            var vi = new CultureInfo("vi-VN");
+
+            Seat? sampleStandard = roomSeats.FirstOrDefault(
+                s => PricingService.GetSeatTypeName(s.Type, s.PriceMultiplier) == "Ghế thường");
+            Seat? sampleVip = roomSeats.FirstOrDefault(
+                s => PricingService.GetSeatTypeName(s.Type, s.PriceMultiplier) == "Ghế VIP");
+            Seat? sampleCouple = roomSeats.FirstOrDefault(
+                s => PricingService.GetSeatTypeName(s.Type, s.PriceMultiplier) == "Ghế đôi");
+
+            decimal stdPrice = sampleStandard != null
+                ? _pricingService.CalculateSeatPrice(showtime, sampleStandard, pricingRules)
+                : _pricingService.CalculatePriceBySeatType(showtime, SeatType.Standard, 1.0, pricingRules);
+
+            decimal vipPrice = sampleVip != null
+                ? _pricingService.CalculateSeatPrice(showtime, sampleVip, pricingRules)
+                : _pricingService.CalculatePriceBySeatType(showtime, SeatType.VIP, 1.2, pricingRules);
+
+            decimal couplePrice = sampleCouple != null
+                ? _pricingService.CalculateSeatPrice(showtime, sampleCouple, pricingRules)
+                : _pricingService.CalculatePriceBySeatType(showtime, SeatType.Couple, 2.0, pricingRules);
+
+            lblLegendStandardPrice.Text = $"{stdPrice.ToString("N0", vi)} đ";
+            lblLegendVipPrice.Text = $"{vipPrice.ToString("N0", vi)} đ";
+            lblLegendCouplePrice.Text = $"{couplePrice.ToString("N0", vi)} đ";
         }
 
         // ==========================================

@@ -24,7 +24,7 @@ namespace CinemaManagement.Repositories
                 SELECT DISTINCT SeatNumber
                 FROM Tickets
                 WHERE ShowtimeId = @ShowtimeId
-                  AND UPPER(Status) IN ('BOOKED', 'CONFIRMED', 'USED');
+                  AND UPPER(Status) <> 'CANCELLED';
             ";
 
             using var connection = DatabaseConnection.GetConnection();

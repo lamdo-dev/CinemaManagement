@@ -37,6 +37,11 @@ namespace CinemaManagement.Services
                     "Không thể lưu đơn đặt vé vào cơ sở dữ liệu.");
             }
 
+            if (currentUser != null && booking.EarnedPoints > 0)
+            {
+                currentUser.RewardPoints += booking.EarnedPoints;
+            }
+
             return bookingId;
         }
 

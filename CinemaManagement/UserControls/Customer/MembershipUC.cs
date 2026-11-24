@@ -35,7 +35,9 @@ public partial class MembershipUC : UserControl
 
     public MembershipUC()
     {
+        CurrentPoints = CinemaManagement.Utils.UserSession.CurrentUser?.RewardPoints ?? 0;
         InitializeComponents();
+        lblPointsValue.Text = CurrentPoints.ToString("N0");
         LoadPointHistoryData();
         LoadVoucherCatalogData();
     }

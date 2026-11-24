@@ -4,7 +4,9 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Models.Enums;
 using CinemaManagement.Repositories;
+using CinemaManagement.Services;
 
 namespace CinemaManagement.UserControls.Customer;
 
@@ -17,10 +19,12 @@ public partial class ShowtimeUC : UserControl
     private readonly MovieRepository _movieRepository = new();
     private readonly RoomRepository _roomRepository = new();
     private readonly ShowtimeRepository _showtimeRepository = new();
+    private readonly PricingService _pricingService = new();
 
     private List<Movie> _movies = new();
     private List<Room> _rooms = new();
     private List<Showtime> _showtimes = new();
+    private List<PricingRule> _pricingRules = new();
 
     // Bảng màu Dark Cinema & Gold Accent
     private readonly Color ColorBg = Color.FromArgb(20, 20, 28);
@@ -280,12 +284,14 @@ public partial class ShowtimeUC : UserControl
             _movies = _movieRepository.GetAll();
             _rooms = _roomRepository.GetAll();
             _showtimes = _showtimeRepository.GetAll();
+            _pricingRules = _pricingService.GetAll();
         }
         catch (Exception ex)
         {
             _movies.Clear();
             _rooms.Clear();
             _showtimes.Clear();
+            _pricingRules.Clear();
 
             MessageBox.Show(
                 "Không thể tải lịch chiếu từ SQLite.\n\n" + ex.Message,
@@ -332,6 +338,21 @@ public partial class ShowtimeUC : UserControl
         {
             flpShowtimeList.Controls.Clear();
 
+            if (MovieData != null && MovieData.Status == MovieStatus.Ended)
+            {
+                Label lblEnded = new Label
+                {
+                    Text = $"Phim {MovieData.Title} đã kết thúc đợt chiếu.",
+                    ForeColor = ColorTextMuted,
+                    Font = new Font("Segoe UI", 11.5F),
+                    AutoSize = true,
+                    Margin = new Padding(8, 16, 8, 16)
+                };
+
+                flpShowtimeList.Controls.Add(lblEnded);
+                return;
+            }
+
             DateTime now = DateTime.Now;
 
             IEnumerable<Showtime> query = _showtimes
@@ -377,7 +398,7 @@ public partial class ShowtimeUC : UserControl
                 Movie? movie = _movies.FirstOrDefault(m => m.Id == showtime.MovieId);
                 Room? room = _rooms.FirstOrDefault(r => r.Id == showtime.RoomId);
 
-                if (movie == null)
+                if (movie == null || movie.Status == MovieStatus.Ended)
                     continue;
 
                 Panel card = CreateShowtimeCard(showtime, movie, room, cardWidth);
@@ -518,12 +539,18 @@ public partial class ShowtimeUC : UserControl
             Margin = new Padding(0, 0, 0, 4)
         };
 
+        decimal displayPrice = _pricingService.CalculatePriceBySeatType(
+            showtime,
+            SeatType.Standard,
+            1.0,
+            _pricingRules);
+
         Label lblInfo = new Label
         {
             Text =
                 $"{room?.Name ?? $"Phòng {showtime.RoomId}"}" +
                 $"   •   {showtime.Format}" +
-                $"   •   Giá vé: {showtime.BasePrice:N0} đ",
+                $"   •   Giá vé từ: {displayPrice:N0} đ",
             Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorGold,
             AutoSize = true,
