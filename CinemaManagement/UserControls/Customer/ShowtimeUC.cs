@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
-using CinemaManagement.Repositories;
 using CinemaManagement.Services;
 
 namespace CinemaManagement.UserControls.Customer;
@@ -13,18 +11,10 @@ namespace CinemaManagement.UserControls.Customer;
 public partial class ShowtimeUC : UserControl
 {
     // =========================================
-    // 1. REPOSITORY VÀ DỮ LIỆU
+    // 1. SERVICE VÀ DỮ LIỆU
     // =========================================
 
-    private readonly MovieRepository _movieRepository = new();
-    private readonly RoomRepository _roomRepository = new();
-    private readonly ShowtimeRepository _showtimeRepository = new();
-    private readonly PricingService _pricingService = new();
-
-    private List<Movie> _movies = new();
-    private List<Room> _rooms = new();
-    private List<Showtime> _showtimes = new();
-    private List<PricingRule> _pricingRules = new();
+    private readonly TicketService _ticketService = new();
 
     // Bảng màu Dark Cinema & Gold Accent
     private readonly Color ColorBg = Color.FromArgb(20, 20, 28);
@@ -52,18 +42,21 @@ public partial class ShowtimeUC : UserControl
     // 2. CONSTRUCTOR
     // =========================================
 
-    public ShowtimeUC()
+    public ShowtimeUC() : this(initialMovie: null, initFlag: true)
     {
-        AutoScaleMode = AutoScaleMode.Dpi;
-
-        InitializeComponents();
-        LoadDatabaseData();
-        LoadShowtimes();
     }
 
-    public ShowtimeUC(Movie movie) : this()
+    public ShowtimeUC(Movie movie) : this(initialMovie: movie, initFlag: true)
     {
-        SetMovie(movie);
+    }
+
+    private ShowtimeUC(Movie? initialMovie, bool initFlag)
+    {
+        AutoScaleMode = AutoScaleMode.Dpi;
+        MovieData = initialMovie;
+
+        InitializeComponents();
+        LoadShowtimes();
     }
 
     // =========================================
@@ -139,10 +132,12 @@ public partial class ShowtimeUC : UserControl
         flpStepper.Controls.AddRange(new Control[]
         {
             CreateStepLabel("①  CHỌN SUẤT CHIẾU", true),
-            CreateDividerLabel("──────"),
+            CreateDividerLabel("────"),
             CreateStepLabel("②  CHỌN GHẾ", false),
-            CreateDividerLabel("──────"),
-            CreateStepLabel("③  THANH TOÁN", false)
+            CreateDividerLabel("────"),
+            CreateStepLabel("③  BẮP NƯỚC", false),
+            CreateDividerLabel("────"),
+            CreateStepLabel("④  THANH TOÁN", false)
         });
 
         tlpTopRow.Controls.Add(btnBack, 0, 0);
@@ -274,35 +269,7 @@ public partial class ShowtimeUC : UserControl
     }
 
     // =========================================
-    // 6. TẢI DỮ LIỆU TỪ SQLITE
-    // =========================================
-
-    private void LoadDatabaseData()
-    {
-        try
-        {
-            _movies = _movieRepository.GetAll();
-            _rooms = _roomRepository.GetAll();
-            _showtimes = _showtimeRepository.GetAll();
-            _pricingRules = _pricingService.GetAll();
-        }
-        catch (Exception ex)
-        {
-            _movies.Clear();
-            _rooms.Clear();
-            _showtimes.Clear();
-            _pricingRules.Clear();
-
-            MessageBox.Show(
-                "Không thể tải lịch chiếu từ SQLite.\n\n" + ex.Message,
-                "Lỗi tải dữ liệu",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-    }
-
-    // =========================================
-    // 7. CHỌN PHIM
+    // 6. CHỌN PHIM VÀ LÀM MỚI LỊCH CHIẾU
     // =========================================
 
     public void SetMovie(Movie movie)
@@ -311,23 +278,17 @@ public partial class ShowtimeUC : UserControl
             return;
 
         MovieData = movie;
-        LoadDatabaseData();
         LoadShowtimes();
     }
 
-    // =========================================
-    // 8. LÀM MỚI LỊCH CHIẾU
-    // =========================================
-
     public void RefreshShowtimes()
     {
-        LoadDatabaseData();
         GenerateDateButtons();
         LoadShowtimes();
     }
 
     // =========================================
-    // 9. TẢI VÀ HIỂN THỊ SUẤT CHIẾU
+    // 7. TẢI VÀ HIỂN THỊ SUẤT CHIẾU (LỌC TRỰC TIẾP TẠI SQLITE)
     // =========================================
 
     private void LoadShowtimes()
@@ -353,22 +314,11 @@ public partial class ShowtimeUC : UserControl
                 return;
             }
 
-            DateTime now = DateTime.Now;
+            var scheduleItems = _ticketService.GetAvailableShowtimes(
+                selectedDate,
+                MovieData?.Id);
 
-            IEnumerable<Showtime> query = _showtimes
-                .Where(s => s.StartTime.Date == selectedDate.Date &&
-                            s.StartTime > now);
-
-            if (MovieData != null)
-            {
-                query = query.Where(s => s.MovieId == MovieData.Id);
-            }
-
-            List<Showtime> result = query
-                .OrderBy(s => s.StartTime)
-                .ToList();
-
-            if (result.Count == 0)
+            if (scheduleItems.Count == 0)
             {
                 string emptyMessage = selectedDate.Date == DateTime.Today
                     ? (MovieData == null
@@ -393,30 +343,10 @@ public partial class ShowtimeUC : UserControl
 
             int cardWidth = Math.Max(420, flpShowtimeList.ClientSize.Width - 44);
 
-            foreach (Showtime showtime in result)
+            foreach (var (showtime, movie, room, standardPrice) in scheduleItems)
             {
-                Movie? movie = _movies.FirstOrDefault(m => m.Id == showtime.MovieId);
-                Room? room = _rooms.FirstOrDefault(r => r.Id == showtime.RoomId);
-
-                if (movie == null || movie.Status == MovieStatus.Ended)
-                    continue;
-
-                Panel card = CreateShowtimeCard(showtime, movie, room, cardWidth);
+                Panel card = CreateShowtimeCard(showtime, movie, room, standardPrice, cardWidth);
                 flpShowtimeList.Controls.Add(card);
-            }
-
-            if (flpShowtimeList.Controls.Count == 0)
-            {
-                Label lblEmpty = new Label
-                {
-                    Text = "Không tìm thấy thông tin phim cho các suất chiếu.",
-                    ForeColor = ColorTextMuted,
-                    Font = new Font("Segoe UI", 11F),
-                    AutoSize = true,
-                    Margin = new Padding(8, 16, 8, 16)
-                };
-
-                flpShowtimeList.Controls.Add(lblEmpty);
             }
         }
         catch (Exception ex)
@@ -434,13 +364,14 @@ public partial class ShowtimeUC : UserControl
     }
 
     // =========================================
-    // 10. TẠO THẺ SUẤT CHIẾU RESPONSIVE
+    // 8. TẠO THẺ SUẤT CHIẾU RESPONSIVE
     // =========================================
 
     private Panel CreateShowtimeCard(
         Showtime showtime,
         Movie movie,
         Room? room,
+        decimal displayPrice,
         int cardWidth)
     {
         Panel card = new Panel
@@ -538,12 +469,6 @@ public partial class ShowtimeUC : UserControl
             AutoSize = true,
             Margin = new Padding(0, 0, 0, 4)
         };
-
-        decimal displayPrice = _pricingService.CalculatePriceBySeatType(
-            showtime,
-            SeatType.Standard,
-            1.0,
-            _pricingRules);
 
         Label lblInfo = new Label
         {

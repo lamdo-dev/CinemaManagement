@@ -7,7 +7,6 @@ using CinemaManagement.Data;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 using CinemaManagement.Services;
-using CinemaManagement.UserControls.Customer;
 
 namespace CinemaManagement.Repositories
 {
@@ -776,11 +775,7 @@ namespace CinemaManagement.Repositories
                     movieMap.TryGetValue(showtime.MovieId, out movie);
                 }
 
-                var foodCart = new Dictionary<int, (
-                    string Name,
-                    decimal Price,
-                    int Qty,
-                    string ImgPath)>();
+                var foodCart = new Dictionary<int, CartItem>();
 
                 int fallbackKey = -1;
                 foreach (var f in foods)
@@ -788,7 +783,7 @@ namespace CinemaManagement.Repositories
                     int key = f.ProductId > 0 ? f.ProductId : fallbackKey--;
                     if (foodCart.TryGetValue(key, out var existing))
                     {
-                        foodCart[key] = (
+                        foodCart[key] = new CartItem(
                             existing.Name,
                             existing.Price,
                             existing.Qty + f.Quantity,
@@ -796,7 +791,7 @@ namespace CinemaManagement.Repositories
                     }
                     else
                     {
-                        foodCart[key] = (
+                        foodCart[key] = new CartItem(
                             f.ProductName,
                             f.UnitPrice,
                             f.Quantity,

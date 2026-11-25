@@ -46,9 +46,6 @@
         <Compile Update="UserControls\Staff\TicketScannerUC.cs">
             <SubType>UserControl</SubType>
         </Compile>
-        <Compile Update="Forms\Dialogs\ConfirmBookingDialog.cs">
-            <SubType>Form</SubType>
-        </Compile>
         <Compile Update="Forms\Dialogs\MovieEditDialog.cs">
             <SubType>Form</SubType>
         </Compile>

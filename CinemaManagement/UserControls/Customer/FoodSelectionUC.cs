@@ -20,15 +20,14 @@ namespace CinemaManagement.UserControls.Customer
         private readonly Color ColorTextMuted = Color.FromArgb(150, 150, 170);
         private readonly Color ColorControlBg = Color.FromArgb(42, 43, 58);
 
-        private Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)>
-            cartItems = new();
+        private Dictionary<int, CartItem> cartItems = new();
 
         private BookingContext? _bookingContext;
 
         // Service lấy dữ liệu sản phẩm từ SQLite
         private readonly FoodService _foodService = new();
 
-        private Panel pnlHeader = null!;
+        private TableLayoutPanel tlpHeader = null!;
         private Button btnBack = null!;
         private FlowLayoutPanel flpFoodCatalog = null!;
         private Panel pnlCartSummary = null!;
@@ -43,29 +42,23 @@ namespace CinemaManagement.UserControls.Customer
         public decimal TicketTotalAmount { get; set; } = 0m;
 
         public event EventHandler<(
-            Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> foodCart,
+            Dictionary<int, CartItem> foodCart,
             decimal totalFoodAmount)>? OnContinueToCheckout;
 
         public event EventHandler? OnBackClicked;
 
         // Constructor mặc định
-        public FoodSelectionUC() : this(0m)
+        public FoodSelectionUC()
         {
-        }
-
-        // Constructor tương thích code cũ
-        public FoodSelectionUC(decimal ticketTotalAmount)
-        {
-            TicketTotalAmount = ticketTotalAmount;
-
             InitializeComponents();
             LoadFoodCatalog();
             UpdateCartSummaryUI();
         }
 
-        // Constructor dùng BookingContext chung
-        public FoodSelectionUC(BookingContext bookingContext) : this()
+        // Constructor dùng BookingContext chung (không gọi trùng LoadFoodCatalog 2 lần)
+        public FoodSelectionUC(BookingContext bookingContext)
         {
+            InitializeComponents();
             SetBookingContext(bookingContext);
         }
 
@@ -78,12 +71,7 @@ namespace CinemaManagement.UserControls.Customer
             TicketTotalAmount = bookingContext.TicketAmount;
 
             // Khôi phục giỏ hàng đã lưu
-            cartItems = new Dictionary<int, (
-                string Name,
-                decimal Price,
-                int Qty,
-                string ImgPath
-            )>(bookingContext.FoodCart);
+            cartItems = new Dictionary<int, CartItem>(bookingContext.FoodCart);
 
             LoadFoodCatalog();
             UpdateCartSummaryUI();
@@ -95,89 +83,69 @@ namespace CinemaManagement.UserControls.Customer
             BackColor = ColorBg;
 
             // ==========================================
-            // HEADER
+            // HEADER RESPONSIVE (ĐỒNG BỘ 4 BƯỚC)
             // ==========================================
-            pnlHeader = new Panel
+            tlpHeader = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 65,
-                BackColor = Color.FromArgb(14, 15, 22)
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.FromArgb(14, 15, 22),
+                Padding = new Padding(20, 12, 20, 12),
+                Margin = new Padding(0)
             };
+            tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tlpHeader.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             btnBack = new Button
             {
                 Text = "← Quay lại",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(35, 36, 50),
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(100, 32),
-                Location = new Point(20, 15),
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(12, 6, 12, 6),
+                Margin = new Padding(0, 0, 16, 0),
                 Cursor = Cursors.Hand
             };
 
             btnBack.FlatAppearance.BorderSize = 0;
-
+            btnBack.MouseEnter += (s, e) =>
+                btnBack.BackColor = Color.FromArgb(52, 54, 74);
+            btnBack.MouseLeave += (s, e) =>
+                btnBack.BackColor = Color.FromArgb(35, 36, 50);
             btnBack.Click += (s, e) =>
                 OnBackClicked?.Invoke(this, EventArgs.Empty);
 
-            // Stepper
-            Panel pnlStepper = new Panel
+            var flpStepper = new FlowLayoutPanel
             {
-                Size = new Size(500, 40),
-                Location = new Point(320, 12)
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Anchor = AnchorStyles.None,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
             };
 
-            Label lblStep1 = new Label
+            flpStepper.Controls.AddRange(new Control[]
             {
-                Text = "① CHỌN SUẤT",
-                Font = new Font("Segoe UI", 9),
-                ForeColor = ColorTextMuted,
-                Location = new Point(0, 10),
-                AutoSize = true
-            };
-
-            Label lblDiv1 = new Label
-            {
-                Text = "───",
-                ForeColor = ColorTextMuted,
-                Location = new Point(105, 10),
-                AutoSize = true
-            };
-
-            Label lblStep2 = new Label
-            {
-                Text = "② CHỌN GHẾ",
-                Font = new Font("Segoe UI", 9),
-                ForeColor = ColorTextMuted,
-                Location = new Point(145, 10),
-                AutoSize = true
-            };
-
-            Label lblDiv2 = new Label
-            {
-                Text = "───",
-                ForeColor = ColorTextMuted,
-                Location = new Point(245, 10),
-                AutoSize = true
-            };
-
-            Label lblStep3 = new Label
-            {
-                Text = "③ BẮP NƯỚC",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = ColorGold,
-                Location = new Point(285, 10),
-                AutoSize = true
-            };
-
-            pnlStepper.Controls.AddRange(new Control[]
-            {
-                lblStep1, lblDiv1, lblStep2, lblDiv2, lblStep3
+                CreateStepLabel("①  CHỌN SUẤT CHIẾU", false),
+                CreateDividerLabel("────"),
+                CreateStepLabel("②  CHỌN GHẾ", false),
+                CreateDividerLabel("────"),
+                CreateStepLabel("③  BẮP NƯỚC", true),
+                CreateDividerLabel("────"),
+                CreateStepLabel("④  THANH TOÁN", false)
             });
 
-            pnlHeader.Controls.Add(btnBack);
-            pnlHeader.Controls.Add(pnlStepper);
+            tlpHeader.Controls.Add(btnBack, 0, 0);
+            tlpHeader.Controls.Add(flpStepper, 1, 0);
 
             // ==========================================
             // GIỎ HÀNG BÊN PHẢI
@@ -326,7 +294,31 @@ namespace CinemaManagement.UserControls.Customer
 
             Controls.Add(flpFoodCatalog);
             Controls.Add(pnlCartSummary);
-            Controls.Add(pnlHeader);
+            Controls.Add(tlpHeader);
+        }
+
+        private Label CreateStepLabel(string text, bool isActive)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                ForeColor = isActive ? ColorGold : ColorTextMuted,
+                AutoSize = true,
+                Margin = new Padding(4, 6, 4, 6)
+            };
+        }
+
+        private Label CreateDividerLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = Color.FromArgb(70, 72, 95),
+                AutoSize = true,
+                Margin = new Padding(4, 6, 4, 6)
+            };
         }
 
         // ==========================================
@@ -365,7 +357,7 @@ namespace CinemaManagement.UserControls.Customer
 
                     if (currentQty > 0)
                     {
-                        cartItems[product.Id] = (
+                        cartItems[product.Id] = new CartItem(
                             product.Name,
                             product.Price,
                             currentQty,
@@ -634,7 +626,7 @@ namespace CinemaManagement.UserControls.Customer
             }
             else
             {
-                cartItems[id] = (name, price, qty, imgPath);
+                cartItems[id] = new CartItem(name, price, qty, imgPath);
             }
 
             SyncBookingContext();
@@ -749,17 +741,12 @@ namespace CinemaManagement.UserControls.Customer
             }
 
             decimal totalFood = cartItems.Sum(
-                item => item.Value.Price * item.Value.Qty
+                item => item.Value.TotalPrice
             );
 
             SyncBookingContext();
 
-            var foodCartCopy = new Dictionary<int, (
-                string Name,
-                decimal Price,
-                int Qty,
-                string ImgPath
-            )>(cartItems);
+            var foodCartCopy = new Dictionary<int, CartItem>(cartItems);
 
             OnContinueToCheckout?.Invoke(
                 this,
@@ -800,12 +787,7 @@ namespace CinemaManagement.UserControls.Customer
 
             SyncBookingContext();
 
-            var emptyFoodCart = new Dictionary<int, (
-                string Name,
-                decimal Price,
-                int Qty,
-                string ImgPath
-            )>();
+            var emptyFoodCart = new Dictionary<int, CartItem>();
 
             OnContinueToCheckout?.Invoke(
                 this,
