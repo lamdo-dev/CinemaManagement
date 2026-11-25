@@ -106,6 +106,9 @@ internal static class ThemeColorApplicator
             return original;
 
         double luminance = GetLuminance(original);
+        if (isDark && luminance <= 0.82)
+            return Color.FromArgb(203, 213, 225);
+
         if (luminance < 0.36 || luminance > 0.82)
             return isDark
                 ? Color.FromArgb(226, 232, 240)

@@ -319,7 +319,7 @@ namespace CinemaManagement.Utils
         // 8. SCAN TICKET
         // =====================================================
 
-        public static TicketScanResult ScanTicket(string code)
+        public static TicketScanResult ScanTicket(string code, int? expectedShowtimeId = null)
         {
             string normalized = (code ?? string.Empty).Trim();
             var repo = new BookingRepository();
@@ -328,7 +328,7 @@ namespace CinemaManagement.Utils
             {
                 var result = new TicketScanResult
                 {
-                    Code = normalized,
+                    Code = normalized.ToUpperInvariant(),
                     ScanTime = DateTime.Now
                 };
 
@@ -339,55 +339,41 @@ namespace CinemaManagement.Utils
                 }
                 else
                 {
-                    var booking = BookingHistory.LastOrDefault(x =>
-                        string.Equals(
-                            x.BookingCode,
-                            normalized,
-                            StringComparison.OrdinalIgnoreCase));
-
-                    if (booking == null)
-                    {
-                        try
-                        {
-                            booking = repo.GetBookingByCode(normalized);
-                        }
-                        catch
-                        {
-                            booking = null;
-                        }
-                    }
+                    BookingResultEventArgs? booking = repo.GetBookingByCode(normalized);
 
                     result.Booking = booking;
-
-                    bool alreadyCheckedInMemory = CheckedInBookings.TryGetValue(
-                        normalized, out DateTime firstTime);
-
-                    bool alreadyCheckedInDb = false;
-                    if (!alreadyCheckedInMemory && booking != null)
-                    {
-                        try
-                        {
-                            alreadyCheckedInDb = repo.IsBookingCheckedIn(normalized);
-                        }
-                        catch
-                        {
-                            alreadyCheckedInDb = false;
-                        }
-                    }
 
                     if (booking == null)
                     {
                         result.Status = TicketScanStatus.NotFound;
                         result.Message = "Mã vé không tồn tại!";
                     }
-                    else if (alreadyCheckedInMemory || alreadyCheckedInDb)
+                    else if (booking.Seats == null || booking.Seats.Count == 0 || booking.Showtime == null)
+                    {
+                        result.Status = TicketScanStatus.NotFound;
+                        result.Message = "Mã giao dịch này không có vé xem phim.";
+                    }
+                    else if (!string.Equals(booking.PaymentStatus, "PAID", StringComparison.OrdinalIgnoreCase))
+                    {
+                        result.Status = TicketScanStatus.NotFound;
+                        result.Message = "Vé chưa được thanh toán.";
+                    }
+                    else if (expectedShowtimeId.HasValue &&
+                             booking.Showtime.Id != expectedShowtimeId.Value)
+                    {
+                        result.Status = TicketScanStatus.WrongShowtime;
+                        result.Message = "Vé không đúng suất chiếu đang được kiểm tra.";
+                    }
+                    else if (repo.IsBookingCheckedIn(normalized))
                     {
                         result.Status = TicketScanStatus.AlreadyUsed;
-                        result.FirstCheckInTime = alreadyCheckedInMemory ? firstTime : null;
+                        if (!CheckedInBookings.TryGetValue(normalized, out DateTime firstTime))
+                            firstTime = repo.GetBookingCheckInTime(normalized) ?? default;
 
-                        result.Message = alreadyCheckedInMemory
-                            ? $"Vé đã được sử dụng lúc {firstTime:HH:mm:ss dd/MM/yyyy}"
-                            : "Vé đã được soát trước đó.";
+                        result.FirstCheckInTime = firstTime == default ? null : firstTime;
+                        result.Message = firstTime == default
+                            ? "Vé đã được soát trước đó."
+                            : $"Vé đã được sử dụng lúc {firstTime:HH:mm:ss dd/MM/yyyy}";
                     }
                     else if (booking.Showtime != null &&
                              result.ScanTime > booking.Showtime.EndTime)
@@ -398,20 +384,22 @@ namespace CinemaManagement.Utils
                     }
                     else
                     {
-                        CheckedInBookings[normalized] = result.ScanTime;
-
-                        try
+                        if (repo.MarkBookingCheckedIn(normalized))
                         {
-                            repo.MarkBookingCheckedIn(normalized);
+                            CheckedInBookings[normalized] = result.ScanTime;
+                            result.Status = TicketScanStatus.Valid;
+                            result.Message = "Vé hợp lệ. Mời khách vào phòng chiếu.";
                         }
-                        catch
+                        else if (repo.IsBookingCheckedIn(normalized))
                         {
-                            // Đơn POS chỉ lưu trên RAM sẽ không có bản ghi trong SQLite
+                            result.Status = TicketScanStatus.AlreadyUsed;
+                            result.Message = "Vé vừa được soát bởi nhân viên khác.";
                         }
-
-                        result.Status = TicketScanStatus.Valid;
-                        result.Message =
-                            "Vé hợp lệ. Mời khách vào phòng chiếu.";
+                        else
+                        {
+                            result.Status = TicketScanStatus.NotFound;
+                            result.Message = "Vé không còn hợp lệ hoặc đã bị hủy.";
+                        }
                     }
                 }
 
@@ -450,6 +438,7 @@ namespace CinemaManagement.Utils
         Valid,
         AlreadyUsed,
         Expired,
+        WrongShowtime,
         NotFound
     }
 

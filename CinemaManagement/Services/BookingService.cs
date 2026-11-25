@@ -71,6 +71,32 @@ namespace CinemaManagement.Services
         }
 
         /// <summary>
+        /// Lưu giao dịch tại quầy; tài khoản nhân viên không được gán làm khách mua.
+        /// </summary>
+        public long CreatePosBooking(BookingResultEventArgs booking)
+        {
+            if (booking == null)
+                throw new ArgumentNullException(nameof(booking));
+
+            NormalizeBookingTime(booking);
+            booking.Channel = "POS";
+
+            if (booking.Seats != null && booking.Seats.Count > 0)
+            {
+                ValidateBooking(booking);
+                return _bookingRepository.SaveBooking(booking, null);
+            }
+
+            if (booking.FoodCart != null && booking.FoodCart.Count > 0)
+            {
+                return _bookingRepository.SaveFoodOnlyBooking(booking);
+            }
+
+            throw new InvalidOperationException(
+                "Hóa đơn cần có vé hoặc sản phẩm bắp nước.");
+        }
+
+        /// <summary>
         /// Lấy toàn bộ lịch sử đặt vé của tài khoản đang đăng nhập từ SQLite.
         /// Không dùng dữ liệu chung trên RAM để tránh lộ vé giữa các tài khoản.
         /// </summary>

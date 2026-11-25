@@ -480,6 +480,210 @@ namespace CinemaManagement.Repositories
         }
 
         /// <summary>
+        /// Lưu hóa đơn chỉ gồm bắp nước/combo cho giao dịch POS.
+        /// </summary>
+        public long SaveFoodOnlyBooking(BookingResultEventArgs booking)
+        {
+            if (booking == null)
+                throw new ArgumentNullException(nameof(booking));
+
+            if (booking.FoodCart == null || booking.FoodCart.Count == 0)
+                throw new InvalidOperationException(
+                    "Hóa đơn chưa có sản phẩm để lưu.");
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                var productIds = booking.FoodCart.Keys.ToList();
+                var products = connection.Query<Product>(@"
+                    SELECT Id, Name, Category, Price, StockQuantity, ImageUrl, IsActive
+                    FROM Products
+                    WHERE Id IN @ProductIds;
+                ", new { ProductIds = productIds }, transaction)
+                    .ToDictionary(product => product.Id);
+
+                if (products.Count != productIds.Distinct().Count())
+                    throw new InvalidOperationException(
+                        "Một hoặc nhiều sản phẩm không còn trong cơ sở dữ liệu.");
+
+                decimal foodAmount = 0m;
+                foreach (var item in booking.FoodCart)
+                {
+                    if (item.Value.Qty <= 0)
+                        throw new InvalidOperationException(
+                            $"Số lượng sản phẩm {item.Value.Name} không hợp lệ.");
+
+                    if (!products.TryGetValue(item.Key, out Product? product) || !product.IsActive)
+                        throw new InvalidOperationException(
+                            $"Sản phẩm {item.Value.Name} hiện không kinh doanh.");
+
+                    foodAmount += product.Price * item.Value.Qty;
+                }
+
+                long bookingId = connection.ExecuteScalar<long>(@"
+                    INSERT INTO Bookings (
+                        UserId, BookingCode, BookingTime, TotalAmount,
+                        DiscountAmount, FinalAmount, PaymentMethod, PaymentStatus,
+                        BookingStatus, PromotionCode, Channel, CustomerName)
+                    VALUES (
+                        NULL, @BookingCode, @BookingTime, @TotalAmount,
+                        0, @TotalAmount, @PaymentMethod, 'PAID',
+                        'CONFIRMED', '', 'POS', @CustomerName);
+                    SELECT last_insert_rowid();
+                ", new
+                {
+                    booking.BookingCode,
+                    BookingTime = booking.BookingTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                    TotalAmount = foodAmount,
+                    booking.PaymentMethod,
+                    CustomerName = booking.CustomerName ?? "Khách lẻ"
+                }, transaction);
+
+                foreach (var item in booking.FoodCart)
+                {
+                    Product product = products[item.Key];
+                    decimal lineTotal = product.Price * item.Value.Qty;
+
+                    int affectedRows = connection.Execute(@"
+                        UPDATE Products
+                        SET StockQuantity = StockQuantity - @Quantity
+                        WHERE Id = @ProductId
+                          AND IsActive = 1
+                          AND StockQuantity >= @Quantity;
+                    ", new
+                    {
+                        ProductId = product.Id,
+                        Quantity = item.Value.Qty
+                    }, transaction);
+
+                    if (affectedRows != 1)
+                        throw new InvalidOperationException(
+                            $"Sản phẩm {product.Name} vừa hết hoặc không đủ tồn kho.");
+
+                    connection.Execute(@"
+                        INSERT INTO BookingDetailProducts (
+                            BookingId, ProductId, ProductName, Quantity, UnitPrice, TotalPrice)
+                        VALUES (
+                            @BookingId, @ProductId, @ProductName, @Quantity, @UnitPrice, @TotalPrice);
+                    ", new
+                    {
+                        BookingId = bookingId,
+                        ProductId = product.Id,
+                        ProductName = product.Name,
+                        Quantity = item.Value.Qty,
+                        UnitPrice = product.Price,
+                        TotalPrice = lineTotal
+                    }, transaction);
+                }
+
+                transaction.Commit();
+
+                booking.UserId = null;
+                booking.TicketAmount = 0m;
+                booking.FoodAmount = foodAmount;
+                booking.DiscountAmount = 0m;
+                booking.TotalAmount = foodAmount;
+                booking.PaymentStatus = "PAID";
+                booking.Channel = "POS";
+                return bookingId;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Lấy mã các đơn có ít nhất một vé đã được check-in.
+        /// </summary>
+        public HashSet<string> GetCheckedInBookingCodes()
+        {
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            return new HashSet<string>(connection.Query<string>(@"
+                SELECT DISTINCT b.BookingCode
+                FROM Bookings b
+                INNER JOIN Tickets t ON t.BookingId = b.Id
+                WHERE UPPER(t.Status) = 'USED'
+                  AND UPPER(COALESCE(b.PaymentStatus, '')) = 'PAID'
+                  AND UPPER(COALESCE(b.BookingStatus, '')) <> 'CANCELLED';
+            "), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public Dictionary<string, DateTime> GetBookingCheckInTimes()
+        {
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            var rows = connection.Query<BookingCheckInRow>(@"
+                SELECT b.BookingCode, MAX(t.CheckedInAt) AS CheckedInAt
+                FROM Bookings b
+                INNER JOIN Tickets t ON t.BookingId = b.Id
+                WHERE UPPER(t.Status) = 'USED'
+                  AND t.CheckedInAt IS NOT NULL
+                  AND UPPER(COALESCE(b.PaymentStatus, '')) = 'PAID'
+                  AND UPPER(COALESCE(b.BookingStatus, '')) <> 'CANCELLED'
+                GROUP BY b.BookingCode;
+            ");
+
+            var checkInTimes = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            foreach (BookingCheckInRow row in rows)
+            {
+                if (DateTime.TryParse(row.CheckedInAt, out DateTime checkInTime))
+                    checkInTimes[row.BookingCode] = checkInTime;
+            }
+
+            return checkInTimes;
+        }
+
+        public DateTime? GetBookingCheckInTime(string bookingCode)
+        {
+            if (string.IsNullOrWhiteSpace(bookingCode))
+                return null;
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            string? checkedInAt = connection.QueryFirstOrDefault<string>(@"
+                SELECT MAX(t.CheckedInAt)
+                FROM Bookings b
+                INNER JOIN Tickets t ON t.BookingId = b.Id
+                WHERE UPPER(b.BookingCode) = UPPER(@BookingCode)
+                  AND UPPER(t.Status) = 'USED';
+            ", new { BookingCode = bookingCode.Trim() });
+
+            return DateTime.TryParse(checkedInAt, out DateTime checkInTime)
+                ? checkInTime
+                : null;
+        }
+
+        /// <summary>
+        /// Lấy tổng số vé hợp lệ và số vé đã check-in trực tiếp từ SQLite.
+        /// </summary>
+        public (int Total, int CheckedIn) GetTicketCheckInCounts(int? showtimeId = null)
+        {
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            TicketCheckInCountRow row = connection.QuerySingle<TicketCheckInCountRow>(@"
+                SELECT
+                    COUNT(CASE WHEN UPPER(Status) <> 'CANCELLED' THEN 1 END) AS Total,
+                    COUNT(CASE WHEN UPPER(Status) = 'USED' THEN 1 END) AS CheckedIn
+                FROM Tickets t
+                INNER JOIN Bookings b ON b.Id = t.BookingId
+                WHERE UPPER(COALESCE(b.PaymentStatus, '')) = 'PAID'
+                  AND UPPER(COALESCE(b.BookingStatus, '')) <> 'CANCELLED'
+                  AND (@ShowtimeId IS NULL OR t.ShowtimeId = @ShowtimeId);
+            ", new { ShowtimeId = showtimeId });
+            return (row.Total, row.CheckedIn);
+        }
+
+        /// <summary>
         /// Kiểm tra dữ liệu trước khi lưu.
         /// </summary>
         private static void ValidateBooking(
@@ -610,6 +814,13 @@ namespace CinemaManagement.Repositories
             var row = connection.QueryFirstOrDefault<BookingRow>(
                 SelectBookingRowSql + @"
                 WHERE UPPER(b.BookingCode) = UPPER(@BookingCode)
+                  AND UPPER(COALESCE(b.PaymentStatus, '')) = 'PAID'
+                  AND UPPER(COALESCE(b.BookingStatus, '')) <> 'CANCELLED'
+                  AND EXISTS (
+                      SELECT 1 FROM Tickets t
+                      WHERE t.BookingId = b.Id
+                        AND UPPER(t.Status) <> 'CANCELLED'
+                  )
                 LIMIT 1;",
                 new { BookingCode = bookingCode.Trim() });
 
@@ -631,8 +842,12 @@ namespace CinemaManagement.Repositories
             var rows = connection.Query<BookingRow>(
                 SelectBookingRowSql + @"
                 WHERE EXISTS (
-                    SELECT 1 FROM Tickets t WHERE t.BookingId = b.Id
+                    SELECT 1 FROM Tickets t
+                    WHERE t.BookingId = b.Id
+                      AND UPPER(t.Status) <> 'CANCELLED'
                 )
+                  AND UPPER(COALESCE(b.PaymentStatus, '')) = 'PAID'
+                  AND UPPER(COALESCE(b.BookingStatus, '')) <> 'CANCELLED'
                 ORDER BY b.Id DESC;").ToList();
 
             return BuildBookingResults(connection, rows);
@@ -673,10 +888,13 @@ namespace CinemaManagement.Repositories
 
             int affected = connection.Execute(@"
                 UPDATE Tickets
-                SET Status = 'USED'
+                SET Status = 'USED',
+                    CheckedInAt = datetime('now', 'localtime')
                 WHERE BookingId = (
                     SELECT Id FROM Bookings
                     WHERE UPPER(BookingCode) = UPPER(@BookingCode)
+                      AND UPPER(COALESCE(PaymentStatus, '')) = 'PAID'
+                      AND UPPER(COALESCE(BookingStatus, '')) <> 'CANCELLED'
                     LIMIT 1
                 )
                 AND UPPER(Status) IN ('BOOKED', 'CONFIRMED');
@@ -703,6 +921,7 @@ namespace CinemaManagement.Repositories
                     Status
                 FROM Tickets
                 WHERE BookingId IN @BookingIds
+                  AND UPPER(Status) <> 'CANCELLED'
                 ORDER BY Id;
             ", new { BookingIds = bookingIds }).ToList();
 
@@ -871,6 +1090,18 @@ namespace CinemaManagement.Repositories
             public decimal UnitPrice { get; set; }
             public decimal TotalPrice { get; set; }
             public string ImageUrl { get; set; } = string.Empty;
+        }
+
+        private sealed class BookingCheckInRow
+        {
+            public string BookingCode { get; set; } = string.Empty;
+            public string CheckedInAt { get; set; } = string.Empty;
+        }
+
+        private sealed class TicketCheckInCountRow
+        {
+            public int Total { get; set; }
+            public int CheckedIn { get; set; }
         }
     }
 }

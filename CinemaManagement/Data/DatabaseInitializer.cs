@@ -466,6 +466,7 @@ public static class DatabaseInitializer
         ");
 
         MigrateTicketsUniqueConstraintIfNeeded(connection);
+        AddColumnIfNotExists(connection, "Tickets", "CheckedInAt", "TEXT");
     }
 
     /// <summary>

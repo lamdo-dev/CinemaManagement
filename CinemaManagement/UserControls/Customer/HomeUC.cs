@@ -44,6 +44,7 @@ namespace CinemaManagement.UserControls.Customer
         private MovieStatus? _selectedStatusFilter = MovieStatus.Showing;
 
         private bool _layoutReady;
+        private bool _isDarkTheme = true;
 
         // =========================================================
         // 2. EVENTS
@@ -476,6 +477,17 @@ namespace CinemaManagement.UserControls.Customer
             }
         }
 
+        public void SetTheme(bool isDark)
+        {
+            _isDarkTheme = isDark;
+
+            if (flpMovieGrid == null || flpMovieGrid.IsDisposed)
+                return;
+
+            foreach (MovieCardUC card in flpMovieGrid.Controls.OfType<MovieCardUC>())
+                card.SetTheme(isDark);
+        }
+
         // =========================================================
         // 8. DYNAMIC GENRES
         // =========================================================
@@ -612,6 +624,7 @@ namespace CinemaManagement.UserControls.Customer
                 };
 
                 flpMovieGrid.Controls.Add(card);
+                card.SetTheme(_isDarkTheme);
             }
 
             flpMovieGrid.ResumeLayout();
