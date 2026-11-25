@@ -12,6 +12,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using CinemaManagement.Models;
+using CinemaManagement.Services;
 using CinemaManagement.Utils;
 
 public partial class TicketUC : UserControl
@@ -33,6 +34,8 @@ public partial class TicketUC : UserControl
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public BookingResultEventArgs? BookingData { get; private set; }
+
+    private readonly BookingService _bookingService = new();
 
     // =========================================================
     // 3. UI CONTROLS
@@ -71,20 +74,35 @@ public partial class TicketUC : UserControl
     // 5. CONSTRUCTOR
     // =========================================================
 
-    public TicketUC()
+    public TicketUC() : this(loadFromCurrentUser: true)
+    {
+    }
+
+    public TicketUC(BookingResultEventArgs bookingData) : this(loadFromCurrentUser: false)
+    {
+        SetBookingData(bookingData);
+    }
+
+    private TicketUC(bool loadFromCurrentUser)
     {
         InitializeComponents();
 
-        // Chỉ sử dụng LatestBooking khi không truyền dữ liệu
-        if (UserSession.LatestBooking != null)
+        if (loadFromCurrentUser)
         {
-            SetBookingData(UserSession.LatestBooking);
+            try
+            {
+                var latestBooking = _bookingService.GetCurrentUserLatestBooking();
+                if (latestBooking != null)
+                {
+                    SetBookingData(latestBooking);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Không thể tải vé gần nhất: {ex.Message}");
+            }
         }
-    }
-
-    public TicketUC(BookingResultEventArgs bookingData) : this()
-    {
-        SetBookingData(bookingData);
     }
 
     // =========================================================
@@ -650,11 +668,22 @@ public partial class TicketUC : UserControl
                 "🍿 Bắp nước: Không kèm bắp nước";
         }
 
-        // Total
+        // Total & Points
+        string paymentState = string.Equals(
+            BookingData.PaymentStatus,
+            "PENDING",
+            StringComparison.OrdinalIgnoreCase)
+            ? "Chờ thanh toán tại quầy"
+            : "Đã thanh toán";
+
+        string pointsSuffix = BookingData.EarnedPoints > 0
+            ? $"  (+{BookingData.EarnedPoints:N0} điểm)"
+            : string.Empty;
+
         lblTotalAmount.Text =
-            $"💳 Tổng thanh toán: " +
-            $"{BookingData.TotalAmount.ToString(
-                "N0", new CultureInfo("vi-VN"))} đ";
+            $"💳 {paymentState}: " +
+            $"{BookingData.TotalAmount.ToString("N0", new CultureInfo("vi-VN"))} đ" +
+            pointsSuffix;
 
         picQRCode.Invalidate();
     }
@@ -669,10 +698,25 @@ public partial class TicketUC : UserControl
     {
         OnViewHistoryClicked?.Invoke(this, EventArgs.Empty);
 
-        if (UserSession.BookingHistory.Count == 0)
+        List<BookingResultEventArgs> history;
+        try
+        {
+            history = _bookingService.GetCurrentUserBookings();
+        }
+        catch (Exception ex)
         {
             MessageBox.Show(
-                "Bạn chưa có đơn đặt vé nào trong phiên làm việc này.",
+                "Không thể tải lịch sử đặt vé từ cơ sở dữ liệu:\n" + ex.Message,
+                "Lỗi tải lịch sử",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
+        if (history.Count == 0)
+        {
+            MessageBox.Show(
+                "Tài khoản của bạn chưa có đơn đặt vé nào.",
                 "Lịch sử đặt vé",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -683,22 +727,18 @@ public partial class TicketUC : UserControl
         StringBuilder sb = new StringBuilder();
 
         sb.AppendLine(
-            $"LỊCH SỬ ĐẶT VÉ ({UserSession.BookingHistory.Count} đơn):");
+            $"LỊCH SỬ ĐẶT VÉ ({history.Count} đơn):");
 
         sb.AppendLine();
 
-        for (int i = UserSession.BookingHistory.Count - 1;
-             i >= 0;
-             i--)
+        foreach (var booking in history)
         {
-            var booking = UserSession.BookingHistory[i];
-
             sb.AppendLine(
                 $"• [{booking.BookingCode}] " +
                 $"{booking.Movie?.Title ?? "Phim"}");
 
             sb.AppendLine(
-                $"  Suất: {booking.Showtime?.StartTime:HH:mm dd/MM}");
+                $"  Suất: {booking.Showtime?.StartTime:HH:mm dd/MM/yyyy}");
 
             sb.AppendLine(
                 $"  Ghế: {string.Join(", ", booking.Seats)}");

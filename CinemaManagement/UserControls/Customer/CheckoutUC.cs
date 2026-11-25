@@ -51,8 +51,7 @@ public partial class CheckoutUC : UserControl
 
     public List<string> SelectedSeats { get; private set; } = new();
 
-    public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart
-        { get; private set; } = new();
+    public Dictionary<int, CartItem> FoodCart { get; private set; } = new();
 
     private decimal ticketSubTotal;
     private decimal foodSubTotal;
@@ -187,11 +186,7 @@ public partial class CheckoutUC : UserControl
 
         SelectedSeats = context.Seats.ToList();
 
-        FoodCart = new Dictionary<int, (
-            string Name,
-            decimal Price,
-            int Qty,
-            string ImgPath)>(context.FoodCart);
+        FoodCart = new Dictionary<int, CartItem>(context.FoodCart);
 
         ticketSubTotal = context.TicketAmount;
         foodSubTotal = context.FoodAmount;
@@ -206,43 +201,6 @@ public partial class CheckoutUC : UserControl
         UpdateUIWithData();
 
         btnPayNow.Enabled = true;
-    }
-
-    // =========================================================
-    // 7. OLD METHOD - KEEP COMPATIBILITY
-    // =========================================================
-
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public void SetBookingData(
-        Movie movie,
-        Showtime showtime,
-        List<string> seats,
-        decimal ticketTotal,
-        Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> foodCart,
-        decimal foodTotal)
-    {
-        _bookingContext = null;
-
-        MovieData = movie;
-        ShowtimeData = showtime;
-
-        SelectedSeats = seats?.ToList() ?? new List<string>();
-
-        FoodCart = foodCart != null
-            ? new Dictionary<int,
-                (string Name, decimal Price, int Qty, string ImgPath)>(foodCart)
-            : new Dictionary<int,
-                (string Name, decimal Price, int Qty, string ImgPath)>();
-
-        ticketSubTotal = ticketTotal;
-        foodSubTotal = foodTotal;
-
-        discountAmount = 0m;
-        _appliedPromotion = null;
-
-        CalculateTotal();
-        UpdateUIWithData();
     }
 
     private void ClearDisplayData()
@@ -332,7 +290,7 @@ public partial class CheckoutUC : UserControl
 
         Label lblStep1 = new Label
         {
-            Text = "①  CHỌN SUẤT",
+            Text = "①  CHỌN SUẤT CHIẾU",
             Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorTextMuted,
             AutoSize = true,
@@ -341,7 +299,7 @@ public partial class CheckoutUC : UserControl
 
         Label lblDiv1 = new Label
         {
-            Text = "──────",
+            Text = "────",
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.FromArgb(70, 72, 95),
             AutoSize = true,
@@ -359,7 +317,7 @@ public partial class CheckoutUC : UserControl
 
         Label lblDiv2 = new Label
         {
-            Text = "──────",
+            Text = "────",
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.FromArgb(70, 72, 95),
             AutoSize = true,
@@ -368,7 +326,25 @@ public partial class CheckoutUC : UserControl
 
         Label lblStep3 = new Label
         {
-            Text = "③  THANH TOÁN",
+            Text = "③  BẮP NƯỚC",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+            ForeColor = ColorTextMuted,
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
+        };
+
+        Label lblDiv3 = new Label
+        {
+            Text = "────",
+            Font = new Font("Segoe UI", 9F),
+            ForeColor = Color.FromArgb(70, 72, 95),
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
+        };
+
+        Label lblStep4 = new Label
+        {
+            Text = "④  THANH TOÁN",
             Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorGold,
             AutoSize = true,
@@ -377,7 +353,7 @@ public partial class CheckoutUC : UserControl
 
         flpStepper.Controls.AddRange(new Control[]
         {
-            lblStep1, lblDiv1, lblStep2, lblDiv2, lblStep3
+            lblStep1, lblDiv1, lblStep2, lblDiv2, lblStep3, lblDiv3, lblStep4
         });
 
         tlpHeader.Controls.Add(btnBack, 0, 0);
@@ -1283,10 +1259,24 @@ public partial class CheckoutUC : UserControl
 
     private void CalculateTotal()
     {
-        totalAmount =
-            ticketSubTotal +
-            foodSubTotal -
-            discountAmount;
+        decimal orderAmount = ticketSubTotal + foodSubTotal;
+
+        if (_appliedPromotion != null)
+        {
+            try
+            {
+                (_, discountAmount) = PromotionService.CalculateDiscountForPromotion(
+                    _appliedPromotion,
+                    orderAmount);
+            }
+            catch
+            {
+                _appliedPromotion = null;
+                discountAmount = 0m;
+            }
+        }
+
+        totalAmount = orderAmount - discountAmount;
 
         if (totalAmount < 0)
             totalAmount = 0m;
@@ -1408,70 +1398,13 @@ public partial class CheckoutUC : UserControl
 
         try
         {
-            Promotion? promotion = _promotionService.GetAll()
-                .FirstOrDefault(p =>
-                    string.Equals(
-                        p.Code?.Trim(),
-                        code,
-                        StringComparison.OrdinalIgnoreCase));
-
-            if (promotion == null)
-            {
-                ShowCouponError("Mã voucher không tồn tại.");
-                return;
-            }
-
-            if (!promotion.IsEnabled)
-            {
-                ShowCouponError("Voucher hiện đã bị vô hiệu hóa.");
-                return;
-            }
-
-            DateTime today = DateTime.Today;
-            if (today < promotion.StartDate.Date ||
-                today > promotion.EndDate.Date)
-            {
-                ShowCouponError("Voucher chưa đến thời gian áp dụng hoặc đã hết hạn.");
-                return;
-            }
-
             decimal orderAmount = ticketSubTotal + foodSubTotal;
-            if (orderAmount < promotion.MinimumOrder)
-            {
-                ShowCouponError(
-                    $"Đơn hàng cần đạt tối thiểu " +
-                    $"{promotion.MinimumOrder.ToString("N0", ViCulture)} đ.");
-                return;
-            }
-
-            decimal calculatedDiscount;
-            if (promotion.DiscountType == "Phần trăm")
-            {
-                calculatedDiscount = orderAmount * promotion.DiscountValue / 100m;
-
-                if (promotion.MaxDiscount > 0 &&
-                    calculatedDiscount > promotion.MaxDiscount)
-                {
-                    calculatedDiscount = promotion.MaxDiscount;
-                }
-            }
-            else if (promotion.DiscountType == "Số tiền")
-            {
-                calculatedDiscount = promotion.DiscountValue;
-            }
-            else
-            {
-                ShowCouponError("Loại giảm giá của voucher không hợp lệ.");
-                return;
-            }
-
-            calculatedDiscount = Math.Min(calculatedDiscount, orderAmount);
-
-            if (calculatedDiscount <= 0)
-            {
-                ShowCouponError("Voucher không tạo ra giá trị giảm hợp lệ.");
-                return;
-            }
+            int? currentUserId = CinemaManagement.Utils.UserSession.CurrentUser?.Id;
+            var (promotion, calculatedDiscount) =
+                _promotionService.ValidateAndCalculateDiscount(
+                    code,
+                    orderAmount,
+                    currentUserId);
 
             _appliedPromotion = promotion;
             discountAmount = calculatedDiscount;
@@ -1481,6 +1414,10 @@ public partial class CheckoutUC : UserControl
 
             CalculateTotal();
             UpdateUIWithData();
+        }
+        catch (InvalidOperationException ex)
+        {
+            ShowCouponError(ex.Message);
         }
         catch (Exception ex)
         {
@@ -1521,6 +1458,14 @@ public partial class CheckoutUC : UserControl
             return;
         }
 
+        if (ShowtimeData.StartTime <= DateTime.Now)
+        {
+            ShowWarning(
+                "Suất chiếu này đã bắt đầu hoặc đã kết thúc.\n" +
+                "Vui lòng quay lại chọn suất chiếu khác.");
+            return;
+        }
+
         if (SelectedSeats == null || SelectedSeats.Count == 0)
         {
             ShowWarning("Vui lòng chọn ít nhất một ghế.");
@@ -1550,34 +1495,6 @@ public partial class CheckoutUC : UserControl
             foodSubTotal = _bookingContext.FoodAmount;
         }
 
-        if (_selectedPaymentMethod == PaymentMethodType.Card)
-        {
-            if (string.IsNullOrWhiteSpace(txtCardName.Text) ||
-                string.IsNullOrWhiteSpace(txtCardNumber.Text) ||
-                string.IsNullOrWhiteSpace(txtExpiry.Text) ||
-                string.IsNullOrWhiteSpace(txtCVV.Text))
-            {
-                ShowWarning("Vui lòng nhập đầy đủ thông tin Thẻ Quốc Tế / ATM.");
-                return;
-            }
-        }
-        else if (_selectedPaymentMethod == PaymentMethodType.Counter)
-        {
-            string phone = txtCounterPhone.Text.Trim();
-            if (string.IsNullOrWhiteSpace(phone) || phone.Length < 9)
-            {
-                ShowWarning("Vui lòng nhập số điện thoại hợp lệ để nhận mã giữ vé tại quầy.");
-                txtCounterPhone.Focus();
-                return;
-            }
-        }
-
-        if (!chkTerms.Checked)
-        {
-            ShowWarning("Vui lòng tích chọn đồng ý với Điều khoản sử dụng.");
-            return;
-        }
-
         if (ticketSubTotal <= 0)
         {
             ShowWarning("Tổng tiền vé không hợp lệ.");
@@ -1587,9 +1504,36 @@ public partial class CheckoutUC : UserControl
         CalculateTotal();
         UpdateUIWithData();
 
-        if (totalAmount <= 0)
+        // Đơn hàng sau giảm giá luôn phải lớn hơn 0 đ để đảm bảo ngân sách
+        if (totalAmount <= 0m)
         {
-            ShowWarning("Tổng tiền thanh toán không hợp lệ.");
+            ShowWarning("Tổng tiền thanh toán sau giảm giá phải lớn hơn 0 đ.");
+            return;
+        }
+
+        if (_selectedPaymentMethod == PaymentMethodType.Card)
+        {
+            if (!ValidateCardInputs(out string cardError))
+            {
+                ShowWarning(cardError);
+                return;
+            }
+        }
+        else if (_selectedPaymentMethod == PaymentMethodType.Counter)
+        {
+            if (!ValidateCounterPhone(txtCounterPhone.Text, out string normalizedPhone, out string phoneError))
+            {
+                ShowWarning(phoneError);
+                txtCounterPhone.Focus();
+                return;
+            }
+
+            txtCounterPhone.Text = normalizedPhone;
+        }
+
+        if (!chkTerms.Checked)
+        {
+            ShowWarning("Vui lòng tích chọn đồng ý với Điều khoản sử dụng.");
             return;
         }
 
@@ -1627,13 +1571,7 @@ public partial class CheckoutUC : UserControl
                 Movie = MovieData,
                 Showtime = ShowtimeData,
                 Seats = SelectedSeats.ToList(),
-
-                FoodCart = new Dictionary<int, (
-                    string Name,
-                    decimal Price,
-                    int Qty,
-                    string ImgPath)>(FoodCart),
-
+                FoodCart = new Dictionary<int, CartItem>(FoodCart),
                 TicketAmount = ticketSubTotal,
                 FoodAmount = foodSubTotal,
                 TotalAmount = totalAmount,
@@ -1642,6 +1580,9 @@ public partial class CheckoutUC : UserControl
                 BookingTime = DateTime.Now,
                 Channel = _selectedPaymentMethod == PaymentMethodType.Counter ? "Tại quầy (Đặt trước)" : "Online",
                 PaymentMethod = methodDisplayName,
+                PaymentStatus = (_selectedPaymentMethod == PaymentMethodType.Counter && totalAmount > 0m)
+                    ? "PENDING"
+                    : "PAID",
                 CustomerName = _selectedPaymentMethod == PaymentMethodType.Card
                     ? txtCardName.Text.Trim()
                     : (_selectedPaymentMethod == PaymentMethodType.Counter ? $"SĐT: {txtCounterPhone.Text.Trim()}" : string.Empty)
@@ -1651,16 +1592,106 @@ public partial class CheckoutUC : UserControl
         }
         catch (Exception ex)
         {
-            btnPayNow.Enabled = true;
-
             ShowWarning(
                 "Không thể hoàn tất quá trình đặt vé:\n" + ex.Message);
+        }
+        finally
+        {
+            if (!IsDisposed && btnPayNow != null && !btnPayNow.IsDisposed)
+            {
+                btnPayNow.Enabled = true;
+            }
         }
     }
 
     // =========================================================
     // 15. WARNING MESSAGE
     // =========================================================
+
+    private bool ValidateCardInputs(out string errorMessage)
+    {
+        string cardName = txtCardName.Text.Trim();
+        if (cardName.Length < 2 || !cardName.Any(char.IsLetter))
+        {
+            txtCardName.Focus();
+            errorMessage = "Vui lòng nhập tên chủ thẻ hợp lệ (ít nhất 2 ký tự chữ).";
+            return false;
+        }
+
+        string cardNumber = txtCardNumber.Text
+            .Replace(" ", string.Empty)
+            .Replace("-", string.Empty)
+            .Trim();
+
+        if (cardNumber.Length < 13 || cardNumber.Length > 19 || !cardNumber.All(char.IsDigit))
+        {
+            txtCardNumber.Focus();
+            errorMessage = "Số thẻ thanh toán phải gồm từ 13 đến 19 chữ số.";
+            return false;
+        }
+
+        string expiry = txtExpiry.Text.Trim();
+        string[] expParts = expiry.Split('/');
+        if (expParts.Length != 2 ||
+            expParts[0].Length is < 1 or > 2 ||
+            expParts[1].Length != 2 ||
+            !int.TryParse(expParts[0], out int expMonth) ||
+            !int.TryParse(expParts[1], out int expYearTwoDigits) ||
+            expMonth < 1 || expMonth > 12)
+        {
+            txtExpiry.Focus();
+            errorMessage = "Ngày hết hạn thẻ phải đúng định dạng MM/YY (ví dụ: 08/28).";
+            return false;
+        }
+
+        int fullYear = 2000 + expYearTwoDigits;
+        DateTime cardEndOfMonth = new DateTime(fullYear, expMonth, 1).AddMonths(1).AddDays(-1);
+        if (cardEndOfMonth < DateTime.Today)
+        {
+            txtExpiry.Focus();
+            errorMessage = "Thẻ thanh toán đã hết hạn.";
+            return false;
+        }
+
+        string cvv = txtCVV.Text.Trim();
+        if ((cvv.Length != 3 && cvv.Length != 4) || !cvv.All(char.IsDigit))
+        {
+            txtCVV.Focus();
+            errorMessage = "Mã bảo mật CVV/CVC phải gồm 3 hoặc 4 chữ số.";
+            return false;
+        }
+
+        errorMessage = string.Empty;
+        return true;
+    }
+
+    private static bool ValidateCounterPhone(
+        string rawPhone,
+        out string normalizedPhone,
+        out string errorMessage)
+    {
+        string cleaned = (rawPhone ?? string.Empty)
+            .Replace(" ", string.Empty)
+            .Replace("-", string.Empty)
+            .Replace(".", string.Empty)
+            .Trim();
+
+        if (cleaned.StartsWith("+84", StringComparison.Ordinal))
+        {
+            cleaned = "0" + cleaned.Substring(3);
+        }
+
+        if (cleaned.Length < 9 || cleaned.Length > 11 || !cleaned.All(char.IsDigit))
+        {
+            normalizedPhone = string.Empty;
+            errorMessage = "Số điện thoại nhận mã giữ vé phải gồm từ 9 đến 11 chữ số hợp lệ.";
+            return false;
+        }
+
+        normalizedPhone = cleaned;
+        errorMessage = string.Empty;
+        return true;
+    }
 
     private void ShowWarning(string message)
     {
@@ -1670,44 +1701,4 @@ public partial class CheckoutUC : UserControl
             MessageBoxButtons.OK,
             MessageBoxIcon.Warning);
     }
-}
-
-// =============================================================
-// BOOKING RESULT EVENT ARGS
-// =============================================================
-
-public class BookingResultEventArgs : EventArgs
-{
-    public string BookingCode { get; set; } = string.Empty;
-
-    public Movie? Movie { get; set; }
-
-    public Showtime? Showtime { get; set; }
-
-    public List<string> Seats { get; set; } = new();
-
-    public Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> FoodCart
-        { get; set; } = new();
-
-    // Tổng tiền vé trước khi áp dụng khuyến mãi.
-    public decimal TicketAmount { get; set; }
-
-    // Tổng tiền bắp nước.
-    public decimal FoodAmount { get; set; }
-
-    // Tổng tiền khách phải thanh toán sau khi trừ khuyến mãi.
-    public decimal TotalAmount { get; set; }
-
-    public string PromotionCode { get; set; } = string.Empty;
-
-    public decimal DiscountAmount { get; set; }
-
-    public DateTime BookingTime { get; set; }
-
-    // Online hoặc POS
-    public string Channel { get; set; } = "Online";
-
-    public string PaymentMethod { get; set; } = "Thanh toán mô phỏng";
-
-    public string CustomerName { get; set; } = string.Empty;
 }

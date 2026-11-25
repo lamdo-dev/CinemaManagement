@@ -6,6 +6,8 @@ using System.Linq;
 using System.Windows.Forms;
 
 using CinemaManagement.Models;
+using CinemaManagement.Models.Enums;
+using CinemaManagement.Services;
 
 namespace CinemaManagement.UserControls.Common
 {
@@ -42,6 +44,8 @@ namespace CinemaManagement.UserControls.Common
 
         private readonly List<Button> seatButtons = new();
         private readonly List<Label> rowLabels = new();
+        private readonly Font _seatFontNormal = new("Segoe UI", 9f, FontStyle.Bold);
+        private readonly Font _seatFontCompact = new("Segoe UI", 8f, FontStyle.Bold);
         private int matrixRows;
         private int matrixColumns;
 
@@ -49,8 +53,12 @@ namespace CinemaManagement.UserControls.Common
         private readonly Dictionary<string, decimal> seatMultipliers =
             new(StringComparer.OrdinalIgnoreCase);
 
+        // Lưu giá thực tế đã tính cho từng ghế (ưu tiên PricingRules)
+        private readonly Dictionary<string, decimal> seatPrices =
+            new(StringComparer.OrdinalIgnoreCase);
+
         // Giá cơ bản của suất chiếu
-        private decimal basePrice = 90000m;
+        private decimal basePrice = PricingService.DefaultBasePrice;
 
         // ==========================================
         // 3. DỮ LIỆU GHẾ
@@ -67,6 +75,12 @@ namespace CinemaManagement.UserControls.Common
         public SeatMatrixUC()
         {
             InitializeComponents();
+
+            Disposed += (s, e) =>
+            {
+                _seatFontNormal.Dispose();
+                _seatFontCompact.Dispose();
+            };
         }
 
         // ==========================================
@@ -196,8 +210,11 @@ namespace CinemaManagement.UserControls.Common
                     startY + row * (seatHeight + gap),
                     seatWidth, seatHeight);
 
-                button.Font = new Font("Segoe UI",
-                    seatWidth >= 54 ? 9f : 8f, FontStyle.Bold);
+                Font targetFont = seatWidth >= 54 ? _seatFontNormal : _seatFontCompact;
+                if (!ReferenceEquals(button.Font, targetFont))
+                {
+                    button.Font = targetFont;
+                }
                 button.TextAlign = ContentAlignment.MiddleCenter;
                 button.Padding = Padding.Empty;
             }
@@ -220,7 +237,7 @@ namespace CinemaManagement.UserControls.Common
                 rows,
                 cols,
                 extraOccupiedSeats,
-                90000m);
+                PricingService.DefaultBasePrice);
         }
 
         // ==========================================
@@ -237,7 +254,7 @@ namespace CinemaManagement.UserControls.Common
 
             basePrice = ticketBasePrice > 0
                 ? ticketBasePrice
-                : 90000m;
+                : PricingService.DefaultBasePrice;
 
             var previousSelection = new HashSet<string>(
                 SelectedSeatCodes,
@@ -281,6 +298,7 @@ namespace CinemaManagement.UserControls.Common
                     decimal multiplier = GetDefaultMultiplier(r);
 
                     seatMultipliers[seatCode] = multiplier;
+                    seatPrices[seatCode] = Math.Round(basePrice * multiplier, 0);
 
                     Color seatColor = GetSeatColor(multiplier);
 
@@ -294,7 +312,7 @@ namespace CinemaManagement.UserControls.Common
                         MinimumSize = new Size(38, 30),
                         Padding = new Padding(0),
                         Margin = new Padding(0),
-                        Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                        Font = _seatFontCompact,
                         ForeColor = Color.White,
                         TextAlign = ContentAlignment.MiddleCenter,
                         BackColor = isOccupied
@@ -336,7 +354,8 @@ namespace CinemaManagement.UserControls.Common
             int cols,
             IEnumerable<Seat> roomSeats,
             IEnumerable<string>? occupiedSeats,
-            decimal ticketBasePrice)
+            decimal ticketBasePrice,
+            IReadOnlyDictionary<string, decimal>? explicitSeatPrices = null)
         {
             if (roomSeats == null)
             {
@@ -361,7 +380,7 @@ namespace CinemaManagement.UserControls.Common
                     .Select(s => s.SeatNumber.Trim()),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Cập nhật hệ số giá và màu sắc theo dữ liệu thực tế
+            // Cập nhật hệ số giá, giá thực tế và màu sắc theo dữ liệu thực tế
             foreach (Seat seat in seatList)
             {
                 string code = seat.SeatNumber?.Trim() ?? "";
@@ -371,13 +390,22 @@ namespace CinemaManagement.UserControls.Common
                     continue;
                 }
 
-                // PriceMultiplier trong Seat là double.
-                // Dictionary của SeatMatrixUC sử dụng decimal.
                 decimal multiplier = seat.PriceMultiplier > 0
                     ? Convert.ToDecimal(seat.PriceMultiplier)
                     : 1.0m;
 
                 seatMultipliers[code] = multiplier;
+
+                if (explicitSeatPrices != null &&
+                    explicitSeatPrices.TryGetValue(code, out decimal explicitPrice) &&
+                    explicitPrice > 0)
+                {
+                    seatPrices[code] = explicitPrice;
+                }
+                else
+                {
+                    seatPrices[code] = Math.Round(basePrice * multiplier, 0);
+                }
 
                 Button? button = seatButtons.FirstOrDefault(
                     b => string.Equals(
@@ -390,7 +418,7 @@ namespace CinemaManagement.UserControls.Common
                     continue;
                 }
 
-                Color color = GetSeatColor(multiplier);
+                Color color = GetSeatColor(seat.Type, multiplier);
 
                 button.Tag = color;
 
@@ -462,6 +490,7 @@ namespace CinemaManagement.UserControls.Common
             pnlMatrixContainer.AutoScrollPosition = Point.Empty;
 
             seatMultipliers.Clear();
+            seatPrices.Clear();
 
             SelectedSeatCodes.Clear();
         }
@@ -489,6 +518,17 @@ namespace CinemaManagement.UserControls.Common
         // 12. MÀU SẮC THEO HỆ SỐ GIÁ
         // ==========================================
 
+        private static Color GetSeatColor(SeatType seatType, decimal multiplier)
+        {
+            if (seatType == SeatType.Couple)
+                return ColorPlus;
+
+            if (seatType == SeatType.VIP)
+                return ColorVIP;
+
+            return GetSeatColor(multiplier);
+        }
+
         private static Color GetSeatColor(decimal multiplier)
         {
             if (multiplier >= 1.8m)
@@ -515,6 +555,11 @@ namespace CinemaManagement.UserControls.Common
                 return 0m;
             }
 
+            if (seatPrices.TryGetValue(seatCode, out decimal explicitPrice))
+            {
+                return explicitPrice;
+            }
+
             if (!seatMultipliers.TryGetValue(
                 seatCode,
                 out decimal multiplier))
@@ -522,7 +567,7 @@ namespace CinemaManagement.UserControls.Common
                 return 0m;
             }
 
-            return basePrice * multiplier;
+            return Math.Round(basePrice * multiplier, 0);
         }
 
         // ==========================================
