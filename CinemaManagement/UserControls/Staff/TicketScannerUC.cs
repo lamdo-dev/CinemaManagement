@@ -40,6 +40,7 @@ namespace CinemaManagement.UserControls.Staff
         private Label lblPendingEmpty = null!;
         private readonly BookingRepository _bookingRepository = new();
         private readonly List<BookingResultEventArgs> _doorBookings = new();
+        private readonly List<StaffTicketScanLog> _scanLogs = new();
         private readonly HashSet<string> _checkedInCodes = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DateTime> _checkInTimes = new(StringComparer.OrdinalIgnoreCase);
         private readonly System.Windows.Forms.Timer _refreshTimer = new();
@@ -1176,11 +1177,14 @@ namespace CinemaManagement.UserControls.Staff
             try
             {
                 List<BookingResultEventArgs> bookings = _bookingRepository.GetAllTicketBookings();
+                List<StaffTicketScanLog> scanLogs = _bookingRepository.GetRecentTicketScanLogs();
                 HashSet<string> checkedInCodes = _bookingRepository.GetCheckedInBookingCodes();
                 Dictionary<string, DateTime> checkInTimes = _bookingRepository.GetBookingCheckInTimes();
 
                 _doorBookings.Clear();
                 _doorBookings.AddRange(bookings);
+                _scanLogs.Clear();
+                _scanLogs.AddRange(scanLogs);
                 UpdateShowtimeFilterOptions(bookings);
                 _checkedInCodes.Clear();
                 _checkedInCodes.UnionWith(checkedInCodes);
@@ -1189,9 +1193,7 @@ namespace CinemaManagement.UserControls.Staff
                     _checkInTimes[checkInTime.Key] = checkInTime.Value;
                 int? showtimeId = SelectedShowtimeId;
                 var counts = _bookingRepository.GetTicketCheckInCounts(showtimeId);
-                _rejectedCount = UserSession.ScanLogs.Count(log =>
-                    !log.IsValid &&
-                    (!showtimeId.HasValue || log.Booking?.Showtime?.Id == showtimeId.Value));
+                _rejectedCount = _bookingRepository.GetRejectedTicketScanCount(showtimeId);
 
                 _kpiValues[0].Text = counts.Total.ToString("N0", VN);
                 _kpiValues[1].Text = counts.CheckedIn.ToString("N0", VN);
@@ -1211,6 +1213,7 @@ namespace CinemaManagement.UserControls.Staff
             catch (Exception ex)
             {
                 _doorBookings.Clear();
+                _scanLogs.Clear();
                 _checkedInCodes.Clear();
                 _checkInTimes.Clear();
                 foreach (Label value in _kpiValues)
@@ -1317,11 +1320,11 @@ namespace CinemaManagement.UserControls.Staff
                         : booking.CustomerName;
                     string checkInTime = _checkInTimes.TryGetValue(booking.BookingCode, out DateTime recordedTime)
                         ? recordedTime.ToString("HH:mm")
-                        : UserSession.ScanLogs
-                            .LastOrDefault(log => log.Status == TicketScanStatus.Valid &&
-                                                  string.Equals(log.Code, booking.BookingCode,
+                        : _scanLogs
+                            .LastOrDefault(log => log.ScanStatus == nameof(TicketScanStatus.Valid) &&
+                                                  string.Equals(log.BookingCode, booking.BookingCode,
                                                       StringComparison.OrdinalIgnoreCase))?
-                            .ScanTime.ToString("HH:mm") ?? "—";
+                            .ScannedAt.ToString("HH:mm") ?? "—";
 
                     if (!MatchesSearch(query, booking.BookingCode, customer, movie, seats))
                         continue;
@@ -1342,33 +1345,31 @@ namespace CinemaManagement.UserControls.Staff
 
             if (filter == "Tất cả" || filter == "Bị từ chối")
             {
-                foreach (TicketScanResult log in UserSession.ScanLogs.AsEnumerable().Reverse()
-                             .Where(scan => !scan.IsValid))
+                foreach (StaffTicketScanLog log in _scanLogs
+                             .Where(scan => !string.Equals(
+                                 scan.ScanStatus,
+                                 nameof(TicketScanStatus.Valid),
+                                 StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (showtimeId.HasValue && log.Booking?.Showtime?.Id != showtimeId.Value)
+                    if (showtimeId.HasValue && log.ShowtimeId != showtimeId.Value)
                         continue;
-                    string movie = log.Booking?.Movie?.Title ?? "—";
-                    string seats = log.Booking?.Seats != null && log.Booking.Seats.Count > 0
-                        ? string.Join(", ", log.Booking.Seats)
+                    string movie = log.MovieTitle;
+                    string seats = log.SeatNumbers;
+                    string customer = log.CustomerName;
+                    string showtime = DateTime.TryParse(log.ShowtimeStartTime, out DateTime startTime)
+                        ? startTime.ToString("HH:mm")
                         : "—";
-                    string customer = log.Booking?.CustomerName ?? "—";
-                    string status = log.Status switch
-                    {
-                        TicketScanStatus.AlreadyUsed => "TỪ CHỐI · ĐÃ DÙNG",
-                        TicketScanStatus.WrongShowtime => "TỪ CHỐI · SAI SUẤT",
-                        TicketScanStatus.Expired => "TỪ CHỐI · HẾT SUẤT",
-                        _ => "TỪ CHỐI · KHÔNG HỢP LỆ"
-                    };
+                    string status = GetScanStatusText(log.ScanStatus);
 
-                    if (!MatchesSearch(query, log.Code, customer, movie, seats))
+                    if (!MatchesSearch(query, log.BookingCode, customer, movie, seats, log.StaffName))
                         continue;
 
                     int rowIndex = dgvLogs.Rows.Add(
-                        log.Code,
+                        log.BookingCode,
                         customer,
-                        movie,
+                        $"{movie} · {showtime}",
                         seats,
-                        log.ScanTime.ToString("HH:mm"),
+                        log.ScannedAt.ToString("HH:mm"),
                         status);
                     dgvLogs.Rows[rowIndex].Tag = log;
                     dgvLogs.Rows[rowIndex].Cells["colStatus"].Style.ForeColor = ColorError;
@@ -1380,6 +1381,17 @@ namespace CinemaManagement.UserControls.Staff
         {
             return string.IsNullOrWhiteSpace(query) || values.Any(value =>
                 value.Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string GetScanStatusText(string status)
+        {
+            return status switch
+            {
+                nameof(TicketScanStatus.AlreadyUsed) => "TỪ CHỐI · ĐÃ DÙNG",
+                nameof(TicketScanStatus.WrongShowtime) => "TỪ CHỐI · SAI SUẤT",
+                nameof(TicketScanStatus.Expired) => "TỪ CHỐI · HẾT SUẤT",
+                _ => "TỪ CHỐI · KHÔNG HỢP LỆ"
+            };
         }
 
         private void DoorList_CellClick(object? sender, DataGridViewCellEventArgs e)
@@ -1401,11 +1413,32 @@ namespace CinemaManagement.UserControls.Staff
                 string details = BuildDetail(booking);
                 if (_checkInTimes.TryGetValue(booking.BookingCode, out DateTime checkInTime))
                     details += $"\nCHECK-IN LÚC: {checkInTime:HH:mm:ss dd/MM/yyyy}";
+                StaffTicketScanLog? checkInLog = _scanLogs.LastOrDefault(log =>
+                    log.ScanStatus == nameof(TicketScanStatus.Valid) &&
+                    string.Equals(log.BookingCode, booking.BookingCode,
+                        StringComparison.OrdinalIgnoreCase));
+                if (checkInLog != null)
+                    details += $"\nNHÂN VIÊN SOÁT: {checkInLog.StaffName}";
                 lblTicketDetail.Text = details;
             }
             else if (item is TicketScanResult result)
             {
                 ShowResult(result);
+            }
+            else if (item is StaffTicketScanLog scanLog)
+            {
+                lblStatus.Text = GetScanStatusText(scanLog.ScanStatus);
+                lblStatus.ForeColor = ColorError;
+                pnlStatusBar.BackColor = Color.FromArgb(254, 242, 242);
+                lblTicketDetail.Text =
+                    $"MÃ VÉ: {scanLog.BookingCode}\n" +
+                    $"KHÁCH HÀNG: {scanLog.CustomerName}\n" +
+                    $"PHIM: {scanLog.MovieTitle}\n" +
+                    $"SUẤT CHIẾU: {scanLog.ShowtimeStartTime}\n" +
+                    $"GHẾ: {scanLog.SeatNumbers}\n" +
+                    $"NHÂN VIÊN: {scanLog.StaffName}\n" +
+                    $"THỜI GIAN: {scanLog.ScannedAt:HH:mm:ss dd/MM/yyyy}\n\n" +
+                    scanLog.Message;
             }
         }
 

@@ -321,6 +321,15 @@ namespace CinemaManagement.Utils
 
         public static TicketScanResult ScanTicket(string code, int? expectedShowtimeId = null)
         {
+            User? currentUser = CurrentUser;
+            if (currentUser == null || currentUser.Id <= 0 ||
+                (currentUser.Role != UserRole.Staff && currentUser.Role != UserRole.Admin))
+            {
+                throw new InvalidOperationException(
+                    "Chỉ nhân viên hoặc quản trị viên mới được soát vé.");
+            }
+
+            int staffUserId = currentUser.Id;
             string normalized = (code ?? string.Empty).Trim();
             var repo = new BookingRepository();
 
@@ -384,7 +393,7 @@ namespace CinemaManagement.Utils
                     }
                     else
                     {
-                        if (repo.MarkBookingCheckedIn(normalized))
+                        if (repo.MarkBookingCheckedIn(normalized, staffUserId, result.ScanTime))
                         {
                             CheckedInBookings[normalized] = result.ScanTime;
                             result.Status = TicketScanStatus.Valid;
@@ -402,6 +411,9 @@ namespace CinemaManagement.Utils
                         }
                     }
                 }
+
+                if (result.Status != TicketScanStatus.Valid)
+                    repo.SaveTicketScanLog(result, staffUserId);
 
                 ScanLogs.Add(result);
 

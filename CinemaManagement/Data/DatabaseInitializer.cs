@@ -26,6 +26,7 @@ public static class DatabaseInitializer
         // Các bảng đặt vé
         CreateBookingsTable(connection);
         CreateTicketsTable(connection);
+        CreateStaffTicketScanLogsTable(connection);
         CreateBookingDetailProductsTable(connection);
 
         // Quản lý giá vé và khuyến mãi
@@ -394,6 +395,7 @@ public static class DatabaseInitializer
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
 
                 UserId INTEGER NULL,
+                StaffUserId INTEGER NULL,
                 BookingCode TEXT NOT NULL UNIQUE,
 
                 BookingTime TEXT NOT NULL DEFAULT
@@ -413,6 +415,10 @@ public static class DatabaseInitializer
 
                 FOREIGN KEY (UserId)
                     REFERENCES Users(Id)
+                    ON DELETE SET NULL,
+
+                FOREIGN KEY (StaffUserId)
+                    REFERENCES Users(Id)
                     ON DELETE SET NULL
             );
         ");
@@ -428,6 +434,12 @@ public static class DatabaseInitializer
             "Bookings",
             "CustomerName",
             "TEXT DEFAULT ''");
+
+        AddColumnIfNotExists(
+            connection,
+            "Bookings",
+            "StaffUserId",
+            "INTEGER NULL REFERENCES Users(Id) ON DELETE SET NULL");
     }
 
     // =========================================
@@ -449,6 +461,8 @@ public static class DatabaseInitializer
 
                 Price NUMERIC NOT NULL DEFAULT 0,
                 Status TEXT NOT NULL DEFAULT 'BOOKED',
+                CheckedInByUserId INTEGER NULL,
+                CheckedInAt TEXT,
 
                 CreatedAt TEXT NOT NULL DEFAULT
                     (datetime('now', 'localtime')),
@@ -461,12 +475,42 @@ public static class DatabaseInitializer
                     REFERENCES Showtimes(Id),
 
                 FOREIGN KEY (SeatId)
-                    REFERENCES Seats(Id)
+                    REFERENCES Seats(Id),
+
+                FOREIGN KEY (CheckedInByUserId)
+                    REFERENCES Users(Id)
+                    ON DELETE SET NULL
             );
         ");
 
         MigrateTicketsUniqueConstraintIfNeeded(connection);
         AddColumnIfNotExists(connection, "Tickets", "CheckedInAt", "TEXT");
+        AddColumnIfNotExists(
+            connection,
+            "Tickets",
+            "CheckedInByUserId",
+            "INTEGER NULL REFERENCES Users(Id) ON DELETE SET NULL");
+    }
+
+    private static void CreateStaffTicketScanLogsTable(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS StaffTicketScanLogs (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                StaffUserId INTEGER NULL,
+                BookingId INTEGER NULL,
+                BookingCode TEXT NOT NULL DEFAULT '',
+                ScanStatus TEXT NOT NULL,
+                Message TEXT NOT NULL DEFAULT '',
+                ScannedAt TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (StaffUserId)
+                    REFERENCES Users(Id)
+                    ON DELETE SET NULL,
+                FOREIGN KEY (BookingId)
+                    REFERENCES Bookings(Id)
+                    ON DELETE SET NULL
+            );
+        ");
     }
 
     /// <summary>
@@ -490,6 +534,13 @@ public static class DatabaseInitializer
         if (!hasTableLevelSeatUnique)
             return;
 
+        string checkedInAtExpression = ColumnExists(connection, "Tickets", "CheckedInAt")
+            ? "CheckedInAt"
+            : "NULL";
+        string checkedInByExpression = ColumnExists(connection, "Tickets", "CheckedInByUserId")
+            ? "CheckedInByUserId"
+            : "NULL";
+
         connection.Execute("PRAGMA foreign_keys = OFF;");
         try
         {
@@ -505,19 +556,24 @@ public static class DatabaseInitializer
                     SeatNumber TEXT NOT NULL,
                     Price NUMERIC NOT NULL DEFAULT 0,
                     Status TEXT NOT NULL DEFAULT 'BOOKED',
+                    CheckedInByUserId INTEGER NULL,
+                    CheckedInAt TEXT,
                     CreatedAt TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
                     FOREIGN KEY (BookingId) REFERENCES Bookings(Id) ON DELETE CASCADE,
                     FOREIGN KEY (ShowtimeId) REFERENCES Showtimes(Id),
-                    FOREIGN KEY (SeatId) REFERENCES Seats(Id)
+                    FOREIGN KEY (SeatId) REFERENCES Seats(Id),
+                    FOREIGN KEY (CheckedInByUserId) REFERENCES Users(Id) ON DELETE SET NULL
                 );
 
                 INSERT INTO Tickets_new (
                     Id, BookingId, ShowtimeId, SeatId,
-                    TicketCode, SeatNumber, Price, Status, CreatedAt
+                    TicketCode, SeatNumber, Price, Status,
+                    CheckedInByUserId, CheckedInAt, CreatedAt
                 )
                 SELECT
                     Id, BookingId, ShowtimeId, SeatId,
-                    TicketCode, SeatNumber, Price, Status, CreatedAt
+                    TicketCode, SeatNumber, Price, Status,
+                    {checkedInByExpression}, {checkedInAtExpression}, CreatedAt
                 FROM Tickets;
 
                 DROP TABLE Tickets;
@@ -618,6 +674,9 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS IX_Bookings_UserId_PromotionCode
             ON Bookings(UserId, PromotionCode);
 
+            CREATE INDEX IF NOT EXISTS IX_Bookings_StaffUserId
+            ON Bookings(StaffUserId);
+
             CREATE INDEX IF NOT EXISTS IX_Bookings_BookingTime
             ON Bookings(BookingTime);
 
@@ -626,6 +685,12 @@ public static class DatabaseInitializer
 
             CREATE INDEX IF NOT EXISTS IX_Tickets_ShowtimeId
             ON Tickets(ShowtimeId);
+
+            CREATE INDEX IF NOT EXISTS IX_Tickets_CheckedInByUserId
+            ON Tickets(CheckedInByUserId);
+
+            CREATE INDEX IF NOT EXISTS IX_StaffTicketScanLogs_ScannedAt
+            ON StaffTicketScanLogs(ScannedAt);
 
             CREATE UNIQUE INDEX IF NOT EXISTS UX_Tickets_ActiveShowtimeSeat
             ON Tickets(ShowtimeId, SeatId)
@@ -646,11 +711,22 @@ public static class DatabaseInitializer
         string column,
         string type)
     {
+        if (ColumnExists(connection, table, column))
+            return;
+
+        using var alterCommand = connection.CreateCommand();
+        alterCommand.CommandText =
+            $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {type};";
+        alterCommand.ExecuteNonQuery();
+    }
+
+    private static bool ColumnExists(
+        SqliteConnection connection,
+        string table,
+        string column)
+    {
         using var command = connection.CreateCommand();
-
         command.CommandText = $"PRAGMA table_info(\"{table}\");";
-
-        bool columnExists = false;
 
         using (var reader = command.ExecuteReader())
         {
@@ -663,20 +739,11 @@ public static class DatabaseInitializer
                     column,
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    columnExists = true;
-                    break;
+                    return true;
                 }
             }
         }
 
-        if (!columnExists)
-        {
-            using var alterCommand = connection.CreateCommand();
-
-            alterCommand.CommandText =
-                $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {type};";
-
-            alterCommand.ExecuteNonQuery();
-        }
+        return false;
     }
 }

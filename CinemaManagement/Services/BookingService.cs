@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using CinemaManagement.Models;
+using CinemaManagement.Models.Enums;
 using CinemaManagement.Repositories;
 using CinemaManagement.Utils;
 
@@ -78,18 +79,26 @@ namespace CinemaManagement.Services
             if (booking == null)
                 throw new ArgumentNullException(nameof(booking));
 
+            User? staffUser = UserSession.CurrentUser;
+            if (staffUser == null || staffUser.Id <= 0 ||
+                (staffUser.Role != UserRole.Staff && staffUser.Role != UserRole.Admin))
+            {
+                throw new InvalidOperationException(
+                    "Vui lòng đăng nhập bằng tài khoản nhân viên hoặc quản trị viên để bán hàng.");
+            }
+
             NormalizeBookingTime(booking);
             booking.Channel = "POS";
 
             if (booking.Seats != null && booking.Seats.Count > 0)
             {
                 ValidateBooking(booking);
-                return _bookingRepository.SaveBooking(booking, null);
+                return _bookingRepository.SaveBooking(booking, null, staffUser.Id);
             }
 
             if (booking.FoodCart != null && booking.FoodCart.Count > 0)
             {
-                return _bookingRepository.SaveFoodOnlyBooking(booking);
+                return _bookingRepository.SaveFoodOnlyBooking(booking, staffUser.Id);
             }
 
             throw new InvalidOperationException(

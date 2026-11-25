@@ -7,6 +7,7 @@ using CinemaManagement.Data;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 using CinemaManagement.Services;
+using CinemaManagement.Utils;
 
 namespace CinemaManagement.Repositories
 {
@@ -18,7 +19,8 @@ namespace CinemaManagement.Repositories
         /// </summary>
         public long SaveBooking(
             BookingResultEventArgs booking,
-            int? userId = null)
+            int? userId = null,
+            int? staffUserId = null)
         {
             if (booking == null)
                 throw new ArgumentNullException(nameof(booking));
@@ -32,6 +34,9 @@ namespace CinemaManagement.Repositories
 
             try
             {
+                if (staffUserId.HasValue)
+                    ValidateStaffUser(connection, transaction, staffUserId.Value);
+
                 // 1. Kiểm tra suất chiếu
                 var showtime = connection.QueryFirstOrDefault<Showtime>(@"
                     SELECT Id, MovieId, RoomId, StartTime, EndTime,
@@ -288,6 +293,7 @@ namespace CinemaManagement.Repositories
                 long bookingId = connection.ExecuteScalar<long>(@"
                     INSERT INTO Bookings (
                         UserId,
+                        StaffUserId,
                         BookingCode,
                         BookingTime,
                         TotalAmount,
@@ -302,6 +308,7 @@ namespace CinemaManagement.Repositories
                     )
                     VALUES (
                         @UserId,
+                        @StaffUserId,
                         @BookingCode,
                         @BookingTime,
                         @TotalAmount,
@@ -320,6 +327,7 @@ namespace CinemaManagement.Repositories
                 new
                 {
                     UserId = userId,
+                    StaffUserId = staffUserId,
                     BookingCode = booking.BookingCode,
                     BookingTime = booking.BookingTime == default
                         ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
@@ -482,7 +490,9 @@ namespace CinemaManagement.Repositories
         /// <summary>
         /// Lưu hóa đơn chỉ gồm bắp nước/combo cho giao dịch POS.
         /// </summary>
-        public long SaveFoodOnlyBooking(BookingResultEventArgs booking)
+        public long SaveFoodOnlyBooking(
+            BookingResultEventArgs booking,
+            int staffUserId)
         {
             if (booking == null)
                 throw new ArgumentNullException(nameof(booking));
@@ -497,6 +507,8 @@ namespace CinemaManagement.Repositories
 
             try
             {
+                ValidateStaffUser(connection, transaction, staffUserId);
+
                 var productIds = booking.FoodCart.Keys.ToList();
                 var products = connection.Query<Product>(@"
                     SELECT Id, Name, Category, Price, StockQuantity, ImageUrl, IsActive
@@ -525,11 +537,11 @@ namespace CinemaManagement.Repositories
 
                 long bookingId = connection.ExecuteScalar<long>(@"
                     INSERT INTO Bookings (
-                        UserId, BookingCode, BookingTime, TotalAmount,
+                        UserId, StaffUserId, BookingCode, BookingTime, TotalAmount,
                         DiscountAmount, FinalAmount, PaymentMethod, PaymentStatus,
                         BookingStatus, PromotionCode, Channel, CustomerName)
                     VALUES (
-                        NULL, @BookingCode, @BookingTime, @TotalAmount,
+                        NULL, @StaffUserId, @BookingCode, @BookingTime, @TotalAmount,
                         0, @TotalAmount, @PaymentMethod, 'PAID',
                         'CONFIRMED', '', 'POS', @CustomerName);
                     SELECT last_insert_rowid();
@@ -538,6 +550,7 @@ namespace CinemaManagement.Repositories
                     booking.BookingCode,
                     BookingTime = booking.BookingTime.ToString("yyyy-MM-dd HH:mm:ss"),
                     TotalAmount = foodAmount,
+                    StaffUserId = staffUserId,
                     booking.PaymentMethod,
                     CustomerName = booking.CustomerName ?? "Khách lẻ"
                 }, transaction);
@@ -660,6 +673,83 @@ namespace CinemaManagement.Repositories
             return DateTime.TryParse(checkedInAt, out DateTime checkInTime)
                 ? checkInTime
                 : null;
+        }
+
+        public void SaveTicketScanLog(TicketScanResult result, int staffUserId)
+        {
+            if (result == null)
+                throw new ArgumentNullException(nameof(result));
+
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+            ValidateStaffUser(connection, null, staffUserId);
+
+            connection.Execute(@"
+                INSERT INTO StaffTicketScanLogs (
+                    StaffUserId, BookingId, BookingCode, ScanStatus, Message, ScannedAt)
+                VALUES (
+                    @StaffUserId,
+                    (SELECT Id FROM Bookings
+                     WHERE UPPER(BookingCode) = UPPER(@BookingCode)
+                     LIMIT 1),
+                    @BookingCode, @ScanStatus, @Message, @ScannedAt);
+            ", new
+            {
+                StaffUserId = staffUserId,
+                BookingCode = result.Code,
+                ScanStatus = result.Status.ToString(),
+                result.Message,
+                ScannedAt = result.ScanTime.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            });
+        }
+
+        public List<StaffTicketScanLog> GetRecentTicketScanLogs(int limit = 100)
+        {
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            return connection.Query<StaffTicketScanLog>(@"
+                SELECT
+                    l.Id,
+                    l.BookingCode,
+                    l.ScanStatus,
+                    l.Message,
+                    l.ScannedAt,
+                    st.Id AS ShowtimeId,
+                    COALESCE(NULLIF(b.CustomerName, ''), customer.FullName, 'Khách lẻ') AS CustomerName,
+                    COALESCE(m.Title, '—') AS MovieTitle,
+                    COALESCE(st.StartTime, '') AS ShowtimeStartTime,
+                    COALESCE(GROUP_CONCAT(t.SeatNumber, ', '), '—') AS SeatNumbers,
+                    COALESCE(staff.FullName, 'Không rõ') AS StaffName
+                FROM StaffTicketScanLogs l
+                LEFT JOIN Bookings b ON b.Id = l.BookingId
+                LEFT JOIN Users customer ON customer.Id = b.UserId
+                LEFT JOIN Users staff ON staff.Id = l.StaffUserId
+                LEFT JOIN Tickets t ON t.BookingId = b.Id
+                LEFT JOIN Showtimes st ON st.Id = t.ShowtimeId
+                LEFT JOIN Movies m ON m.Id = st.MovieId
+                GROUP BY l.Id
+                ORDER BY l.Id DESC
+                LIMIT @Limit;
+            ", new { Limit = Math.Clamp(limit, 1, 1000) }).ToList();
+        }
+
+        public int GetRejectedTicketScanCount(int? showtimeId = null)
+        {
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+
+            return connection.ExecuteScalar<int>(@"
+                SELECT COUNT(1)
+                FROM StaffTicketScanLogs l
+                WHERE UPPER(l.ScanStatus) <> 'VALID'
+                  AND (@ShowtimeId IS NULL OR EXISTS (
+                      SELECT 1
+                      FROM Tickets t
+                      WHERE t.BookingId = l.BookingId
+                        AND t.ShowtimeId = @ShowtimeId
+                  ));
+            ", new { ShowtimeId = showtimeId });
         }
 
         /// <summary>
@@ -878,29 +968,93 @@ namespace CinemaManagement.Repositories
         /// <summary>
         /// Đánh dấu các vé thuộc đơn đã được soát (USED) trong SQLite.
         /// </summary>
-        public bool MarkBookingCheckedIn(string bookingCode)
+        public bool MarkBookingCheckedIn(
+            string bookingCode,
+            int staffUserId,
+            DateTime scanTime)
         {
             if (string.IsNullOrWhiteSpace(bookingCode))
                 return false;
 
             using var connection = DatabaseConnection.GetConnection();
             connection.Open();
+            using var transaction = connection.BeginTransaction();
 
-            int affected = connection.Execute(@"
-                UPDATE Tickets
-                SET Status = 'USED',
-                    CheckedInAt = datetime('now', 'localtime')
-                WHERE BookingId = (
-                    SELECT Id FROM Bookings
-                    WHERE UPPER(BookingCode) = UPPER(@BookingCode)
-                      AND UPPER(COALESCE(PaymentStatus, '')) = 'PAID'
-                      AND UPPER(COALESCE(BookingStatus, '')) <> 'CANCELLED'
-                    LIMIT 1
-                )
-                AND UPPER(Status) IN ('BOOKED', 'CONFIRMED');
-            ", new { BookingCode = bookingCode.Trim() });
+            try
+            {
+                ValidateStaffUser(connection, transaction, staffUserId);
 
-            return affected > 0;
+                int affected = connection.Execute(@"
+                    UPDATE Tickets
+                    SET Status = 'USED',
+                        CheckedInAt = @CheckedInAt,
+                        CheckedInByUserId = @StaffUserId
+                    WHERE BookingId = (
+                        SELECT Id FROM Bookings
+                        WHERE UPPER(BookingCode) = UPPER(@BookingCode)
+                          AND UPPER(COALESCE(PaymentStatus, '')) = 'PAID'
+                          AND UPPER(COALESCE(BookingStatus, '')) <> 'CANCELLED'
+                        LIMIT 1
+                    )
+                    AND UPPER(Status) IN ('BOOKED', 'CONFIRMED');
+                ", new
+                {
+                    BookingCode = bookingCode.Trim(),
+                    StaffUserId = staffUserId,
+                    CheckedInAt = scanTime.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                }, transaction);
+
+                if (affected > 0)
+                {
+                    connection.Execute(@"
+                        INSERT INTO StaffTicketScanLogs (
+                            StaffUserId, BookingId, BookingCode, ScanStatus, Message, ScannedAt)
+                        SELECT @StaffUserId, Id, BookingCode, 'Valid',
+                               'Vé hợp lệ. Mời khách vào phòng chiếu.', @ScannedAt
+                        FROM Bookings
+                        WHERE UPPER(BookingCode) = UPPER(@BookingCode)
+                        LIMIT 1;
+                    ", new
+                    {
+                        StaffUserId = staffUserId,
+                        BookingCode = bookingCode.Trim(),
+                        ScannedAt = scanTime.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                    }, transaction);
+                }
+
+                transaction.Commit();
+                return affected > 0;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        private static void ValidateStaffUser(
+            SqliteConnection connection,
+            SqliteTransaction? transaction,
+            int staffUserId)
+        {
+            if (staffUserId <= 0)
+                throw new InvalidOperationException("Tài khoản nhân viên không hợp lệ.");
+
+            bool isStaff = connection.ExecuteScalar<bool>(@"
+                SELECT EXISTS(
+                    SELECT 1 FROM Users
+                    WHERE Id = @StaffUserId
+                      AND Role IN @AllowedRoles
+                );
+            ", new
+            {
+                StaffUserId = staffUserId,
+                AllowedRoles = new[] { (int)UserRole.Admin, (int)UserRole.Staff }
+            }, transaction);
+
+            if (!isStaff)
+                throw new InvalidOperationException(
+                    "Chỉ tài khoản nhân viên hoặc quản trị viên mới được thực hiện thao tác này.");
         }
 
         private static List<BookingResultEventArgs> BuildBookingResults(
