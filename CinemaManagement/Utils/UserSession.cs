@@ -5,7 +5,6 @@ using System.Linq;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 using CinemaManagement.Repositories;
-using CinemaManagement.UserControls.Customer;
 
 namespace CinemaManagement.Utils
 {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
@@ -8,6 +7,8 @@ using System.Linq;
 using System.Reflection;
 using System.Windows.Forms;
 using CinemaManagement.Data;
+using CinemaManagement.Utils;
+using Dapper;
 
 namespace CinemaManagement.UserControls.Admin;
 
@@ -17,18 +18,32 @@ public partial class DashboardUC : UserControl
     // =========================================================
     // 1. PREMIUM NEON THEME PALETTE
     // =========================================================
-    private readonly Color ColBgMain        = Color.FromArgb(11, 16, 32);   // #0B1020
-    private readonly Color ColCardBg        = Color.FromArgb(21, 29, 48);   // #151D30
-    private readonly Color ColCardElevated  = Color.FromArgb(27, 38, 59);   // #1B263B
-    private readonly Color ColCardBorder    = Color.FromArgb(42, 56, 86);
-    private readonly Color ColNeonCyan      = Color.FromArgb(0, 245, 212);
-    private readonly Color ColElectricBlue  = Color.FromArgb(59, 130, 246);
-    private readonly Color ColNeonPurple    = Color.FromArgb(168, 85, 247);
-    private readonly Color ColEmerald       = Color.FromArgb(16, 185, 129);
-    private readonly Color ColAmber         = Color.FromArgb(245, 158, 11);
-    private readonly Color ColRose          = Color.FromArgb(244, 63, 94);
-    private readonly Color ColTextPrimary   = Color.FromArgb(241, 245, 249);
-    private readonly Color ColTextMuted     = Color.FromArgb(148, 163, 184);
+    private Color ColBgMain        = Color.FromArgb(11, 16, 32);
+    private Color ColCardBg        = Color.FromArgb(21, 29, 48);
+    private Color ColCardElevated  = Color.FromArgb(27, 38, 59);
+    private Color ColCardBorder    = Color.FromArgb(42, 56, 86);
+    private Color ColNeonCyan      = Color.FromArgb(0, 245, 212);
+    private Color ColElectricBlue  = Color.FromArgb(59, 130, 246);
+    private Color ColNeonPurple    = Color.FromArgb(168, 85, 247);
+    private Color ColEmerald       = Color.FromArgb(16, 185, 129);
+    private Color ColAmber         = Color.FromArgb(245, 158, 11);
+    private Color ColRose          = Color.FromArgb(244, 63, 94);
+    private Color ColTextPrimary   = Color.FromArgb(241, 245, 249);
+    private Color ColTextMuted     = Color.FromArgb(148, 163, 184);
+    private static bool _isDarkTheme = true;
+
+    public static bool IsDarkTheme => _isDarkTheme;
+    public event Action<bool>? ThemeChanged;
+
+    public static void SetThemePreference(bool isDark)
+    {
+        _isDarkTheme = isDark;
+    }
+
+    public void SetTheme(bool isDark)
+    {
+        ApplyTheme(isDark);
+    }
 
     private readonly CultureInfo ViCulture = new("vi-VN");
 
@@ -37,7 +52,7 @@ public partial class DashboardUC : UserControl
     // =========================================================
     private sealed class AnalyticsSnapshot
     {
-        public bool IsDemo { get; set; }
+        public string? DatabaseError { get; set; }
         public decimal TotalRevenue { get; set; }
         public double RevenueGrowthPct { get; set; }
         public float[] RevenueSpark { get; set; } = Array.Empty<float>();
@@ -111,6 +126,87 @@ public partial class DashboardUC : UserControl
         public Color StatusColor { get; set; }
     }
 
+    private sealed class RoomFilterItem
+    {
+        public RoomFilterItem() { }
+
+        public int? Id { get; set; }
+        public string Name { get; set; } = "";
+
+        public override string ToString() => Name;
+    }
+
+    private sealed class DailyRevenueRow
+    {
+        public DailyRevenueRow() { }
+
+        public string Day { get; set; } = "";
+        public decimal Revenue { get; set; }
+    }
+
+    private sealed class DailyTicketRow
+    {
+        public DailyTicketRow() { }
+        public string Day { get; set; } = "";
+        public int Sold { get; set; }
+        public int Canceled { get; set; }
+    }
+
+    private sealed class PeriodBucket
+    {
+        public DateTime Start { get; init; }
+        public DateTime End { get; init; }
+        public string Label { get; init; } = "";
+        public decimal Revenue { get; set; }
+        public int Sold { get; set; }
+        public int Canceled { get; set; }
+    }
+
+    private sealed class MovieSummaryRow
+    {
+        public MovieSummaryRow() { }
+        public string Title { get; set; } = "";
+        public string Genre { get; set; } = "";
+        public int Tickets { get; set; }
+        public decimal Revenue { get; set; }
+    }
+
+    private sealed class RoomSummaryRow
+    {
+        public RoomSummaryRow() { }
+        public string Name { get; set; } = "";
+        public int Tickets { get; set; }
+        public decimal Revenue { get; set; }
+    }
+
+    private sealed class PaymentSummaryRow
+    {
+        public PaymentSummaryRow() { }
+        public string Name { get; set; } = "";
+        public decimal Amount { get; set; }
+        public int Transactions { get; set; }
+    }
+
+    private sealed class TimeSlotSummaryRow
+    {
+        public TimeSlotSummaryRow() { }
+        public int Slot { get; set; }
+        public int Tickets { get; set; }
+        public decimal Revenue { get; set; }
+    }
+
+    private sealed class RecentBookingRow
+    {
+        public RecentBookingRow() { }
+        public string BookingCode { get; set; } = "";
+        public string BookingTime { get; set; } = "";
+        public decimal Amount { get; set; }
+        public string PaymentMethod { get; set; } = "";
+        public string BookingStatus { get; set; } = "";
+        public int TicketCount { get; set; }
+        public string Movies { get; set; } = "";
+    }
+
     // =========================================================
     // 3. UI & ANIMATION STATE
     // =========================================================
@@ -125,9 +221,11 @@ public partial class DashboardUC : UserControl
     private Panel pnlCustomDates = null!;
     private ComboBox cboCinemaFilter = null!;
     private Button btnRefresh = null!;
+    private NeonThemeButton btnTheme = null!;
     private Label lblLastUpdated = null!;
     private Label lblDemoBadge = null!;
     private Label lblMovieTitle = null!;
+    private TableLayoutPanel _dashboardRoot = null!;
 
     // KPI Cards
     private readonly Panel[] _kpiCards = new Panel[6];
@@ -165,6 +263,7 @@ public partial class DashboardUC : UserControl
                  ControlStyles.ResizeRedraw, true);
 
         BuildDashboardUI();
+        ApplyTheme(_isDarkTheme);
         SetupAnimation();
         LoadAndAnimateData();
 
@@ -197,6 +296,7 @@ public partial class DashboardUC : UserControl
             BackColor = ColBgMain,
             Margin = new Padding(0)
         };
+        _dashboardRoot = tlpRoot;
         tlpRoot.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
         // HÀNG 1: HEADER + BỘ LỌC
@@ -336,7 +436,7 @@ public partial class DashboardUC : UserControl
         {
             Text = "THE MAGICIAN'S ELEPHANT",
             Font = new Font("Segoe UI", 14F, FontStyle.Bold),
-            ForeColor = Color.White,
+            ForeColor = ColTextPrimary,
             Dock = DockStyle.Top,
             Height = 40,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -356,7 +456,7 @@ public partial class DashboardUC : UserControl
         {
             Text = "LIVE DB",
             Font = new Font("Segoe UI", 7.8F, FontStyle.Bold),
-            ForeColor = Color.Black,
+            ForeColor = ColBgMain,
             BackColor = ColNeonCyan,
             Location = new Point(295, 19),
             Size = new Size(76, 20),
@@ -446,13 +546,19 @@ public partial class DashboardUC : UserControl
             Width = 165,
             Margin = new Padding(0, 2, 8, 0)
         };
-        cboCinemaFilter.Items.AddRange(new object[]
+        cboCinemaFilter.Items.Add(new RoomFilterItem { Name = "Tất cả phòng" });
+        try
         {
-            "Tất cả rạp / phòng",
-            "Cineworld Quận 1",
-            "Cineworld Thủ Đức",
-            "Cineworld Gò Vấp"
-        });
+            using var connection = DatabaseConnection.GetConnection();
+            connection.Open();
+            foreach (var room in connection.Query<RoomFilterItem>(
+                         "SELECT Id, Name FROM Rooms ORDER BY Name;"))
+                cboCinemaFilter.Items.Add(room);
+        }
+        catch
+        {
+            // The dashboard will report the database error when it loads its data.
+        }
         cboCinemaFilter.SelectedIndex = 0;
         cboCinemaFilter.SelectedIndexChanged += (s, e) => LoadAndAnimateData();
 
@@ -461,7 +567,7 @@ public partial class DashboardUC : UserControl
         {
             Text = "⟳ Làm mới",
             Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-            ForeColor = Color.Black,
+            ForeColor = ColBgMain,
             BackColor = ColNeonCyan,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(102, 28),
@@ -470,6 +576,21 @@ public partial class DashboardUC : UserControl
         };
         btnRefresh.FlatAppearance.BorderSize = 0;
         btnRefresh.Click += (s, e) => LoadAndAnimateData();
+
+        btnTheme = new NeonThemeButton
+        {
+            Text = _isDarkTheme ? "☀ Chế độ sáng" : "☾ Chế độ tối",
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+            ForeColor = ColNeonCyan,
+            NeonColor = ColNeonCyan,
+            BackColor = ColCardElevated,
+            FlatStyle = FlatStyle.Flat,
+            Size = new Size(122, 28),
+            Margin = new Padding(8, 0, 0, 0),
+            Cursor = Cursors.Hand
+        };
+        btnTheme.FlatAppearance.BorderColor = ColCardBorder;
+        btnTheme.Click += (s, e) => ApplyTheme(!_isDarkTheme);
 
         lblLastUpdated = new Label
         {
@@ -485,6 +606,7 @@ public partial class DashboardUC : UserControl
         flpFilters.Controls.Add(pnlCustomDates);
         flpFilters.Controls.Add(cboCinemaFilter);
         flpFilters.Controls.Add(btnRefresh);
+        flpFilters.Controls.Add(btnTheme);
 
         pnlHeader.Controls.Add(lblTitle);
         pnlHeader.Controls.Add(lblDemoBadge);
@@ -502,6 +624,103 @@ public partial class DashboardUC : UserControl
     {
         flp.Location = new Point(Math.Max(380, header.ClientSize.Width - flp.Width - 18), 16);
         lblLastUpdated.Location = new Point(Math.Max(380, header.ClientSize.Width - lblLastUpdated.Width - 20), 52);
+    }
+
+    private void ApplyTheme(bool isDark)
+    {
+        _isDarkTheme = isDark;
+        if (isDark)
+        {
+            ColBgMain = Color.FromArgb(11, 16, 32);
+            ColCardBg = Color.FromArgb(21, 29, 48);
+            ColCardElevated = Color.FromArgb(27, 38, 59);
+            ColCardBorder = Color.FromArgb(42, 56, 86);
+            ColNeonCyan = Color.FromArgb(0, 245, 212);
+            ColElectricBlue = Color.FromArgb(59, 130, 246);
+            ColNeonPurple = Color.FromArgb(168, 85, 247);
+            ColEmerald = Color.FromArgb(16, 185, 129);
+            ColAmber = Color.FromArgb(245, 158, 11);
+            ColRose = Color.FromArgb(244, 63, 94);
+            ColTextPrimary = Color.FromArgb(241, 245, 249);
+            ColTextMuted = Color.FromArgb(148, 163, 184);
+        }
+        else
+        {
+            ColBgMain = Color.FromArgb(241, 245, 249);
+            ColCardBg = Color.White;
+            ColCardElevated = Color.FromArgb(226, 232, 240);
+            ColCardBorder = Color.FromArgb(203, 213, 225);
+            ColNeonCyan = Color.FromArgb(8, 145, 178);
+            ColElectricBlue = Color.FromArgb(37, 99, 235);
+            ColNeonPurple = Color.FromArgb(124, 58, 237);
+            ColEmerald = Color.FromArgb(5, 150, 105);
+            ColAmber = Color.FromArgb(180, 83, 9);
+            ColRose = Color.FromArgb(225, 29, 72);
+            ColTextPrimary = Color.FromArgb(15, 23, 42);
+            ColTextMuted = Color.FromArgb(71, 85, 105);
+        }
+
+        BackColor = ColBgMain;
+        if (_dashboardRoot == null) return;
+        _dashboardRoot.BackColor = ColBgMain;
+        ApplyThemeToControl(_dashboardRoot);
+
+        foreach (var card in _kpiCards)
+            if (card != null) card.BackColor = ColCardBg;
+
+        if (btnRefresh != null)
+        {
+            btnRefresh.BackColor = ColNeonCyan;
+            btnRefresh.ForeColor = isDark ? Color.FromArgb(8, 30, 30) : Color.White;
+        }
+        if (btnTheme != null)
+        {
+            btnTheme.Text = isDark ? "☀ Chế độ sáng" : "☾ Chế độ tối";
+            btnTheme.BackColor = ColCardElevated;
+            btnTheme.NeonColor = ColNeonCyan;
+            btnTheme.ForeColor = ColNeonCyan;
+            btnTheme.Invalidate();
+        }
+        if (lblDemoBadge != null)
+        {
+            lblDemoBadge.BackColor = _data.DatabaseError == null ? ColNeonCyan : ColRose;
+            lblDemoBadge.ForeColor = isDark ? Color.FromArgb(8, 30, 30) : Color.White;
+        }
+        if (lblLastUpdated != null) lblLastUpdated.ForeColor = ColTextMuted;
+
+        _dashboardRoot.Invalidate(true);
+        ThemeChanged?.Invoke(isDark);
+    }
+
+    private void ApplyThemeToControl(Control control)
+    {
+        if (control is ComboBox comboBox)
+        {
+            comboBox.BackColor = ColCardElevated;
+            comboBox.ForeColor = ColTextPrimary;
+        }
+        else if (control is DateTimePicker dateTimePicker)
+        {
+            dateTimePicker.CalendarMonthBackground = ColCardBg;
+            dateTimePicker.CalendarForeColor = ColTextPrimary;
+            dateTimePicker.CalendarTitleBackColor = ColCardElevated;
+            dateTimePicker.CalendarTitleForeColor = ColTextPrimary;
+        }
+        else if (control is Label label)
+        {
+            label.ForeColor = ColTextPrimary;
+        }
+        else if (control is TableLayoutPanel table && table.BackColor != Color.Transparent)
+        {
+            table.BackColor = ColBgMain;
+        }
+        else if (control is Panel panel && panel.BackColor != Color.Transparent)
+        {
+            panel.BackColor = ColCardBg;
+        }
+
+        foreach (Control child in control.Controls)
+            ApplyThemeToControl(child);
     }
 
     // =========================================================
@@ -554,7 +773,7 @@ public partial class DashboardUC : UserControl
 
         using (var bgBrush = new LinearGradientBrush(rect,
             isHover ? ColCardElevated : ColCardBg,
-            Color.FromArgb(17, 24, 39), 45F))
+            ColBgMain, 45F))
         {
             g.FillPath(bgBrush, path);
         }
@@ -709,10 +928,12 @@ public partial class DashboardUC : UserControl
         var plot = new Rectangle(cardRect.X + 64, cardRect.Y + 56, cardRect.Width - 84, cardRect.Height - 94);
         if (plot.Width <= 40 || plot.Height <= 40 || _data.CurrentPeriodRevenue.Count < 2) return;
 
+        if (_data.CurrentPeriodRevenue.Count == 0 || _data.PreviousPeriodRevenue.Count == 0) return;
+
         decimal maxVal = Math.Max(100000m,
             Math.Max(_data.CurrentPeriodRevenue.Max(), _data.PreviousPeriodRevenue.Max()) * 1.15m);
 
-        using var gridPen = new Pen(Color.FromArgb(34, 46, 72), 1F) { DashStyle = DashStyle.Dash };
+        using var gridPen = new Pen(ColCardBorder, 1F) { DashStyle = DashStyle.Dash };
         using var fontAxis = new Font("Segoe UI", 8F);
         using var brushAxis = new SolidBrush(ColTextMuted);
 
@@ -775,7 +996,7 @@ public partial class DashboardUC : UserControl
         {
             bool isHover = i == _hoverRevIdx;
             float r = isHover ? 6F : 3.5F;
-            using var dotBrush = new SolidBrush(isHover ? Color.White : ColNeonCyan);
+            using var dotBrush = new SolidBrush(isHover ? ColCardBg : ColNeonCyan);
             g.FillEllipse(dotBrush, curPts[i].X - r, curPts[i].Y - r, r * 2, r * 2);
             if (isHover)
             {
@@ -840,7 +1061,7 @@ public partial class DashboardUC : UserControl
             cardRect.Y + 56,
             dia, dia);
 
-        using (var bgPen = new Pen(Color.FromArgb(40, 52, 82), 18F))
+        using (var bgPen = new Pen(ColCardElevated, 18F))
         {
             g.DrawEllipse(bgPen, ringRect);
         }
@@ -875,7 +1096,7 @@ public partial class DashboardUC : UserControl
         int emptySeats = Math.Max(0, _data.TotalSeatCapacity - _data.SeatsSold);
         int legendY = ringRect.Bottom + 18;
         DrawLegendDot(g, cardRect.X + 24, legendY, ColNeonCyan, $"Đã bán: {_data.SeatsSold:N0} ghế");
-        DrawLegendDot(g, cardRect.X + cardRect.Width / 2 + 8, legendY, Color.FromArgb(65, 82, 120), $"Còn trống: {emptySeats:N0} ghế");
+        DrawLegendDot(g, cardRect.X + cardRect.Width / 2 + 8, legendY, ColCardElevated, $"Còn trống: {emptySeats:N0} ghế");
     }
 
     // =========================================================
@@ -895,11 +1116,12 @@ public partial class DashboardUC : UserControl
         var plot = new Rectangle(cardRect.X + 48, cardRect.Y + 56, cardRect.Width - 68, cardRect.Height - 92);
         int n = Math.Min(_data.TimeLabels.Count, _data.SoldSeries.Count);
         if (plot.Width <= 40 || plot.Height <= 40 || n == 0) return;
+        if (_data.SoldSeries.All(value => value == 0) && _data.CanceledSeries.All(value => value == 0)) return;
 
         int maxVal = Math.Max(10, (int)(_data.SoldSeries.Max() * 1.18));
         float p = EaseOutCubic(_animProgress);
 
-        using var gridPen = new Pen(Color.FromArgb(34, 46, 72), 1F) { DashStyle = DashStyle.Dash };
+        using var gridPen = new Pen(ColCardBorder, 1F) { DashStyle = DashStyle.Dash };
         using var fontAxis = new Font("Segoe UI", 8F);
         using var fontVal = new Font("Segoe UI", 7.5F, FontStyle.Bold);
         using var brushMuted = new SolidBrush(ColTextMuted);
@@ -929,14 +1151,14 @@ public partial class DashboardUC : UserControl
 
             int hSold = Math.Max(2, (int)((_data.SoldSeries[i] / (float)maxVal) * plot.Height * p));
             var rSold = new Rectangle((int)(centerX - barW - 2), plot.Bottom - hSold, barW, hSold);
-            using (var bSold = new LinearGradientBrush(rSold, ColEmerald, Color.FromArgb(6, 95, 70), 90F))
+            using (var bSold = new LinearGradientBrush(rSold, ColEmerald, ColEmerald, 90F))
             {
                 g.FillRectangle(bSold, rSold);
             }
 
             int hCan = Math.Max(2, (int)((_data.CanceledSeries[i] / (float)maxVal) * plot.Height * p));
             var rCan = new Rectangle((int)(centerX + 2), plot.Bottom - hCan, barW, hCan);
-            using (var bCan = new LinearGradientBrush(rCan, ColRose, Color.FromArgb(136, 19, 55), 90F))
+            using (var bCan = new LinearGradientBrush(rCan, ColRose, ColRose, 90F))
             {
                 g.FillRectangle(bCan, rCan);
             }
@@ -1166,7 +1388,7 @@ public partial class DashboardUC : UserControl
         decimal maxVal = Math.Max(100000m, _data.RoomPerformances.Max(r => r.Revenue) * 1.18m);
         float p = EaseOutCubic(_animProgress);
 
-        using var gridPen = new Pen(Color.FromArgb(34, 46, 72), 1F) { DashStyle = DashStyle.Dash };
+        using var gridPen = new Pen(ColCardBorder, 1F) { DashStyle = DashStyle.Dash };
         using var fontAxis = new Font("Segoe UI", 8F);
         using var fontVal = new Font("Segoe UI", 8F, FontStyle.Bold);
         using var brushMuted = new SolidBrush(ColTextMuted);
@@ -1193,7 +1415,7 @@ public partial class DashboardUC : UserControl
 
             bool isHover = i == _hoverRoomIdx;
             Color cTop = isHover ? ColNeonCyan : ColElectricBlue;
-            Color cBot = isHover ? ColElectricBlue : Color.FromArgb(30, 58, 138);
+            Color cBot = isHover ? ColElectricBlue : ColElectricBlue;
 
             using (var barPath = CreateRoundedPath(barRect, 6))
             using (var barBrush = new LinearGradientBrush(barRect, cTop, cBot, 90F))
@@ -1250,6 +1472,7 @@ public partial class DashboardUC : UserControl
         int n = _data.TimeSlotPerfs.Count;
         var plot = new Rectangle(cardRect.X + 48, cardRect.Y + 56, cardRect.Width - 68, cardRect.Height - 92);
         if (plot.Width <= 40 || plot.Height <= 40 || n == 0) return;
+        if (_data.TimeSlotPerfs.All(slot => slot.Tickets == 0)) return;
 
         int maxTickets = Math.Max(10, (int)(_data.TimeSlotPerfs.Max(s => s.Tickets) * 1.2));
         int peakIdx = 0;
@@ -1258,7 +1481,7 @@ public partial class DashboardUC : UserControl
 
         float p = EaseOutCubic(_animProgress);
 
-        using var gridPen = new Pen(Color.FromArgb(34, 46, 72), 1F) { DashStyle = DashStyle.Dash };
+        using var gridPen = new Pen(ColCardBorder, 1F) { DashStyle = DashStyle.Dash };
         using var fontAxis = new Font("Segoe UI", 8.2F);
         using var fontVal = new Font("Segoe UI", 8.2F, FontStyle.Bold);
         using var brushMuted = new SolidBrush(ColTextMuted);
@@ -1287,7 +1510,7 @@ public partial class DashboardUC : UserControl
             bool isHover = i == _hoverSlotIdx;
 
             Color topCol = isPeak ? ColNeonPurple : (isHover ? ColNeonCyan : ColElectricBlue);
-            Color botCol = isPeak ? Color.FromArgb(88, 28, 135) : Color.FromArgb(30, 58, 138);
+            Color botCol = isPeak ? ColNeonPurple : ColElectricBlue;
 
             using (var path = CreateRoundedPath(barRect, 6))
             using (var brush = new LinearGradientBrush(barRect, topCol, botCol, 90F))
@@ -1352,7 +1575,7 @@ public partial class DashboardUC : UserControl
         using var fontStatus = new Font("Segoe UI", 7.8F, FontStyle.Bold);
         using var brushWhite = new SolidBrush(ColTextPrimary);
         using var brushMuted = new SolidBrush(ColTextMuted);
-        using var linePen = new Pen(Color.FromArgb(34, 46, 72), 1F);
+        using var linePen = new Pen(ColCardBorder, 1F);
 
         for (int i = 0; i < count; i++)
         {
@@ -1370,10 +1593,19 @@ public partial class DashboardUC : UserControl
             g.DrawString(act.Icon, fontIcon, brushWhite, iconCircle.X + 4, iconCircle.Y + 4);
 
             int contentX = iconCircle.Right + 10;
-            g.DrawString(act.Content, fontText, brushWhite, contentX, y + 4);
-            g.DrawString(act.TimeAgo, fontTime, brushMuted, contentX, y + 22);
-
             var stRect = new Rectangle(cardRect.Right - 104, y + 9, 88, 22);
+            int contentWidth = Math.Max(0, stRect.Left - contentX - 8);
+            var contentRect = new Rectangle(contentX, y + 4, contentWidth, 18);
+            var timeRect = new Rectangle(contentX, y + 22, contentWidth, 16);
+            const TextFormatFlags activityTextFlags = TextFormatFlags.Left |
+                                                        TextFormatFlags.Top |
+                                                        TextFormatFlags.SingleLine |
+                                                        TextFormatFlags.EndEllipsis |
+                                                        TextFormatFlags.NoPadding |
+                                                        TextFormatFlags.NoPrefix;
+            TextRenderer.DrawText(g, act.Content, fontText, contentRect, ColTextPrimary, activityTextFlags);
+            TextRenderer.DrawText(g, act.TimeAgo, fontTime, timeRect, ColTextMuted, activityTextFlags);
+
             using (var stPath = CreateRoundedPath(stRect, 8))
             using (var stBg = new SolidBrush(Color.FromArgb(38, act.StatusColor)))
             using (var stBorder = new Pen(act.StatusColor, 1F))
@@ -1381,11 +1613,13 @@ public partial class DashboardUC : UserControl
                 g.FillPath(stBg, stPath);
                 g.DrawPath(stBorder, stPath);
             }
-            using var stBrush = new SolidBrush(act.StatusColor);
-            var szSt = g.MeasureString(act.Status, fontStatus);
-            g.DrawString(act.Status, fontStatus, stBrush,
-                stRect.X + (stRect.Width - szSt.Width) / 2,
-                stRect.Y + (stRect.Height - szSt.Height) / 2);
+            TextRenderer.DrawText(g, act.Status, fontStatus, stRect, act.StatusColor,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.SingleLine |
+                TextFormatFlags.EndEllipsis |
+                TextFormatFlags.NoPadding |
+                TextFormatFlags.NoPrefix);
         }
     }
 
@@ -1432,7 +1666,7 @@ public partial class DashboardUC : UserControl
 
         var tipRect = new Rectangle(x, y, boxW, boxH);
         using var path = CreateRoundedPath(tipRect, 10);
-        using var bg = new SolidBrush(Color.FromArgb(242, 15, 23, 42));
+        using var bg = new SolidBrush(ColCardElevated);
         using var border = new Pen(accent, 1.3F);
         g.FillPath(bg, path);
         g.DrawPath(border, path);
@@ -1507,16 +1741,27 @@ public partial class DashboardUC : UserControl
     private void LoadAndAnimateData()
     {
         var (fromDate, toDate) = ResolveFilterDateRange();
-        string cinemaFilter = cboCinemaFilter?.SelectedItem?.ToString() ?? "Tất cả rạp / phòng";
+        int? roomId = (cboCinemaFilter?.SelectedItem as RoomFilterItem)?.Id;
 
-        _data = TryQueryRealDatabase(fromDate, toDate, cinemaFilter)
-                ?? BuildLabeledDemoSnapshot(fromDate, toDate, cinemaFilter);
+        try
+        {
+            _data = QueryDatabaseSnapshot(fromDate, toDate, roomId);
+            lblDemoBadge.Text = "LIVE DB";
+            lblDemoBadge.BackColor = ColNeonCyan;
+            lblLastUpdated.Text = $"Cập nhật lúc: {DateTime.Now:HH:mm:ss dd/MM/yyyy}";
+            lblLastUpdated.ForeColor = ColTextMuted;
+        }
+        catch (Exception ex)
+        {
+            _data = new AnalyticsSnapshot { DatabaseError = ex.Message };
+            lblDemoBadge.Text = "LỖI DB";
+            lblDemoBadge.BackColor = ColRose;
+            lblLastUpdated.Text = "Không thể tải dữ liệu từ SQLite";
+            lblLastUpdated.ForeColor = ColRose;
+            lblLastUpdated.Tag = ex.Message;
+        }
 
-        lblDemoBadge.Text = _data.IsDemo ? "DEMO DATA" : "LIVE DB";
-        lblDemoBadge.BackColor = _data.IsDemo ? ColAmber : ColNeonCyan;
-        lblLastUpdated.Text = $"Cập nhật lúc: {DateTime.Now:HH:mm:ss dd/MM/yyyy}";
-
-        _animProgress = 0.05F;
+        _animProgress = 1F;
         _animTimer.Start();
         pnlRecentActivities?.Invalidate();
     }
@@ -1525,7 +1770,7 @@ public partial class DashboardUC : UserControl
     {
         string mode = cboTimeRange?.SelectedItem?.ToString() ?? "30 ngày qua";
         DateTime today = DateTime.Today;
-        return mode switch
+        var (from, to) = mode switch
         {
             "Hôm nay" => (today, today.AddDays(1).AddSeconds(-1)),
             "7 ngày qua" => (today.AddDays(-6), today.AddDays(1).AddSeconds(-1)),
@@ -1534,217 +1779,337 @@ public partial class DashboardUC : UserControl
             "Năm nay" => (new DateTime(today.Year, 1, 1), today.AddDays(1).AddSeconds(-1)),
             _ => (dtpFrom.Value.Date, dtpTo.Value.Date.AddDays(1).AddSeconds(-1))
         };
+        if (from.Date <= to.Date) return (from.Date, to);
+        return (to.Date, from.Date.AddDays(1).AddSeconds(-1));
     }
 
-    private static IDbConnection? OpenProjectDbConnection()
+    private AnalyticsSnapshot QueryDatabaseSnapshot(DateTime from, DateTime to, int? roomId)
     {
-        var dbType = typeof(DatabaseConnection);
+        using var connection = DatabaseConnection.GetConnection();
+        connection.Open();
 
-        // 1. Tìm phương thức static không tham số trả về IDbConnection (CreateConnection, GetConnection, OpenConnection...)
-        var staticConnMethod = dbType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .FirstOrDefault(m => typeof(IDbConnection).IsAssignableFrom(m.ReturnType) && m.GetParameters().Length == 0);
-        if (staticConnMethod != null)
-            return staticConnMethod.Invoke(null, null) as IDbConnection;
-
-        // 2. Nếu là Singleton (DatabaseConnection.Instance)
-        var instanceProp = dbType.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-        if (instanceProp != null)
+        from = from.Date;
+        int periodDays = Math.Max(1, (to.Date - from).Days + 1);
+        DateTime currentTo = from.AddDays(periodDays).AddSeconds(-1);
+        DateTime previousFrom = from.AddDays(-periodDays);
+        DateTime previousTo = from.AddSeconds(-1);
+        var currentParameters = new
         {
-            object? inst = instanceProp.GetValue(null);
-            if (inst is IDbConnection directConn) return directConn;
+            FromDate = from.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+            ToDate = currentTo.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+            RoomId = roomId
+        };
+        var previousParameters = new
+        {
+            FromDate = previousFrom.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+            ToDate = previousTo.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+            RoomId = roomId
+        };
 
-            if (inst != null)
+        const string revenueSql = @"
+            SELECT date(b.BookingTime) AS Day,
+                   COALESCE(SUM(b.FinalAmount), 0) AS Revenue
+            FROM Bookings b
+            WHERE datetime(b.BookingTime) >= datetime(@FromDate)
+              AND datetime(b.BookingTime) <= datetime(@ToDate)
+              AND UPPER(COALESCE(b.BookingStatus, '')) NOT IN ('CANCELLED', 'CANCELED', 'REFUNDED')
+              AND (@RoomId IS NULL OR EXISTS (
+                    SELECT 1
+                    FROM Tickets t
+                    INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
+                    WHERE t.BookingId = b.Id AND s.RoomId = @RoomId
+              ))
+            GROUP BY date(b.BookingTime)
+            ORDER BY date(b.BookingTime);";
+        const string ticketSql = @"
+            SELECT date(b.BookingTime) AS Day,
+                   COALESCE(SUM(CASE
+                       WHEN UPPER(COALESCE(t.Status, '')) NOT IN ('CANCELLED', 'CANCELED')
+                        AND UPPER(COALESCE(b.BookingStatus, '')) NOT IN ('CANCELLED', 'CANCELED', 'REFUNDED')
+                       THEN 1 ELSE 0 END), 0) AS Sold,
+                   COALESCE(SUM(CASE
+                       WHEN UPPER(COALESCE(t.Status, '')) IN ('CANCELLED', 'CANCELED')
+                         OR UPPER(COALESCE(b.BookingStatus, '')) IN ('CANCELLED', 'CANCELED', 'REFUNDED')
+                       THEN 1 ELSE 0 END), 0) AS Canceled
+            FROM Tickets t
+            INNER JOIN Bookings b ON b.Id = t.BookingId
+            INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
+            WHERE datetime(b.BookingTime) >= datetime(@FromDate)
+              AND datetime(b.BookingTime) <= datetime(@ToDate)
+              AND (@RoomId IS NULL OR s.RoomId = @RoomId)
+            GROUP BY date(b.BookingTime)
+            ORDER BY date(b.BookingTime);";
+
+        var currentRevenueRows = connection.Query<DailyRevenueRow>(revenueSql, currentParameters).ToList();
+        var previousRevenueRows = connection.Query<DailyRevenueRow>(revenueSql, previousParameters).ToList();
+        var currentTicketRows = connection.Query<DailyTicketRow>(ticketSql, currentParameters).ToList();
+        var previousTicketRows = connection.Query<DailyTicketRow>(ticketSql, previousParameters).ToList();
+
+        var currentBuckets = CreatePeriodBuckets(from, periodDays);
+        var previousBuckets = CreatePeriodBuckets(previousFrom, periodDays);
+        AddRevenueRowsToBuckets(currentRevenueRows, currentBuckets, from, periodDays);
+        AddRevenueRowsToBuckets(previousRevenueRows, previousBuckets, previousFrom, periodDays);
+        AddTicketRowsToBuckets(currentTicketRows, currentBuckets, from, periodDays);
+        AddTicketRowsToBuckets(previousTicketRows, previousBuckets, previousFrom, periodDays);
+
+        var snapshot = new AnalyticsSnapshot
+        {
+            TotalRevenue = currentRevenueRows.Sum(row => row.Revenue),
+            RevenueGrowthPct = CalculateGrowth(SumRevenueRows(currentRevenueRows), SumRevenueRows(previousRevenueRows)),
+            TicketsSold = currentTicketRows.Sum(row => row.Sold),
+            TicketGrowthPct = CalculateGrowth(
+                currentTicketRows.Sum(row => row.Sold), previousTicketRows.Sum(row => row.Sold)),
+            TicketsCanceled = currentTicketRows.Sum(row => row.Canceled),
+            TimeLabels = currentBuckets.Select(bucket => bucket.Label).ToList(),
+            CurrentPeriodRevenue = currentBuckets.Select(bucket => bucket.Revenue).ToList(),
+            PreviousPeriodRevenue = previousBuckets.Select(bucket => bucket.Revenue).ToList(),
+            SoldSeries = currentBuckets.Select(bucket => bucket.Sold).ToList(),
+            CanceledSeries = currentBuckets.Select(bucket => bucket.Canceled).ToList()
+        };
+        snapshot.SeatsSold = snapshot.TicketsSold;
+        snapshot.RevenueSpark = CreateSparkline(snapshot.CurrentPeriodRevenue);
+        snapshot.TicketSpark = CreateSparkline(snapshot.SoldSeries.Select(value => (decimal)value).ToList());
+
+        snapshot.TotalShowtimes = connection.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM Showtimes s
+            WHERE datetime(s.StartTime) >= datetime(@FromDate)
+              AND datetime(s.StartTime) <= datetime(@ToDate)
+              AND (@RoomId IS NULL OR s.RoomId = @RoomId);", currentParameters);
+        snapshot.ActiveShowtimes = connection.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM Showtimes s
+            WHERE datetime(s.StartTime) >= datetime('now', 'localtime')
+              AND datetime(s.StartTime) >= datetime(@FromDate)
+              AND datetime(s.StartTime) <= datetime(@ToDate)
+              AND (@RoomId IS NULL OR s.RoomId = @RoomId);", currentParameters);
+        snapshot.TotalSeatCapacity = connection.ExecuteScalar<int>(@"
+            SELECT COUNT(*)
+            FROM Showtimes s
+            INNER JOIN Seats seat ON seat.RoomId = s.RoomId
+            WHERE datetime(s.StartTime) >= datetime(@FromDate)
+              AND datetime(s.StartTime) <= datetime(@ToDate)
+              AND (@RoomId IS NULL OR s.RoomId = @RoomId);", currentParameters);
+        snapshot.TotalCustomers = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM Users WHERE Role = 2;");
+        snapshot.NewCustomers = connection.ExecuteScalar<int>(@"
+            SELECT COUNT(*) FROM Users
+            WHERE Role = 2
+              AND datetime(CreatedAt) >= datetime(@FromDate)
+              AND datetime(CreatedAt) <= datetime(@ToDate);", currentParameters);
+
+        const string ticketRevenueFilter = @"
+            datetime(b.BookingTime) >= datetime(@FromDate)
+            AND datetime(b.BookingTime) <= datetime(@ToDate)
+            AND UPPER(COALESCE(b.BookingStatus, '')) NOT IN ('CANCELLED', 'CANCELED', 'REFUNDED')
+            AND UPPER(COALESCE(t.Status, '')) NOT IN ('CANCELLED', 'CANCELED')
+            AND (@RoomId IS NULL OR s.RoomId = @RoomId)";
+        var movieRows = connection.Query<MovieSummaryRow>($@"
+            SELECT m.Title, COALESCE(m.Genre, '') AS Genre,
+                   COUNT(t.Id) AS Tickets, COALESCE(SUM(t.Price), 0) AS Revenue
+            FROM Tickets t
+            INNER JOIN Bookings b ON b.Id = t.BookingId
+            INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
+            INNER JOIN Movies m ON m.Id = s.MovieId
+            WHERE {ticketRevenueFilter}
+            GROUP BY m.Id, m.Title, m.Genre
+            ORDER BY Revenue DESC
+            LIMIT 5;", currentParameters).ToList();
+        decimal movieRevenueTotal = connection.ExecuteScalar<decimal>($@"
+            SELECT COALESCE(SUM(t.Price), 0)
+            FROM Tickets t
+            INNER JOIN Bookings b ON b.Id = t.BookingId
+            INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
+            WHERE {ticketRevenueFilter};", currentParameters);
+        Color[] movieColors = { ColNeonCyan, ColNeonPurple, ColEmerald, ColElectricBlue, ColAmber };
+        snapshot.TopMovies = movieRows.Select((row, index) => new MovieRankItem
+        {
+            Title = row.Title,
+            Genre = row.Genre,
+            Tickets = row.Tickets,
+            Revenue = row.Revenue,
+            SharePct = movieRevenueTotal > 0 ? (double)(row.Revenue * 100m / movieRevenueTotal) : 0,
+            BadgeColor = movieColors[index % movieColors.Length]
+        }).ToList();
+
+        snapshot.RoomPerformances = connection.Query<RoomSummaryRow>($@"
+            SELECT r.Name, COUNT(t.Id) AS Tickets, COALESCE(SUM(t.Price), 0) AS Revenue
+            FROM Tickets t
+            INNER JOIN Bookings b ON b.Id = t.BookingId
+            INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
+            INNER JOIN Rooms r ON r.Id = s.RoomId
+            WHERE {ticketRevenueFilter}
+            GROUP BY r.Id, r.Name
+            ORDER BY Revenue DESC
+            LIMIT 6;", currentParameters)
+            .Select(row => new RoomPerfItem
             {
-                var instConnMethod = dbType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(m => typeof(IDbConnection).IsAssignableFrom(m.ReturnType) && m.GetParameters().Length == 0);
-                if (instConnMethod != null)
-                    return instConnMethod.Invoke(inst, null) as IDbConnection;
-            }
-        }
+                RoomName = row.Name,
+                Tickets = row.Tickets,
+                Revenue = row.Revenue
+            }).ToList();
 
-        return null;
-    }
+        Color[] paymentColors = { ColNeonPurple, ColNeonCyan, ColElectricBlue, ColEmerald, ColAmber };
+        snapshot.PaymentMethods = connection.Query<PaymentSummaryRow>(@"
+            SELECT COALESCE(NULLIF(TRIM(b.PaymentMethod), ''), 'Chưa xác định') AS Name,
+                   COALESCE(SUM(b.FinalAmount), 0) AS Amount,
+                   COUNT(*) AS Transactions
+            FROM Bookings b
+            WHERE datetime(b.BookingTime) >= datetime(@FromDate)
+              AND datetime(b.BookingTime) <= datetime(@ToDate)
+              AND UPPER(COALESCE(b.BookingStatus, '')) NOT IN ('CANCELLED', 'CANCELED', 'REFUNDED')
+              AND (@RoomId IS NULL OR EXISTS (
+                    SELECT 1 FROM Tickets t
+                    INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
+                    WHERE t.BookingId = b.Id AND s.RoomId = @RoomId
+              ))
+            GROUP BY COALESCE(NULLIF(TRIM(b.PaymentMethod), ''), 'Chưa xác định')
+            ORDER BY Amount DESC
+            LIMIT 5;", currentParameters)
+            .Select((row, index) => (row.Name, row.Amount, row.Transactions, paymentColors[index % paymentColors.Length]))
+            .ToList();
 
-    private static bool TableExists(IDbConnection conn, string tableName)
-    {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{tableName}';";
-        object? res = cmd.ExecuteScalar();
-        return res != null && res != DBNull.Value && Convert.ToInt32(res) > 0;
-    }
+        var timeSlotRows = connection.Query<TimeSlotSummaryRow>($@"
+            SELECT CASE
+                       WHEN CAST(strftime('%H', s.StartTime) AS INTEGER) < 12 THEN 0
+                       WHEN CAST(strftime('%H', s.StartTime) AS INTEGER) < 16 THEN 1
+                       WHEN CAST(strftime('%H', s.StartTime) AS INTEGER) < 19 THEN 2
+                       ELSE 3
+                   END AS Slot,
+                   COUNT(t.Id) AS Tickets, COALESCE(SUM(t.Price), 0) AS Revenue
+            FROM Tickets t
+            INNER JOIN Bookings b ON b.Id = t.BookingId
+            INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
+            WHERE {ticketRevenueFilter}
+            GROUP BY Slot
+            ORDER BY Slot;", currentParameters).ToDictionary(row => row.Slot);
+        string[] slotNames = { "Sáng (08h-12h)", "Trưa (12h-16h)", "Chiều (16h-19h)", "Tối (19h-23h30)" };
+        snapshot.TimeSlotPerfs = Enumerable.Range(0, slotNames.Length)
+            .Select(slot => timeSlotRows.TryGetValue(slot, out var row)
+                ? (slotNames[slot], row.Tickets, row.Revenue)
+                : (slotNames[slot], 0, 0m))
+            .ToList();
 
-    private static decimal ExecuteScalarDecimal(IDbConnection conn, string sql)
-    {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        object? res = cmd.ExecuteScalar();
-        return (res == null || res == DBNull.Value) ? 0m : Convert.ToDecimal(res);
-    }
-
-    private static int ExecuteScalarInt(IDbConnection conn, string sql)
-    {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        object? res = cmd.ExecuteScalar();
-        return (res == null || res == DBNull.Value) ? 0 : Convert.ToInt32(res);
-    }
-
-    private AnalyticsSnapshot? TryQueryRealDatabase(DateTime from, DateTime to, string cinemaFilter)
-    {
-        try
-        {
-            using var conn = OpenProjectDbConnection();
-            if (conn == null) return null;
-            if (conn.State != ConnectionState.Open) conn.Open();
-
-            if (!TableExists(conn, "Bookings")) return null;
-
-            int bookingCount = ExecuteScalarInt(conn, "SELECT COUNT(*) FROM Bookings;");
-            if (bookingCount == 0) return null;
-
-            var snap = new AnalyticsSnapshot { IsDemo = false };
-
-            if (TableExists(conn, "Users"))
+        snapshot.RecentActivities = connection.Query<RecentBookingRow>(@"
+            SELECT b.BookingCode, b.BookingTime,
+                   COALESCE(b.FinalAmount, 0) AS Amount,
+                   COALESCE(b.PaymentMethod, '') AS PaymentMethod,
+                   COALESCE(b.BookingStatus, '') AS BookingStatus,
+                   COUNT(t.Id) AS TicketCount,
+                   COALESCE(GROUP_CONCAT(DISTINCT m.Title), 'Đơn đặt vé') AS Movies
+            FROM Bookings b
+            LEFT JOIN Tickets t ON t.BookingId = b.Id
+            LEFT JOIN Showtimes s ON s.Id = t.ShowtimeId
+            LEFT JOIN Movies m ON m.Id = s.MovieId
+            WHERE datetime(b.BookingTime) >= datetime(@FromDate)
+              AND datetime(b.BookingTime) <= datetime(@ToDate)
+              AND (@RoomId IS NULL OR EXISTS (
+                    SELECT 1 FROM Tickets roomTicket
+                    INNER JOIN Showtimes roomShowtime ON roomShowtime.Id = roomTicket.ShowtimeId
+                    WHERE roomTicket.BookingId = b.Id AND roomShowtime.RoomId = @RoomId
+              ))
+            GROUP BY b.Id
+            ORDER BY datetime(b.BookingTime) DESC
+            LIMIT 5;", currentParameters)
+            .Select(row =>
             {
-                snap.TotalCustomers = ExecuteScalarInt(conn, "SELECT COUNT(*) FROM Users;");
-                snap.NewCustomers = Math.Max(1, snap.TotalCustomers / 6);
-            }
+                bool canceled = IsCanceled(row.BookingStatus);
+                DateTime bookingTime = DateTime.TryParse(row.BookingTime, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeLocal, out var parsedTime) ? parsedTime : DateTime.Now;
+                return new ActivityItem
+                {
+                    Icon = canceled ? "⚠" : "🎟",
+                    Content = $"{row.BookingCode} • {row.Movies} ({row.TicketCount} vé)",
+                    TimeAgo = $"{GetTimeAgo(bookingTime)} • {row.PaymentMethod} • {row.Amount:N0} đ",
+                    Status = canceled ? "Đã hủy" : row.BookingStatus,
+                    StatusColor = canceled ? ColRose : ColEmerald
+                };
+            }).ToList();
 
-            if (TableExists(conn, "Showtimes"))
-            {
-                snap.TotalShowtimes = ExecuteScalarInt(conn, "SELECT COUNT(*) FROM Showtimes;");
-                snap.ActiveShowtimes = Math.Max(1, snap.TotalShowtimes / 2);
-            }
-
-            snap.TotalRevenue = ExecuteScalarDecimal(conn, "SELECT COALESCE(SUM(TotalAmount), 0) FROM Bookings;");
-            snap.TicketsSold = bookingCount * 2;
-            snap.SeatsSold = snap.TicketsSold;
-            snap.TotalSeatCapacity = Math.Max(snap.SeatsSold + 40, (int)(snap.SeatsSold * 1.35));
-
-            if (snap.TotalRevenue <= 0) return null;
-
-            var demoTemplate = BuildLabeledDemoSnapshot(from, to, cinemaFilter);
-            snap.RevenueGrowthPct = 14.2;
-            snap.TicketGrowthPct = 11.8;
-            snap.TicketsCanceled = Math.Max(1, snap.TicketsSold / 18);
-            snap.RevenueSpark = demoTemplate.RevenueSpark;
-            snap.TicketSpark = demoTemplate.TicketSpark;
-            snap.TimeLabels = demoTemplate.TimeLabels;
-            snap.CurrentPeriodRevenue = demoTemplate.CurrentPeriodRevenue;
-            snap.PreviousPeriodRevenue = demoTemplate.PreviousPeriodRevenue;
-            snap.SoldSeries = demoTemplate.SoldSeries;
-            snap.CanceledSeries = demoTemplate.CanceledSeries;
-            snap.TopMovies = demoTemplate.TopMovies;
-            snap.RoomPerformances = demoTemplate.RoomPerformances;
-            snap.PaymentMethods = demoTemplate.PaymentMethods;
-            snap.TimeSlotPerfs = demoTemplate.TimeSlotPerfs;
-            snap.RecentActivities = demoTemplate.RecentActivities;
-
-            return snap;
-        }
-        catch
-        {
-            return null;
-        }
+        return snapshot;
     }
 
-    private AnalyticsSnapshot BuildLabeledDemoSnapshot(DateTime from, DateTime to, string cinemaFilter)
+    private static decimal SumRevenueRows(IEnumerable<DailyRevenueRow> rows) => rows.Sum(row => row.Revenue);
+
+    private static double CalculateGrowth(decimal current, decimal previous)
     {
-        double scaleFactor = cinemaFilter switch
-        {
-            "Cineworld Quận 1" => 0.45,
-            "Cineworld Thủ Đức" => 0.32,
-            "Cineworld Gò Vấp" => 0.23,
-            _ => 1.0
-        };
-
-        int days = Math.Max(1, (to.Date - from.Date).Days + 1);
-        double periodFactor = days <= 1 ? 0.08 : (days <= 7 ? 0.32 : (days <= 31 ? 1.0 : 3.4));
-        double mult = scaleFactor * periodFactor;
-
-        var snap = new AnalyticsSnapshot
-        {
-            IsDemo = true,
-            TotalRevenue = Math.Round((decimal)(482_500_000 * mult), 0),
-            RevenueGrowthPct = 16.4,
-            RevenueSpark = new[] { 22f, 28f, 25f, 36f, 42f, 39f, 54f, 61f },
-
-            TicketsSold = Math.Max(12, (int)Math.Round(4_850 * mult)),
-            TicketGrowthPct = 12.8,
-            TicketSpark = new[] { 18f, 21f, 24f, 22f, 31f, 38f, 44f, 49f },
-
-            SeatsSold = Math.Max(12, (int)Math.Round(4_850 * mult)),
-            TotalSeatCapacity = Math.Max(20, (int)Math.Round(6_400 * mult)),
-
-            TicketsCanceled = Math.Max(1, (int)Math.Round(215 * mult)),
-
-            TotalShowtimes = Math.Max(4, (int)Math.Round(168 * mult)),
-            ActiveShowtimes = Math.Max(2, (int)Math.Round(24 * scaleFactor)),
-
-            TotalCustomers = Math.Max(15, (int)Math.Round(3_420 * scaleFactor)),
-            NewCustomers = Math.Max(2, (int)Math.Round(310 * mult))
-        };
-
-        for (int i = 6; i >= 0; i--)
-        {
-            DateTime d = to.Date.AddDays(-i);
-            snap.TimeLabels.Add(d.ToString("dd/MM"));
-
-            decimal baseRev = (decimal)((48_000_000 + (6 - i) * 6_500_000 + (i % 2 == 0 ? 9_000_000 : -3_000_000)) * mult);
-            decimal prevRev = Math.Round(baseRev * 0.84m, 0);
-
-            snap.CurrentPeriodRevenue.Add(Math.Round(baseRev, 0));
-            snap.PreviousPeriodRevenue.Add(prevRev);
-
-            int sold = Math.Max(5, (int)Math.Round((520 + (6 - i) * 55 + (i % 2 == 0 ? 80 : -25)) * mult));
-            int can = Math.Max(1, (int)Math.Round(sold * 0.045));
-            snap.SoldSeries.Add(sold);
-            snap.CanceledSeries.Add(can);
-        }
-
-
-        snap.TopMovies = new List<MovieRankItem>
-        {
-            new() { Title = "The Magician's Elephant", Genre = "Hoạt hình • Phiêu lưu", Tickets = (int)(1420 * mult), Revenue = (decimal)(148_500_000 * mult), SharePct = 30.8, BadgeColor = ColNeonCyan },
-            new() { Title = "Dune: Hành Tinh Cát II", Genre = "Khoa học viễn tưởng", Tickets = (int)(1180 * mult), Revenue = (decimal)(126_000_000 * mult), SharePct = 26.1, BadgeColor = ColNeonPurple },
-            new() { Title = "Lật Mặt 8: Vòng Tay Nắng", Genre = "Tâm lý • Gia đình", Tickets = (int)(940 * mult), Revenue = (decimal)(92_400_000 * mult), SharePct = 19.2, BadgeColor = ColEmerald },
-            new() { Title = "Godzilla x Kong: Đế Chế Mới", Genre = "Hành động • Quái vật", Tickets = (int)(730 * mult), Revenue = (decimal)(68_200_000 * mult), SharePct = 14.1, BadgeColor = ColElectricBlue },
-            new() { Title = "Kung Fu Panda 4", Genre = "Hài hước • Gia đình", Tickets = (int)(580 * mult), Revenue = (decimal)(47_400_000 * mult), SharePct = 9.8, BadgeColor = ColAmber }
-        };
-
-        snap.RoomPerformances = new List<RoomPerfItem>
-        {
-            new() { RoomName = "Studio 1 (IMAX)", Tickets = (int)(1540 * mult), Revenue = (decimal)(178_000_000 * mult) },
-            new() { RoomName = "Studio 2 (VIP)", Tickets = (int)(1190 * mult), Revenue = (decimal)(124_500_000 * mult) },
-            new() { RoomName = "Studio 3 (2D)", Tickets = (int)(1120 * mult), Revenue = (decimal)(98_000_000 * mult) },
-            new() { RoomName = "Studio 4 (3D)", Tickets = (int)(1000 * mult), Revenue = (decimal)(82_000_000 * mult) }
-        };
-
-        snap.PaymentMethods = new List<(string, decimal, int, Color)>
-        {
-            ("Ví Điện Tử MoMo", Math.Round(snap.TotalRevenue * 0.41m, 0), (int)(1980 * mult), ColNeonPurple),
-            ("QR Pay Ngân Hàng", Math.Round(snap.TotalRevenue * 0.32m, 0), (int)(1550 * mult), ColNeonCyan),
-            ("Thẻ Quốc Tế / ATM", Math.Round(snap.TotalRevenue * 0.17m, 0), (int)(820 * mult), ColElectricBlue),
-            ("Tiền mặt tại quầy", Math.Round(snap.TotalRevenue * 0.10m, 0), (int)(500 * mult), ColEmerald)
-        };
-
-        snap.TimeSlotPerfs = new List<(string, int, decimal)>
-        {
-            ("Sáng (08h-12h)", (int)(680 * mult), (decimal)(61_200_000 * mult)),
-            ("Trưa (12h-16h)", (int)(1050 * mult), (decimal)(99_500_000 * mult)),
-            ("Chiều (16h-19h)", (int)(1340 * mult), (decimal)(132_800_000 * mult)),
-            ("Tối (19h-23h30)", (int)(1780 * mult), (decimal)(189_000_000 * mult))
-        };
-
-        snap.RecentActivities = new List<ActivityItem>
-        {
-            new() { Icon = "🎟", Content = "Đặt thành công 4 ghế VIP (G3-G6) - The Magician's Elephant", TimeAgo = "2 phút trước  •  Ví MoMo", Status = "Thành công", StatusColor = ColEmerald },
-            new() { Icon = "🏦", Content = "Thanh toán QR Pay 320.000đ - Dune: Hành Tinh Cát II", TimeAgo = "9 phút trước  •  VietQR", Status = "Thành công", StatusColor = ColNeonCyan },
-            new() { Icon = "⚠", Content = "Khách hàng hủy 2 vé suất 14:30 Studio 2 (Hoàn tiền tự động)", TimeAgo = "21 phút trước  •  Mã #BK9042", Status = "Đã hủy", StatusColor = ColRose },
-            new() { Icon = "👤", Content = "Thành viên mới đăng ký: Nguyễn Minh Anh (Hạng Bạc)", TimeAgo = "38 phút trước  •  Online App", Status = "Khách mới", StatusColor = ColElectricBlue },
-            new() { Icon = "🎬", Content = "Mở thêm suất chiếu tối 21:15 tại Studio 1 (IMAX)", TimeAgo = "1 giờ trước  •  Quản trị viên", Status = "Suất mới", StatusColor = ColNeonPurple }
-        };
-
-        return snap;
+        if (previous == 0) return current > 0 ? 100 : 0;
+        return Math.Round((double)((current - previous) * 100m / previous), 1);
     }
+
+    private static double CalculateGrowth(int current, int previous)
+    {
+        if (previous == 0) return current > 0 ? 100 : 0;
+        return Math.Round((current - previous) * 100.0 / previous, 1);
+    }
+
+    private static List<PeriodBucket> CreatePeriodBuckets(DateTime start, int days)
+    {
+        int count = Math.Min(7, days);
+        return Enumerable.Range(0, count).Select(index =>
+        {
+            int startOffset = index * days / count;
+            int endOffset = ((index + 1) * days / count) - 1;
+            DateTime bucketStart = start.Date.AddDays(startOffset);
+            DateTime bucketEnd = start.Date.AddDays(endOffset);
+            return new PeriodBucket
+            {
+                Start = bucketStart,
+                End = bucketEnd,
+                Label = bucketStart == bucketEnd
+                    ? bucketStart.ToString("dd/MM", CultureInfo.InvariantCulture)
+                    : $"{bucketStart:dd/MM}-{bucketEnd:dd/MM}"
+            };
+        }).ToList();
+    }
+
+    private static int GetBucketIndex(DateTime date, DateTime start, int days, int count)
+    {
+        int dayOffset = Math.Clamp((date.Date - start.Date).Days, 0, days - 1);
+        return Math.Min(count - 1, dayOffset * count / days);
+    }
+
+    private static void AddRevenueRowsToBuckets(IEnumerable<DailyRevenueRow> rows,
+        IList<PeriodBucket> buckets, DateTime start, int days)
+    {
+        foreach (var row in rows)
+        {
+            if (!DateTime.TryParseExact(row.Day, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var date)) continue;
+            buckets[GetBucketIndex(date, start, days, buckets.Count)].Revenue += row.Revenue;
+        }
+    }
+
+    private static void AddTicketRowsToBuckets(IEnumerable<DailyTicketRow> rows,
+        IList<PeriodBucket> buckets, DateTime start, int days)
+    {
+        foreach (var row in rows)
+        {
+            if (!DateTime.TryParseExact(row.Day, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var date)) continue;
+            var bucket = buckets[GetBucketIndex(date, start, days, buckets.Count)];
+            bucket.Sold += row.Sold;
+            bucket.Canceled += row.Canceled;
+        }
+    }
+
+    private static float[] CreateSparkline(IReadOnlyCollection<decimal> values)
+    {
+        decimal max = values.Count == 0 ? 0 : values.Max();
+        if (values.Count < 2 || max <= 0) return Array.Empty<float>();
+        return values.Select(value => (float)(value * 100m / max)).ToArray();
+    }
+
+    private static bool IsCanceled(string? status) =>
+        string.Equals(status, "CANCELLED", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "CANCELED", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "REFUNDED", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetTimeAgo(DateTime time)
+    {
+        TimeSpan elapsed = DateTime.Now - time;
+        if (elapsed.TotalMinutes < 1) return "Vừa xong";
+        if (elapsed.TotalHours < 1) return $"{(int)elapsed.TotalMinutes} phút trước";
+        if (elapsed.TotalDays < 1) return $"{(int)elapsed.TotalHours} giờ trước";
+        return $"{(int)elapsed.TotalDays} ngày trước";
+    }
+
 }

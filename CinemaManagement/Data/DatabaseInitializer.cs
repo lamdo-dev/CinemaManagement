@@ -16,6 +16,7 @@ public static class DatabaseInitializer
 
         // Các bảng hiện có
         CreateUsersTable(connection);
+        SeedAdminUser(connection);
         CreateMoviesTable(connection);
         CreateRoomsTable(connection);
         CreateSeatsTable(connection);
@@ -102,11 +103,150 @@ public static class DatabaseInitializer
 
         AddColumnIfNotExists(connection, "Users", "CreatedAt", "TEXT");
 
+        MigrateUsersSchemaIfNeeded(connection);
+
         connection.Execute(@"
             UPDATE Users
             SET CreatedAt = datetime('now', 'localtime')
             WHERE CreatedAt IS NULL OR CreatedAt = '';
         ");
+    }
+
+    /// <summary>
+    /// Chuyển đổi bảng Users cũ (dùng khóa chính UserId hoặc Role kiểu TEXT)
+    /// sang lược đồ chuẩn dùng khóa chính Id INTEGER PRIMARY KEY để khớp khóa ngoại với Bookings.
+    /// </summary>
+    private static void MigrateUsersSchemaIfNeeded(SqliteConnection connection)
+    {
+        bool hasIdColumn = false;
+        bool hasPrimaryKeyId = false;
+        bool hasLegacyUserId = false;
+        bool isRoleInteger = false;
+
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(\"Users\");";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                string colName = reader["name"]?.ToString() ?? "";
+                string colType = reader["type"]?.ToString() ?? "";
+                int pk = Convert.ToInt32(reader["pk"] ?? 0);
+
+                if (colName.Equals("Id", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasIdColumn = true;
+                    hasPrimaryKeyId = pk > 0;
+                }
+                else if (colName.Equals("UserId", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasLegacyUserId = true;
+                }
+                else if (colName.Equals("Role", StringComparison.OrdinalIgnoreCase))
+                {
+                    isRoleInteger = colType.Contains("INT", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+        }
+
+        if (hasPrimaryKeyId && !hasLegacyUserId && isRoleInteger)
+            return;
+
+        string idExpression = hasIdColumn
+            ? "Id"
+            : hasLegacyUserId
+                ? "UserId"
+                : "rowid";
+
+        connection.Execute("PRAGMA foreign_keys = OFF;");
+        try
+        {
+            using var tx = connection.BeginTransaction();
+
+            connection.Execute($@"
+                DROP TABLE IF EXISTS Users_new;
+
+                CREATE TABLE Users_new (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Username TEXT NOT NULL UNIQUE,
+                    PasswordHash TEXT NOT NULL DEFAULT '',
+                    FullName TEXT NOT NULL,
+                    Role INTEGER NOT NULL DEFAULT 0,
+                    Email TEXT DEFAULT '',
+                    Phone TEXT DEFAULT '',
+                    RewardPoints INTEGER NOT NULL DEFAULT 0,
+                    CreatedAt TEXT
+                );
+
+                INSERT INTO Users_new (
+                    Id, Username, PasswordHash, FullName, Role,
+                    Email, Phone, RewardPoints, CreatedAt
+                )
+                SELECT
+                    {idExpression},
+                    Username,
+                    COALESCE(PasswordHash, ''),
+                    COALESCE(FullName, Username),
+                    CASE
+                        WHEN UPPER(TRIM(CAST(Role AS TEXT))) IN ('0', 'ADMIN') THEN 0
+                        WHEN UPPER(TRIM(CAST(Role AS TEXT))) IN ('1', 'STAFF') THEN 1
+                        WHEN UPPER(TRIM(CAST(Role AS TEXT))) IN ('2', 'CUSTOMER') THEN 2
+                        ELSE 2
+                    END,
+                    COALESCE(Email, ''),
+                    COALESCE(Phone, ''),
+                    COALESCE(RewardPoints, 0),
+                    COALESCE(NULLIF(CreatedAt, ''), datetime('now', 'localtime'))
+                FROM Users;
+
+                DROP TABLE Users;
+                ALTER TABLE Users_new RENAME TO Users;
+            ", transaction: tx);
+
+            bool hasBookingsTable = connection.ExecuteScalar<bool>(@"
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name = 'Bookings'
+                );
+            ", transaction: tx);
+
+            if (hasBookingsTable)
+            {
+                connection.Execute(@"
+                    UPDATE Bookings
+                    SET UserId = NULL
+                    WHERE UserId IS NOT NULL
+                      AND UserId NOT IN (SELECT Id FROM Users);
+                ", transaction: tx);
+            }
+
+            tx.Commit();
+        }
+        finally
+        {
+            connection.Execute("PRAGMA foreign_keys = ON;");
+        }
+    }
+
+    private static void SeedAdminUser(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            INSERT INTO Users (Username, PasswordHash, FullName, Role, CreatedAt)
+            SELECT @Username, @PasswordHash, @FullName, @Role,
+                   datetime('now', 'localtime')
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM Users
+                WHERE Username COLLATE NOCASE = @Username
+            );
+        ", new
+        {
+            Username = "admin",
+            PasswordHash = "admin123",
+            FullName = "Administrator",
+            Role = (int)CinemaManagement.Models.Enums.UserRole.Admin
+        });
     }
 
     // =========================================

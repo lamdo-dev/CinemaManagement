@@ -50,22 +50,38 @@ namespace CinemaManagement
             public bool IsDanger;
         }
 
-        private readonly Color ColSidebarBg     = Color.FromArgb(255, 255, 255);
-        private readonly Color ColSidebarBorder = Color.FromArgb(229, 234, 242);
-        private readonly Color ColGroupLabel    = Color.FromArgb(148, 163, 184);
-        private readonly Color ColItemText      = Color.FromArgb(30, 41, 59);
-        private readonly Color ColItemActiveBg  = Color.FromArgb(241, 245, 249);
-        private readonly Color ColItemHoverBg   = Color.FromArgb(248, 250, 252);
-        private readonly Color ColEmeraldIcon   = Color.FromArgb(22, 163, 74);
-        private readonly Color ColEmeraldSoft   = Color.FromArgb(220, 252, 231);
+        private Color ColSidebarBg     = Color.FromArgb(255, 255, 255);
+        private Color ColSidebarBorder = Color.FromArgb(229, 234, 242);
+        private Color ColGroupLabel    = Color.FromArgb(148, 163, 184);
+        private Color ColItemText      = Color.FromArgb(30, 41, 59);
+        private Color ColItemActiveBg  = Color.FromArgb(241, 245, 249);
+        private Color ColItemHoverBg   = Color.FromArgb(248, 250, 252);
+        private Color ColEmeraldIcon   = Color.FromArgb(22, 163, 74);
+        private Color ColEmeraldSoft   = Color.FromArgb(220, 252, 231);
 
         private Panel panelSidebar = null!;
         private FlowLayoutPanel flpNavContainer = null!;
+        private Panel pnlBrand = null!;
+        private Panel panelHeader = null!;
         private Panel panelContent = null!;
         private Label lblHeaderTitle = null!;
+        private NeonThemeButton btnThemeToggle = null!;
 
         private readonly List<Panel> _navPanels = new();
+        private readonly List<Label> _navGroupLabels = new();
         private Panel? _activeNavPanel;
+        private UserControl? _activeView;
+        private bool _isDarkTheme = DashboardUC.IsDarkTheme;
+
+        // Các mục điều hướng để tự động highlight theo bước hiện tại
+        private Panel? _navCustomerHome;
+        private Panel? _navCustomerShowtime;
+        private Panel? _navCustomerSeat;
+        private Panel? _navCustomerFood;
+        private Panel? _navCustomerCheckout;
+        private Panel? _navCustomerTicket;
+        private Panel? _navStaffPos;
+        private Panel? _navStaffScanner;
 
         private readonly UserRole currentRole;
 
@@ -92,6 +108,7 @@ namespace CinemaManagement
             AutoScaleMode = AutoScaleMode.Dpi;
 
             SetupFullUILayout();
+            ApplyShellTheme(_isDarkTheme);
 
             // Chỉ bật responsive sau khi giao diện đã được tạo.
             SizeChanged += MainForm_SizeChanged;
@@ -152,7 +169,7 @@ namespace CinemaManagement
                     panelSidebar.Height);
             };
 
-            var pnlBrand = new Panel
+            pnlBrand = new Panel
             {
                 Dock = DockStyle.Top,
                 Height = 68,
@@ -169,12 +186,17 @@ namespace CinemaManagement
                 DrawVectorIcon(e.Graphics, NavIconType.Movie, new Rectangle(24, 22, 24, 24), ColEmeraldIcon);
 
                 using var fontBrand = new Font("Segoe UI", 12.5F, FontStyle.Bold);
-                using var brushBrand = new SolidBrush(Color.FromArgb(15, 23, 42));
+                using var brushBrand = new SolidBrush(ColItemText);
                 e.Graphics.DrawString("CINEMA APP", fontBrand, brushBrand, 62, 16);
 
                 using var fontRole = new Font("Segoe UI", 8F, FontStyle.Bold);
                 using var brushRole = new SolidBrush(ColEmeraldIcon);
-                e.Graphics.DrawString($"● {userDisplay}", fontRole, brushRole, 63, 38);
+                string userLine = $"● {userDisplay}";
+                e.Graphics.DrawString(userLine, fontRole, brushRole, 63, 41);
+                float badgeX = Math.Min(
+                    63 + e.Graphics.MeasureString(userLine, fontRole).Width,
+                    pnlBrand.Width - 19);
+                DrawVerifiedBadge(e.Graphics, new Rectangle((int)badgeX, 40, 14, 14));
 
                 using var divPen = new Pen(ColSidebarBorder, 1F);
                 e.Graphics.DrawLine(
@@ -201,11 +223,11 @@ namespace CinemaManagement
             // -----------------------------------------------------
             // HEADER
             // -----------------------------------------------------
-            var panelHeader = new Panel
+            panelHeader = new Panel
             {
                 Dock = DockStyle.Top,
                 Height = 62,
-                BackColor = Color.White
+                BackColor = ColSidebarBg
             };
             panelHeader.Paint += (s, e) =>
             {
@@ -222,14 +244,37 @@ namespace CinemaManagement
             {
                 Text = "Trang làm việc",
                 Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(30, 41, 59),
+                ForeColor = ColItemText,
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(22, 0, 10, 0),
+                Padding = new Padding(22, 0, 170, 0),
                 AutoEllipsis = true
             };
 
+            btnThemeToggle = new NeonThemeButton
+            {
+                Width = 150,
+                Height = 38,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(panelHeader.ClientSize.Width - 164, 12),
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnThemeToggle.FlatAppearance.BorderSize = 1;
+            btnThemeToggle.Click += (s, e) => ToggleTheme();
+
             panelHeader.Controls.Add(lblHeaderTitle);
+            if (currentRole != UserRole.Customer)
+            {
+                panelHeader.Controls.Add(btnThemeToggle);
+                panelHeader.Resize += (s, e) =>
+                    btnThemeToggle.Location = new Point(panelHeader.ClientSize.Width - btnThemeToggle.Width - 14, 12);
+            }
+            else
+            {
+                lblHeaderTitle.Padding = new Padding(22, 0, 10, 0);
+            }
 
             // -----------------------------------------------------
             // CONTENT
@@ -248,18 +293,18 @@ namespace CinemaManagement
             {
                 AddNavGroup("BÁN HÀNG & SOÁT VÉ");
 
-                var itemPos = AddNavButton(
+                _navStaffPos = AddNavButton(
                     "Bán vé tại quầy (POS)",
                     NavIconType.Cart,
                     OpenPOSView);
 
-                AddNavButton(
+                _navStaffScanner = AddNavButton(
                     "Quét mã QR soát vé",
                     NavIconType.QrScan,
                     () => OpenTicketScannerView());
 
                 if (currentRole == UserRole.Staff)
-                    SetActiveNav(itemPos);
+                    SetActiveNav(_navStaffPos);
             }
 
             // ADMIN MENU
@@ -270,9 +315,7 @@ namespace CinemaManagement
                 var itemDash = AddNavButton(
                     "Dashboard Thống kê",
                     NavIconType.Chart,
-                    () => SwitchView(
-                        "Dashboard Doanh thu & Suất chiếu",
-                        new DashboardUC()));
+                    OpenDashboardView);
 
                 AddNavButton(
                     "Quản lý Phim",
@@ -331,7 +374,12 @@ namespace CinemaManagement
             {
                 AddNavGroup("DỊCH VỤ KHÁCH HÀNG");
 
-                var itemHome = AddNavButton(
+                btnThemeToggle.Width = 200;
+                btnThemeToggle.Height = 38;
+                btnThemeToggle.Margin = new Padding(0, 4, 0, 8);
+                flpNavContainer.Controls.Add(btnThemeToggle);
+
+                _navCustomerHome = AddNavButton(
                     "Trang chủ Phim",
                     NavIconType.Home,
                     OpenHomeView);
@@ -343,37 +391,32 @@ namespace CinemaManagement
                         "Ưu đãi & Khuyến mãi",
                         new PromotionListUC()));
 
-                AddNavButton(
+                _navCustomerShowtime = AddNavButton(
                     "Lịch chiếu",
                     NavIconType.Schedule,
                     () => OpenShowtimeView(_bookingContext.Movie));
 
-                AddNavButton(
-                    "Đặt vé liên hoàn",
-                    NavIconType.Ticket,
-                    StartBookingFlow);
-
-                AddNavButton(
+                _navCustomerSeat = AddNavButton(
                     "Chọn ghế đặt vé",
                     NavIconType.Seat,
                     () => OpenSeatSelectionView());
 
-                AddNavButton(
+                _navCustomerFood = AddNavButton(
                     "Chọn bắp nước",
                     NavIconType.Food,
                     OpenFoodSelectionView);
 
-                AddNavButton(
+                _navCustomerCheckout = AddNavButton(
                     "Thanh toán",
                     NavIconType.Payment,
                     OpenCheckoutView);
 
-                AddNavButton(
+                _navCustomerTicket = AddNavButton(
                     "Vé của tôi",
                     NavIconType.Ticket,
                     () => OpenTicketView());
 
-                SetActiveNav(itemHome);
+                SetActiveNav(_navCustomerHome);
             }
 
             // =====================================================
@@ -412,9 +455,7 @@ namespace CinemaManagement
             }
             else
             {
-                SwitchView(
-                    "Dashboard Doanh thu & Suất chiếu",
-                    new DashboardUC());
+                OpenDashboardView();
             }
         }
 
@@ -438,6 +479,90 @@ namespace CinemaManagement
             };
 
             flpNavContainer.Controls.Add(lblGroup);
+            _navGroupLabels.Add(lblGroup);
+        }
+
+        private void OpenDashboardView()
+        {
+            var dashboard = new DashboardUC();
+            dashboard.ThemeChanged += ApplyShellTheme;
+            SwitchView("Dashboard Doanh thu & Suất chiếu", dashboard);
+            ApplyShellTheme(DashboardUC.IsDarkTheme);
+        }
+
+        private void ToggleTheme()
+        {
+            bool isDark = !_isDarkTheme;
+            if (_activeView is DashboardUC dashboard)
+            {
+                dashboard.SetTheme(isDark);
+                return;
+            }
+
+            DashboardUC.SetThemePreference(isDark);
+            ApplyShellTheme(isDark);
+        }
+
+        private void ApplyShellTheme(bool isDark)
+        {
+            _isDarkTheme = isDark;
+            DashboardUC.SetThemePreference(isDark);
+
+            if (isDark)
+            {
+                ColSidebarBg = Color.FromArgb(15, 23, 42);
+                ColSidebarBorder = Color.FromArgb(42, 56, 86);
+                ColGroupLabel = Color.FromArgb(148, 163, 184);
+                ColItemText = Color.FromArgb(226, 232, 240);
+                ColItemActiveBg = Color.FromArgb(30, 41, 59);
+                ColItemHoverBg = Color.FromArgb(27, 38, 59);
+                ColEmeraldIcon = Color.FromArgb(52, 211, 153);
+                ColEmeraldSoft = Color.FromArgb(6, 78, 59);
+            }
+            else
+            {
+                ColSidebarBg = Color.White;
+                ColSidebarBorder = Color.FromArgb(229, 234, 242);
+                ColGroupLabel = Color.FromArgb(148, 163, 184);
+                ColItemText = Color.FromArgb(30, 41, 59);
+                ColItemActiveBg = Color.FromArgb(241, 245, 249);
+                ColItemHoverBg = Color.FromArgb(248, 250, 252);
+                ColEmeraldIcon = Color.FromArgb(22, 163, 74);
+                ColEmeraldSoft = Color.FromArgb(220, 252, 231);
+            }
+
+            panelSidebar.BackColor = ColSidebarBg;
+            pnlBrand.BackColor = ColSidebarBg;
+            flpNavContainer.BackColor = ColSidebarBg;
+            panelHeader.BackColor = ColSidebarBg;
+            panelContent.BackColor = isDark
+                ? Color.FromArgb(11, 16, 32)
+                : Color.FromArgb(241, 242, 246);
+            lblHeaderTitle.ForeColor = ColItemText;
+            btnThemeToggle.Text = isDark ? "☀ Chế độ sáng" : "☾ Chế độ tối";
+            btnThemeToggle.BackColor = ColItemActiveBg;
+            btnThemeToggle.NeonColor = isDark
+                ? Color.FromArgb(0, 245, 212)
+                : Color.FromArgb(0, 112, 192);
+            btnThemeToggle.ForeColor = btnThemeToggle.NeonColor;
+            btnThemeToggle.Invalidate();
+            this.BackColor = panelContent.BackColor;
+
+            foreach (Label label in _navGroupLabels)
+                label.ForeColor = ColGroupLabel;
+
+            foreach (Panel item in _navPanels)
+            {
+                item.BackColor = ColSidebarBg;
+                item.Invalidate();
+            }
+
+            panelSidebar.Invalidate(true);
+            panelHeader.Invalidate();
+            pnlBrand.Invalidate();
+
+            if (_activeView != null && _activeView is not DashboardUC)
+                ThemeColorApplicator.Apply(_activeView, isDark);
         }
 
         private Panel AddNavButton(
@@ -512,7 +637,7 @@ namespace CinemaManagement
                 Color textColor = itemState.IsDanger
                     ? Color.FromArgb(220, 38, 38)
                     : itemState.IsActive
-                        ? Color.FromArgb(15, 23, 42)
+                        ? ColItemText
                         : ColItemText;
 
                 using var textFont = new Font(
@@ -572,8 +697,11 @@ namespace CinemaManagement
             return item;
         }
 
-        private void SetActiveNav(Panel target)
+        private void SetActiveNav(Panel? target)
         {
+            if (target == null)
+                return;
+
             if (_activeNavPanel != null)
             {
                 if (_activeNavPanel.Tag is NavItemState oldSt)
@@ -597,6 +725,41 @@ namespace CinemaManagement
             path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
+        }
+
+        private static void DrawVerifiedBadge(Graphics graphics, Rectangle bounds)
+        {
+            PointF[] points = new PointF[24];
+            float centerX = bounds.X + bounds.Width / 2F;
+            float centerY = bounds.Y + bounds.Height / 2F;
+            float outerRadius = Math.Min(bounds.Width, bounds.Height) / 2F;
+
+            for (int i = 0; i < points.Length; i++)
+            {
+                float angle = (float)(-Math.PI / 2 + i * Math.PI * 2 / points.Length);
+                float radius = i % 2 == 0 ? outerRadius : outerRadius * 0.82F;
+                points[i] = new PointF(
+                    centerX + (float)Math.Cos(angle) * radius,
+                    centerY + (float)Math.Sin(angle) * radius);
+            }
+
+            using var badgeBrush = new SolidBrush(Color.FromArgb(24, 144, 255));
+            using var badgeBorder = new Pen(Color.FromArgb(112, 199, 255), 0.8F);
+            graphics.FillPolygon(badgeBrush, points);
+            graphics.DrawPolygon(badgeBorder, points);
+
+            using var checkPen = new Pen(Color.White, 1.8F)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+            graphics.DrawLines(checkPen, new[]
+            {
+                new PointF(bounds.X + 3.5F, bounds.Y + 7.5F),
+                new PointF(bounds.X + 5.8F, bounds.Y + 9.8F),
+                new PointF(bounds.X + 10.5F, bounds.Y + 4.5F)
+            });
         }
 
         private static void DrawVectorIcon(Graphics g, NavIconType type, Rectangle r, Color color)
@@ -776,6 +939,10 @@ namespace CinemaManagement
             control.Dock = DockStyle.Fill;
             panelContent.Controls.Add(control);
             control.BringToFront();
+            _activeView = control;
+
+            if (control is not DashboardUC)
+                ThemeColorApplicator.Apply(control, _isDarkTheme);
         }
 
         // =========================================================
@@ -839,6 +1006,7 @@ namespace CinemaManagement
                 OpenShowtimeView(selectedMovie);
             };
 
+            SetActiveNav(_navCustomerHome);
             SwitchView("Trang chủ - Chọn phim", homeUC);
         }
 
@@ -862,6 +1030,7 @@ namespace CinemaManagement
                 OpenHomeView();
             };
 
+            SetActiveNav(_navCustomerHome);
             SwitchView($"Chi tiết phim: {movie.Title}", detailUC);
         }
 
@@ -914,6 +1083,7 @@ namespace CinemaManagement
                 ? $"Chọn suất chiếu: {_bookingContext.Movie.Title}"
                 : "Lịch chiếu phim";
 
+            SetActiveNav(_navCustomerShowtime);
             SwitchView(header, showtimeUC);
         }
 
@@ -970,6 +1140,7 @@ namespace CinemaManagement
                 OpenShowtimeView(_bookingContext.Movie);
             };
 
+            SetActiveNav(_navCustomerSeat);
             SwitchView($"Chọn ghế - {_bookingContext.Movie!.Title}", seatUC);
         }
 
@@ -1000,6 +1171,7 @@ namespace CinemaManagement
                 OpenSeatSelectionView();
             };
 
+            SetActiveNav(_navCustomerFood);
             SwitchView("Chọn bắp nước & Combo", foodUC);
         }
 
@@ -1086,7 +1258,7 @@ namespace CinemaManagement
                     {
                         try
                         {
-                            var bookedSeats = new Repositories.TicketRepository()
+                            var bookedSeats = new TicketService()
                                 .GetBookedSeatNumbers(_bookingContext.Showtime.Id);
 
                             if (_bookingContext.Seats.Any(s => bookedSeats.Contains(s)))
@@ -1110,6 +1282,7 @@ namespace CinemaManagement
                 }
             };
 
+            SetActiveNav(_navCustomerCheckout);
             SwitchView("Thanh toán", checkoutUC);
         }
 
@@ -1179,13 +1352,12 @@ namespace CinemaManagement
                 }
             };
 
-            SwitchView("Hoàn tất & Xuất vé điện tử", ticketUC);
-        }
+            if (currentRole == UserRole.Customer)
+            {
+                SetActiveNav(_navCustomerTicket);
+            }
 
-        private void StartBookingFlow()
-        {
-            _bookingContext.Clear();
-            OpenHomeView();
+            SwitchView("Hoàn tất & Xuất vé điện tử", ticketUC);
         }
 
         // =========================================================
@@ -1229,6 +1401,7 @@ namespace CinemaManagement
                 OpenTicketScannerView(code);
             };
 
+            SetActiveNav(_navStaffPos);
             SwitchView("Bán vé tại quầy (POS)", posUC);
         }
 
@@ -1288,6 +1461,7 @@ namespace CinemaManagement
                 OpenPOSView();
             };
 
+            SetActiveNav(_navStaffScanner);
             SwitchView("Soát vé QR Code", scannerUC);
         }
     }
