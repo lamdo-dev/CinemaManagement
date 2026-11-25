@@ -575,8 +575,17 @@ public partial class FoodManagementUC : UserControl
         _grid.Columns.Add("Stock", "TỒN KHO");
         _grid.Columns.Add("Image", "HÌNH ẢNH");
         _grid.Columns.Add("Status", "TRẠNG THÁI");
+        _grid.Columns.Insert(0, new DataGridViewTextBoxColumn
+        {
+            Name = "STT",
+            HeaderText = "STT",
+            ReadOnly = true,
+            Width = 55,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
+        _grid.Columns["Id"]!.Visible = false;
 
-        int[] minWidths = { 55, 145, 85, 95, 70, 85, 110 };
+        int[] minWidths = { 55, 55, 145, 85, 95, 70, 85, 110 };
 
         for (int i = 0; i < _grid.Columns.Count; i++)
         {
@@ -731,10 +740,15 @@ public partial class FoodManagementUC : UserControl
             // Tránh tình trạng bảng chỉ chiếm một phần màn hình như trước.
             _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
 
-            float[] fillWeights = { 7, 22, 12, 13, 9, 15, 18 };
+            float[] fillWeights = { 6, 7, 22, 12, 13, 9, 15, 18 };
             for (int i = 0; i < _grid.Columns.Count; i++)
             {
-                _grid.Columns[i].FillWeight = fillWeights[i];
+                // Nếu sau này thêm/bớt cột, không truy cập vượt giới hạn mảng.
+                float fillWeight = i < fillWeights.Length
+                    ? fillWeights[i]
+                    : 12f;
+
+                _grid.Columns[i].FillWeight = fillWeight;
                 _grid.Columns[i].MinimumWidth = mobile ? 48 : 58;
             }
 
@@ -827,13 +841,15 @@ public partial class FoodManagementUC : UserControl
             return matchName && matchCategory && matchStatus;
         }).OrderBy(p => p.Id).ToList();
 
-        foreach (Product product in result)
+        for (int index = 0; index < result.Count; index++)
         {
+            Product product = result[index];
             string imageName = string.IsNullOrWhiteSpace(product.ImageUrl)
                 ? "Chưa có ảnh"
                 : Path.GetFileName(product.ImageUrl);
 
             _grid.Rows.Add(
+                index + 1,
                 product.Id,
                 product.Name,
                 GetCategoryText(product.Category),

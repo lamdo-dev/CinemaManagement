@@ -530,6 +530,15 @@ public partial class ShowtimeManagementUC : UserControl
         _dgvShowtimes.Columns.Add("End", "Giờ kết thúc");
         _dgvShowtimes.Columns.Add("Format", "Định dạng");
         _dgvShowtimes.Columns.Add("Price", "Giá vé");
+        _dgvShowtimes.Columns.Insert(0, new DataGridViewTextBoxColumn
+        {
+            Name = "STT",
+            HeaderText = "STT",
+            ReadOnly = true,
+            Width = 55,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
+        _dgvShowtimes.Columns["Id"]!.Visible = false;
 
         // CHÂN TRANG
 
@@ -1099,8 +1108,9 @@ public partial class ShowtimeManagementUC : UserControl
         .OrderBy(s => s.StartTime)
         .ToList();
 
-        foreach (Showtime showtime in result)
+        for (int index = 0; index < result.Count; index++)
         {
+            Showtime showtime = result[index];
             Movie? movie = _movies.FirstOrDefault(
                 m => m.Id == showtime.MovieId
             );
@@ -1112,6 +1122,7 @@ public partial class ShowtimeManagementUC : UserControl
             string format = showtime.Format;
 
             _dgvShowtimes.Rows.Add(
+                index + 1,
                 showtime.Id,
                 movie?.Title ?? "Không xác định",
                 room?.Name ?? "Không xác định",
