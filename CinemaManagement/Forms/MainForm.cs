@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Windows.Forms;
 
 using CinemaManagement.Models;
@@ -71,6 +72,16 @@ namespace CinemaManagement
         private Panel? _activeNavPanel;
         private UserControl? _activeView;
         private bool _isDarkTheme = DashboardUC.IsDarkTheme;
+
+        // Các mục điều hướng để tự động highlight theo bước hiện tại
+        private Panel? _navCustomerHome;
+        private Panel? _navCustomerShowtime;
+        private Panel? _navCustomerSeat;
+        private Panel? _navCustomerFood;
+        private Panel? _navCustomerCheckout;
+        private Panel? _navCustomerTicket;
+        private Panel? _navStaffPos;
+        private Panel? _navStaffScanner;
 
         private readonly UserRole currentRole;
 
@@ -282,18 +293,18 @@ namespace CinemaManagement
             {
                 AddNavGroup("BÁN HÀNG & SOÁT VÉ");
 
-                var itemPos = AddNavButton(
+                _navStaffPos = AddNavButton(
                     "Bán vé tại quầy (POS)",
                     NavIconType.Cart,
                     OpenPOSView);
 
-                AddNavButton(
+                _navStaffScanner = AddNavButton(
                     "Quét mã QR soát vé",
                     NavIconType.QrScan,
                     () => OpenTicketScannerView());
 
                 if (currentRole == UserRole.Staff)
-                    SetActiveNav(itemPos);
+                    SetActiveNav(_navStaffPos);
             }
 
             // ADMIN MENU
@@ -368,7 +379,7 @@ namespace CinemaManagement
                 btnThemeToggle.Margin = new Padding(0, 4, 0, 8);
                 flpNavContainer.Controls.Add(btnThemeToggle);
 
-                var itemHome = AddNavButton(
+                _navCustomerHome = AddNavButton(
                     "Trang chủ Phim",
                     NavIconType.Home,
                     OpenHomeView);
@@ -380,37 +391,32 @@ namespace CinemaManagement
                         "Ưu đãi & Khuyến mãi",
                         new PromotionListUC()));
 
-                AddNavButton(
+                _navCustomerShowtime = AddNavButton(
                     "Lịch chiếu",
                     NavIconType.Schedule,
                     () => OpenShowtimeView(_bookingContext.Movie));
 
-                AddNavButton(
-                    "Đặt vé liên hoàn",
-                    NavIconType.Ticket,
-                    StartBookingFlow);
-
-                AddNavButton(
+                _navCustomerSeat = AddNavButton(
                     "Chọn ghế đặt vé",
                     NavIconType.Seat,
                     () => OpenSeatSelectionView());
 
-                AddNavButton(
+                _navCustomerFood = AddNavButton(
                     "Chọn bắp nước",
                     NavIconType.Food,
                     OpenFoodSelectionView);
 
-                AddNavButton(
+                _navCustomerCheckout = AddNavButton(
                     "Thanh toán",
                     NavIconType.Payment,
                     OpenCheckoutView);
 
-                AddNavButton(
+                _navCustomerTicket = AddNavButton(
                     "Vé của tôi",
                     NavIconType.Ticket,
-                    () => OpenTicketView(UserSession.LatestBooking));
+                    () => OpenTicketView());
 
-                SetActiveNav(itemHome);
+                SetActiveNav(_navCustomerHome);
             }
 
             // =====================================================
@@ -691,8 +697,11 @@ namespace CinemaManagement
             return item;
         }
 
-        private void SetActiveNav(Panel target)
+        private void SetActiveNav(Panel? target)
         {
+            if (target == null)
+                return;
+
             if (_activeNavPanel != null)
             {
                 if (_activeNavPanel.Tag is NavItemState oldSt)
@@ -997,6 +1006,7 @@ namespace CinemaManagement
                 OpenShowtimeView(selectedMovie);
             };
 
+            SetActiveNav(_navCustomerHome);
             SwitchView("Trang chủ - Chọn phim", homeUC);
         }
 
@@ -1020,6 +1030,7 @@ namespace CinemaManagement
                 OpenHomeView();
             };
 
+            SetActiveNav(_navCustomerHome);
             SwitchView($"Chi tiết phim: {movie.Title}", detailUC);
         }
 
@@ -1072,6 +1083,7 @@ namespace CinemaManagement
                 ? $"Chọn suất chiếu: {_bookingContext.Movie.Title}"
                 : "Lịch chiếu phim";
 
+            SetActiveNav(_navCustomerShowtime);
             SwitchView(header, showtimeUC);
         }
 
@@ -1128,6 +1140,7 @@ namespace CinemaManagement
                 OpenShowtimeView(_bookingContext.Movie);
             };
 
+            SetActiveNav(_navCustomerSeat);
             SwitchView($"Chọn ghế - {_bookingContext.Movie!.Title}", seatUC);
         }
 
@@ -1158,6 +1171,7 @@ namespace CinemaManagement
                 OpenSeatSelectionView();
             };
 
+            SetActiveNav(_navCustomerFood);
             SwitchView("Chọn bắp nước & Combo", foodUC);
         }
 
@@ -1213,8 +1227,9 @@ namespace CinemaManagement
                             "Không thể lưu đơn đặt vé vào cơ sở dữ liệu.");
                     }
 
-                    // 2. Chỉ cập nhật lịch sử trong bộ nhớ sau khi SQLite lưu thành công.
-                    UserSession.AddBooking(result);
+                    // 2. Xóa ngay dữ liệu tạm của lượt đặt vé vừa hoàn tất
+                    // để tránh còn lưu ghế/giỏ hàng cũ nếu khách bấm sang menu khác.
+                    _bookingContext.Clear();
 
                     // 3. Chuyển sang màn hình vé điện tử.
                     OpenTicketView(result);
@@ -1226,6 +1241,36 @@ namespace CinemaManagement
                         "Không thể hoàn tất đơn hàng",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
+
+                    // Nếu suất chiếu đã qua giờ thì đưa khách về chọn lại suất chiếu
+                    if (_bookingContext.Showtime != null &&
+                        _bookingContext.Showtime.StartTime <= DateTime.Now)
+                    {
+                        Movie? currentMovie = _bookingContext.Movie;
+                        _bookingContext.ClearAfterMovieChange();
+                        OpenShowtimeView(currentMovie);
+                        return;
+                    }
+
+                    // Nếu có ghế vừa bị người khác đặt thì đưa khách về sơ đồ ghế để chọn lại
+                    if (_bookingContext.Showtime != null &&
+                        _bookingContext.Seats.Count > 0)
+                    {
+                        try
+                        {
+                            var bookedSeats = new TicketService()
+                                .GetBookedSeatNumbers(_bookingContext.Showtime.Id);
+
+                            if (_bookingContext.Seats.Any(s => bookedSeats.Contains(s)))
+                            {
+                                OpenSeatSelectionView();
+                            }
+                        }
+                        catch
+                        {
+                            // Giữ người dùng ở lại màn thanh toán với nút đã mở khóa
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1237,20 +1282,45 @@ namespace CinemaManagement
                 }
             };
 
+            SetActiveNav(_navCustomerCheckout);
             SwitchView("Thanh toán", checkoutUC);
         }
 
-                public void OpenTicketView(BookingResultEventArgs? bookingData = null)
+        public void OpenTicketView(BookingResultEventArgs? bookingData = null)
         {
-            bookingData ??= UserSession.LatestBooking;
+            if (bookingData == null)
+            {
+                if (currentRole == UserRole.Customer)
+                {
+                    try
+                    {
+                        bookingData = new BookingService().GetCurrentUserLatestBooking();
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(
+                            "Không thể tải thông tin vé từ cơ sở dữ liệu:\n" + ex.Message,
+                            "Lỗi tải vé",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    bookingData = UserSession.LatestBooking;
+                }
+            }
 
             if (bookingData == null)
             {
                 MessageBox.Show(
-                    "Không tìm thấy thông tin vé.",
+                    currentRole == UserRole.Customer
+                        ? "Tài khoản của bạn chưa có vé nào đã đặt."
+                        : "Không tìm thấy thông tin vé.",
                     "Thông báo",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Information);
 
                 if (currentRole == UserRole.Staff ||
                     currentRole == UserRole.Admin)
@@ -1282,13 +1352,12 @@ namespace CinemaManagement
                 }
             };
 
-            SwitchView("Hoàn tất & Xuất vé điện tử", ticketUC);
-        }
+            if (currentRole == UserRole.Customer)
+            {
+                SetActiveNav(_navCustomerTicket);
+            }
 
-        private void StartBookingFlow()
-        {
-            _bookingContext.Clear();
-            OpenHomeView();
+            SwitchView("Hoàn tất & Xuất vé điện tử", ticketUC);
         }
 
         // =========================================================
@@ -1332,6 +1401,7 @@ namespace CinemaManagement
                 OpenTicketScannerView(code);
             };
 
+            SetActiveNav(_navStaffPos);
             SwitchView("Bán vé tại quầy (POS)", posUC);
         }
 
@@ -1391,6 +1461,7 @@ namespace CinemaManagement
                 OpenPOSView();
             };
 
+            SetActiveNav(_navStaffScanner);
             SwitchView("Soát vé QR Code", scannerUC);
         }
     }

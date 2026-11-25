@@ -5,8 +5,8 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
+using CinemaManagement.Models;
 using CinemaManagement.Utils;
-using CinemaManagement.UserControls.Customer;
 
 namespace CinemaManagement.UserControls.Staff
 {
@@ -658,9 +658,7 @@ namespace CinemaManagement.UserControls.Staff
             }
 
             // Thống kê lượt khách đã vào
-            var ticketBookings = UserSession.BookingHistory
-                .Where(b => b.Seats != null && b.Seats.Count > 0)
-                .ToList();
+            var ticketBookings = UserSession.GetAllTicketBookings();
 
             int totalSeats = ticketBookings.Sum(b => b.Seats.Count);
 
@@ -688,12 +686,11 @@ namespace CinemaManagement.UserControls.Staff
         {
             lstPending.Items.Clear();
 
-            var pendingBookings = UserSession.BookingHistory
+            var pendingBookings = UserSession.GetAllTicketBookings()
                 .Where(b =>
                     b.Seats != null &&
                     b.Seats.Count > 0 &&
                     !UserSession.IsCheckedIn(b.BookingCode))
-                .Reverse()
                 .ToList();
 
             foreach (var b in pendingBookings)

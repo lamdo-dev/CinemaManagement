@@ -177,23 +177,4 @@ public class FoodService
     {
         return _repository.CountLowStock();
     }
-
-    // TRỪ TỒN KHO SAU KHI ĐẶT HÀNG
-    public bool DeductStockForOrder(
-        Dictionary<int, (string Name, decimal Price, int Qty, string ImgPath)> foodCart)
-    {
-        if (foodCart == null)
-            throw new ArgumentNullException(nameof(foodCart));
-
-        foreach (var item in foodCart)
-        {
-            if (item.Key <= 0 || item.Value.Qty <= 0)
-            {
-                throw new ArgumentException(
-                    "Thông tin sản phẩm trong đơn hàng không hợp lệ.");
-            }
-        }
-
-        return _repository.DeductStockForOrder(foodCart);
-    }
 }

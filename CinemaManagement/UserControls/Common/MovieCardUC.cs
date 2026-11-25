@@ -143,17 +143,10 @@ namespace CinemaManagement.UserControls.Common
 
             btnBookNow.Click += (s, e) =>
             {
-                if (MovieData == null)
+                if (MovieData == null || MovieData.Status == MovieStatus.Ended)
                     return;
 
-                if (MovieData.Status == MovieStatus.ComingSoon)
-                {
-                    MovieSelected?.Invoke(this, MovieData);
-                }
-                else
-                {
-                    OnBookNowClicked?.Invoke(this, MovieData);
-                }
+                OnBookNowClicked?.Invoke(this, MovieData);
             };
 
             // Thêm control theo thứ tự Dock.
@@ -261,17 +254,31 @@ namespace CinemaManagement.UserControls.Common
 
                 lblStatusBadge.Visible = true;
 
-                btnBookNow.Text = "🕒 Xem chi tiết";
+                btnBookNow.Text = "🎟 Đặt vé trước";
                 btnBookNow.BackColor =
-                    Color.FromArgb(71, 85, 105);
+                    Color.FromArgb(229, 9, 20);
+                btnBookNow.Enabled = true;
             }
-            else
+            else if (movie.Status == MovieStatus.Showing)
             {
                 lblStatusBadge.Visible = false;
 
                 btnBookNow.Text = "🎟 Đặt vé ngay";
                 btnBookNow.BackColor =
                     Color.FromArgb(229, 9, 20);
+                btnBookNow.Enabled = true;
+            }
+            else
+            {
+                lblStatusBadge.Text = "ĐÃ KẾT THÚC";
+                lblStatusBadge.BackColor =
+                    Color.FromArgb(100, 116, 139);
+                lblStatusBadge.Visible = true;
+
+                btnBookNow.Text = "Ngừng chiếu";
+                btnBookNow.BackColor =
+                    Color.FromArgb(71, 85, 105);
+                btnBookNow.Enabled = false;
             }
 
             // ---------------- RELEASE OLD IMAGE ----------------
