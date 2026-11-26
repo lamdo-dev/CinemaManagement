@@ -9,19 +9,17 @@ using CinemaManagement.Models.Enums;
 
 public partial class MovieDetailUC : UserControl
 {
-    // Color Palette
     private readonly Color ColorBg = Color.FromArgb(18, 19, 28);
     private readonly Color ColorCardBg = Color.FromArgb(26, 27, 38);
     private readonly Color ColorAccentRed = Color.FromArgb(229, 9, 20);
     private readonly Color ColorDisabledBtn = Color.FromArgb(65, 70, 90);
     private readonly Color ColorTextMuted = Color.FromArgb(160, 160, 180);
 
-    // UI Controls
     private Panel pnlHero = null!;
     private PictureBox picPoster = null!;
     private Label lblTitle = null!;
     private Label lblSynopsisHeader = null!;
-    private Label lblDescription = null!;
+    private RichTextBox lblDescription = null!;
     private FlowLayoutPanel flpMetadata = null!;
     private Label lblMetaDirector = null!;
     private Label lblMetaGenre = null!;
@@ -32,10 +30,7 @@ public partial class MovieDetailUC : UserControl
     private Button btnBack = null!;
 
     public Movie? MovieData { get; private set; }
-
-    // Sự kiện khi bấm "Đặt Vé Ngay" để chuyển sang màn hình Chọn Suất Chiếu (ShowtimeUC)
     public event EventHandler<Movie>? OnBookTicketClicked;
-    // Sự kiện khi bấm "Quay lại" về HomeUC
     public event EventHandler? OnBackClicked;
 
     public MovieDetailUC()
@@ -50,13 +45,11 @@ public partial class MovieDetailUC : UserControl
 
     private void InitializeComponents()
     {
-        this.Dock = DockStyle.Fill;
-        this.BackColor = ColorBg;
-        this.AutoScroll = true;
+        Dock = DockStyle.Fill;
+        BackColor = ColorBg;
+        AutoScroll = true;
+        MinimumSize = new Size(0, 0);
 
-        // -------------------------------------------------------------
-        // 1. NÚT BACK (QUAY LẠI TRANG CHỦ)
-        // -------------------------------------------------------------
         btnBack = new Button
         {
             Text = "← Quay lại",
@@ -65,88 +58,79 @@ public partial class MovieDetailUC : UserControl
             BackColor = Color.FromArgb(35, 36, 50),
             FlatStyle = FlatStyle.Flat,
             Size = new Size(110, 35),
-            Location = new Point(20, 15),
-            Cursor = Cursors.Hand
+            Location = new Point(12, 12),
+            Cursor = Cursors.Hand,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left
         };
         btnBack.FlatAppearance.BorderSize = 0;
-        btnBack.Click += (s, e) => OnBackClicked?.Invoke(this, EventArgs.Empty);
+        btnBack.Click += (_, _) => OnBackClicked?.Invoke(this, EventArgs.Empty);
 
-        // -------------------------------------------------------------
-        // 2. KHỐI HERO (BANNER BANNER & THÔNG TIN CHÍNH)
-        // -------------------------------------------------------------
         pnlHero = new Panel
         {
-            Location = new Point(20, 60),
-            Size = new Size(1140, 360),
+            Location = new Point(12, 58),
+            Size = new Size(900, 500),
             BackColor = ColorCardBg,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
 
-        // Poster Phim bên trái
         picPoster = new PictureBox
         {
-            Location = new Point(20, 20),
             Size = new Size(220, 320),
             SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Color.FromArgb(40, 40, 55)
+            BackColor = Color.FromArgb(40, 40, 55),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left
         };
-        picPoster.Paint += (s, e) =>
+        picPoster.Paint += (_, e) =>
         {
-            if (picPoster.Image != null)
-                return;
-
+            if (picPoster.Image != null) return;
             using var font = new Font("Segoe UI Emoji", 32f);
             using var brush = new SolidBrush(Color.FromArgb(130, 135, 160));
-            using var sf = new StringFormat
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center
-            };
+            using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             e.Graphics.DrawString("🎬", font, brush, picPoster.ClientRectangle, sf);
         };
 
-        // Tiêu đề Phim
         lblTitle = new Label
         {
             Text = "Thông tin bộ phim",
             Font = new Font("Segoe UI", 22, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(260, 20),
-            Size = new Size(850, 45),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            AutoSize = false,
             AutoEllipsis = true
         };
 
-        // Tiêu đề tóm tắt
         lblSynopsisHeader = new Label
         {
             Text = "Tóm tắt & Chi tiết",
             Font = new Font("Segoe UI", 13, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(260, 70),
             AutoSize = true
         };
 
-        // Mô tả nội dung phim
-        lblDescription = new Label
+        lblDescription = new RichTextBox
         {
             Text = "Đang tải mô tả phim...",
-            Font = new Font("Segoe UI", 10),
-            ForeColor = ColorTextMuted,
-            Location = new Point(260, 105),
-            Size = new Size(840, 70),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-            AutoEllipsis = true
+            Font = new Font("Segoe UI", 11.5f, FontStyle.Regular),
+            ForeColor = Color.FromArgb(220, 228, 240),
+            BackColor = ColorCardBg,
+            BorderStyle = BorderStyle.None,
+            ReadOnly = true,
+            Multiline = true,
+            WordWrap = true,
+            ScrollBars = RichTextBoxScrollBars.None,
+            DetectUrls = false,
+            TabStop = false,
+            HideSelection = true,
+            ShortcutsEnabled = true,
+            AutoSize = false
         };
 
-        // Grid Thông tin phụ (Đạo diễn, Thể loại, Thời lượng, Khởi chiếu, Trạng thái)
         flpMetadata = new FlowLayoutPanel
         {
-            Location = new Point(260, 185),
-            Size = new Size(840, 75),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             AutoScroll = false,
-            WrapContents = true
+            WrapContents = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
         };
 
         lblMetaDirector = AddMetaItem("Đạo diễn", "Đang cập nhật");
@@ -155,7 +139,6 @@ public partial class MovieDetailUC : UserControl
         lblMetaReleaseDate = AddMetaItem("Khởi chiếu", "--/--/----");
         lblMetaStatus = AddMetaItem("Trạng thái", "Đang chiếu");
 
-        // Nút bấm ĐẶT VÉ NGAY
         btnBookTicket = new Button
         {
             Text = "🎟  ĐẶT VÉ NGAY",
@@ -164,7 +147,6 @@ public partial class MovieDetailUC : UserControl
             BackColor = ColorAccentRed,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(280, 45),
-            Location = new Point(260, 280),
             Cursor = Cursors.Hand
         };
         btnBookTicket.FlatAppearance.BorderSize = 0;
@@ -177,14 +159,108 @@ public partial class MovieDetailUC : UserControl
         pnlHero.Controls.Add(flpMetadata);
         pnlHero.Controls.Add(btnBookTicket);
 
-        // Thêm tất cả vào UserControl
-        this.Controls.Add(btnBack);
-        this.Controls.Add(pnlHero);
+        Controls.Add(btnBack);
+        Controls.Add(pnlHero);
+
+        Resize += (_, _) => UpdateResponsiveLayout();
+        pnlHero.Resize += (_, _) => UpdateResponsiveLayout();
+        UpdateResponsiveLayout();
+    }
+
+    private void UpdateResponsiveLayout()
+    {
+        if (pnlHero == null || IsDisposed) return;
+
+        // Panel luôn theo chiều rộng hiện tại của UserControl, không giữ width cố định.
+        int availableWidth = Math.Max(280, ClientSize.Width - 24);
+        pnlHero.Location = new Point(12, 58);
+        pnlHero.Width = availableWidth;
+
+        int padding = 16;
+        int posterWidth = 220;
+        int posterHeight = 320;
+        bool narrow = availableWidth < 760;
+
+        if (!narrow)
+        {
+            // Màn hình rộng: poster bên trái, nội dung bên phải.
+            picPoster.Location = new Point(padding, padding);
+            picPoster.Size = new Size(posterWidth, posterHeight);
+
+            int contentLeft = padding + posterWidth + 20;
+            int contentWidth = Math.Max(220, availableWidth - contentLeft - padding);
+            LayoutContent(contentLeft, padding, contentWidth, false);
+        }
+        else
+        {
+            // Màn hình nhỏ: poster ở trên, nội dung xếp dọc bên dưới.
+            int posterW = Math.Min(220, Math.Max(140, availableWidth - padding * 2));
+            int posterH = (int)(posterW * 1.45);
+            picPoster.Size = new Size(posterW, posterH);
+            picPoster.Location = new Point((availableWidth - posterW) / 2, padding);
+
+            int contentTop = padding + posterH + 18;
+            int contentWidth = Math.Max(240, availableWidth - padding * 2);
+            LayoutContent(padding, contentTop, contentWidth, true);
+        }
+    }
+
+    private void LayoutContent(int left, int top, int width, bool narrow)
+    {
+        lblTitle.Location = new Point(left, top);
+        lblTitle.Width = width;
+        lblTitle.Height = 56;
+
+        lblSynopsisHeader.Location = new Point(left, top + 58);
+
+        int descriptionTop = top + 92;
+        lblDescription.Location = new Point(left, descriptionTop);
+        lblDescription.Width = width;
+
+        // Đo chiều cao theo đúng chiều rộng hiện tại để mọi dòng được hiển thị.
+        string text = string.IsNullOrEmpty(lblDescription.Text)
+            ? "Chưa có mô tả cho bộ phim này."
+            : lblDescription.Text;
+        int measuredWidth = Math.Max(120, width - 12);
+        Size measured = TextRenderer.MeasureText(
+            text,
+            lblDescription.Font,
+            new Size(measuredWidth, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding);
+        int descriptionHeight = Math.Max(58, measured.Height + 18);
+        lblDescription.Height = descriptionHeight;
+
+        int metadataTop = descriptionTop + descriptionHeight + 18;
+        flpMetadata.Location = new Point(left, metadataTop);
+        flpMetadata.Width = width;
+
+        int itemWidth = 155;
+        int itemGap = 12;
+        int columns = Math.Max(1, (width + itemGap) / (itemWidth + itemGap));
+        int rows = (int)Math.Ceiling(5.0 / columns);
+        flpMetadata.Height = rows * 62;
+
+        int buttonTop = metadataTop + flpMetadata.Height + 14;
+        btnBookTicket.Location = new Point(left, buttonTop);
+        btnBookTicket.Width = Math.Min(280, width);
+
+        int bottom = buttonTop + btnBookTicket.Height + 18;
+        int minBottom = narrow ? picPoster.Bottom + 18 : picPoster.Bottom + 18;
+        pnlHero.Height = Math.Max(bottom, minBottom);
+
+        // RichTextBox does not need its own scroll bar because its full text is measured;
+        // the parent UserControl provides vertical scrolling for long content.
+        lblDescription.WordWrap = true;
+        lblDescription.ScrollBars = RichTextBoxScrollBars.None;
     }
 
     private Label AddMetaItem(string title, string value)
     {
-        Panel pnl = new Panel { Size = new Size(155, 58), Margin = new Padding(0, 0, 12, 0) };
+        Panel pnl = new Panel
+        {
+            Size = new Size(155, 58),
+            Margin = new Padding(0, 0, 12, 4)
+        };
         Label lblT = new Label
         {
             Text = title,
@@ -210,33 +286,20 @@ public partial class MovieDetailUC : UserControl
 
     public void SetMovie(Movie movie)
     {
-        if (movie == null)
-            return;
+        if (movie == null) return;
 
         MovieData = movie;
-        lblTitle.Text = string.IsNullOrWhiteSpace(movie.Title)
-            ? "Chưa có tên phim"
-            : movie.Title;
-
+        lblTitle.Text = string.IsNullOrWhiteSpace(movie.Title) ? "Chưa có tên phim" : movie.Title;
         lblDescription.Text = string.IsNullOrWhiteSpace(movie.Description)
             ? "Chưa có mô tả cho bộ phim này."
-            : movie.Description;
+            : movie.Description.Trim();
+        lblDescription.SelectionStart = 0;
+        lblDescription.SelectionLength = 0;
 
-        lblMetaDirector.Text = string.IsNullOrWhiteSpace(movie.Director)
-            ? "Đang cập nhật"
-            : movie.Director;
-
-        lblMetaGenre.Text = string.IsNullOrWhiteSpace(movie.Genre)
-            ? "Chưa phân loại"
-            : movie.Genre;
-
-        lblMetaDuration.Text = movie.DurationMinutes > 0
-            ? $"{movie.DurationMinutes} phút"
-            : "Đang cập nhật";
-
-        lblMetaReleaseDate.Text = movie.ReleaseDate != default
-            ? movie.ReleaseDate.ToString("dd/MM/yyyy")
-            : "Đang cập nhật";
+        lblMetaDirector.Text = string.IsNullOrWhiteSpace(movie.Director) ? "Đang cập nhật" : movie.Director;
+        lblMetaGenre.Text = string.IsNullOrWhiteSpace(movie.Genre) ? "Chưa phân loại" : movie.Genre;
+        lblMetaDuration.Text = movie.DurationMinutes > 0 ? $"{movie.DurationMinutes} phút" : "Đang cập nhật";
+        lblMetaReleaseDate.Text = movie.ReleaseDate != default ? movie.ReleaseDate.ToString("dd/MM/yyyy") : "Đang cập nhật";
 
         switch (movie.Status)
         {
@@ -248,7 +311,6 @@ public partial class MovieDetailUC : UserControl
                 btnBookTicket.BackColor = ColorAccentRed;
                 btnBookTicket.Cursor = Cursors.Hand;
                 break;
-
             case MovieStatus.ComingSoon:
                 lblMetaStatus.Text = "Sắp chiếu";
                 lblMetaStatus.ForeColor = Color.Gold;
@@ -257,7 +319,6 @@ public partial class MovieDetailUC : UserControl
                 btnBookTicket.BackColor = ColorAccentRed;
                 btnBookTicket.Cursor = Cursors.Hand;
                 break;
-
             default:
                 lblMetaStatus.Text = "Đã kết thúc";
                 lblMetaStatus.ForeColor = Color.IndianRed;
@@ -279,11 +340,7 @@ public partial class MovieDetailUC : UserControl
         {
             try
             {
-                using var stream = new FileStream(
-                    movie.PosterUrl,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite);
+                using var stream = new FileStream(movie.PosterUrl, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using var img = Image.FromStream(stream);
                 picPoster.Image = new Bitmap(img);
             }
@@ -294,12 +351,12 @@ public partial class MovieDetailUC : UserControl
         }
 
         picPoster.Invalidate();
+        UpdateResponsiveLayout();
     }
 
     private void BtnBookTicket_Click(object? sender, EventArgs e)
     {
-        if (MovieData == null)
-            return;
+        if (MovieData == null) return;
 
         if (MovieData.Status == MovieStatus.Ended)
         {
