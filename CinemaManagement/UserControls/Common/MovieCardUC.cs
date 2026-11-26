@@ -22,6 +22,8 @@ namespace CinemaManagement.UserControls.Common
         private Button btnBookNow = null!;
         private Panel pnlCard = null!;
         private Panel pnlInfo = null!;
+        private bool _isDarkTheme = true;
+        private bool _isHovered;
 
         public Movie MovieData { get; private set; } = null!;
 
@@ -170,27 +172,52 @@ namespace CinemaManagement.UserControls.Common
 
             pnlCard.MouseEnter += (s, e) =>
             {
-                pnlCard.BackColor = Color.FromArgb(45, 45, 65);
-                pnlInfo.BackColor = Color.FromArgb(45, 45, 65);
+                _isHovered = true;
+                UpdateThemeColors();
             };
 
             pnlCard.MouseLeave += (s, e) =>
             {
-                pnlCard.BackColor = Color.FromArgb(30, 30, 46);
-                pnlInfo.BackColor = Color.FromArgb(30, 30, 46);
+                _isHovered = false;
+                UpdateThemeColors();
             };
 
             picPoster.MouseEnter += (s, e) =>
             {
-                pnlCard.BackColor = Color.FromArgb(45, 45, 65);
-                pnlInfo.BackColor = Color.FromArgb(45, 45, 65);
+                _isHovered = true;
+                UpdateThemeColors();
             };
 
             picPoster.MouseLeave += (s, e) =>
             {
-                pnlCard.BackColor = Color.FromArgb(30, 30, 46);
-                pnlInfo.BackColor = Color.FromArgb(30, 30, 46);
+                _isHovered = false;
+                UpdateThemeColors();
             };
+        }
+
+        public void SetTheme(bool isDark)
+        {
+            _isDarkTheme = isDark;
+            UpdateThemeColors();
+        }
+
+        private void UpdateThemeColors()
+        {
+            Color surface = _isDarkTheme
+                ? (_isHovered ? Color.FromArgb(45, 45, 65) : Color.FromArgb(30, 30, 46))
+                : (_isHovered ? Color.FromArgb(241, 245, 249) : Color.White);
+
+            pnlCard.BackColor = surface;
+            pnlInfo.BackColor = surface;
+            picPoster.BackColor = _isDarkTheme
+                ? Color.FromArgb(45, 45, 60)
+                : Color.FromArgb(226, 232, 240);
+            lblTitle.ForeColor = _isDarkTheme
+                ? Color.White
+                : Color.FromArgb(23, 32, 51);
+            lblSubInfo.ForeColor = _isDarkTheme
+                ? Color.FromArgb(190, 195, 210)
+                : Color.FromArgb(100, 116, 139);
         }
 
         // =========================================================

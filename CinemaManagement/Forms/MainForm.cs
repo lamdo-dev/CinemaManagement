@@ -62,10 +62,12 @@ namespace CinemaManagement
         private Panel panelSidebar = null!;
         private FlowLayoutPanel flpNavContainer = null!;
         private Panel pnlBrand = null!;
+        private Label lblBrandTitle = null!;
         private Panel panelHeader = null!;
         private Panel panelContent = null!;
         private Label lblHeaderTitle = null!;
         private NeonThemeButton btnThemeToggle = null!;
+        private Panel? pnlThemeToggleHost;
 
         private readonly List<Panel> _navPanels = new();
         private readonly List<Label> _navGroupLabels = new();
@@ -112,6 +114,15 @@ namespace CinemaManagement
 
             // Chỉ bật responsive sau khi giao diện đã được tạo.
             SizeChanged += MainForm_SizeChanged;
+            DpiChanged += (s, e) =>
+            {
+                UpdateResponsiveLayout();
+                UpdateBrandHeaderLayout();
+                btnThemeToggle.Width = ScaleForDpi(78);
+                btnThemeToggle.Height = ScaleForDpi(38);
+                PositionThemeToggle();
+                PositionCustomerThemeToggle();
+            };
             _responsiveReady = true;
 
             UpdateResponsiveLayout();
@@ -175,35 +186,46 @@ namespace CinemaManagement
                 Height = 68,
                 BackColor = ColSidebarBg
             };
+            lblBrandTitle = new Label
+            {
+                Text = "CINEMA APP",
+                AutoSize = false,
+                AutoEllipsis = true,
+                BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
+                ForeColor = ColItemText,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            pnlBrand.Controls.Add(lblBrandTitle);
+            pnlBrand.SizeChanged += (s, e) => UpdateBrandHeaderLayout();
+            pnlBrand.Layout += (s, e) => UpdateBrandHeaderLayout();
+            UpdateBrandHeaderLayout();
+
             pnlBrand.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                var logoBox = new Rectangle(18, 16, 36, 36);
-                using var path = CreateRoundedPath(logoBox, 10);
+                var logoBox = new Rectangle(
+                    ScaleForDpi(18), ScaleForDpi(16), ScaleForDpi(36), ScaleForDpi(36));
+                using var path = CreateRoundedPath(logoBox, ScaleForDpi(10));
                 using var bg = new SolidBrush(ColEmeraldSoft);
                 e.Graphics.FillPath(bg, path);
 
-                DrawVectorIcon(e.Graphics, NavIconType.Movie, new Rectangle(24, 22, 24, 24), ColEmeraldIcon);
-
-                using var fontBrand = new Font("Segoe UI", 12.5F, FontStyle.Bold);
-                using var brushBrand = new SolidBrush(ColItemText);
-                e.Graphics.DrawString("CINEMA APP", fontBrand, brushBrand, 62, 16);
+                DrawVectorIcon(e.Graphics, NavIconType.Movie,
+                    new Rectangle(ScaleForDpi(24), ScaleForDpi(22), ScaleForDpi(24), ScaleForDpi(24)),
+                    ColEmeraldIcon);
 
                 using var fontRole = new Font("Segoe UI", 8F, FontStyle.Bold);
                 using var brushRole = new SolidBrush(ColEmeraldIcon);
                 string userLine = $"● {userDisplay}";
-                e.Graphics.DrawString(userLine, fontRole, brushRole, 63, 41);
-                float badgeX = Math.Min(
-                    63 + e.Graphics.MeasureString(userLine, fontRole).Width,
-                    pnlBrand.Width - 19);
-                DrawVerifiedBadge(e.Graphics, new Rectangle((int)badgeX, 40, 14, 14));
+                e.Graphics.DrawString(
+                    userLine, fontRole, brushRole, ScaleForDpi(63), ScaleForDpi(41));
 
                 using var divPen = new Pen(ColSidebarBorder, 1F);
                 e.Graphics.DrawLine(
                     divPen,
-                    16,
+                    ScaleForDpi(16),
                     pnlBrand.Height - 1,
-                    pnlBrand.Width - 16,
+                    pnlBrand.Width - ScaleForDpi(16),
                     pnlBrand.Height - 1);
             };
 
@@ -247,29 +269,30 @@ namespace CinemaManagement
                 ForeColor = ColItemText,
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(22, 0, 170, 0),
+                Padding = new Padding(22, 0, 110, 0),
                 AutoEllipsis = true
             };
 
             btnThemeToggle = new NeonThemeButton
             {
-                Width = 150,
-                Height = 38,
+                Width = ScaleForDpi(78),
+                Height = ScaleForDpi(38),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Location = new Point(panelHeader.ClientSize.Width - 164, 12),
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
-            btnThemeToggle.FlatAppearance.BorderSize = 1;
+            btnThemeToggle.IsDarkTheme = _isDarkTheme;
             btnThemeToggle.Click += (s, e) => ToggleTheme();
 
             panelHeader.Controls.Add(lblHeaderTitle);
             if (currentRole != UserRole.Customer)
             {
                 panelHeader.Controls.Add(btnThemeToggle);
-                panelHeader.Resize += (s, e) =>
-                    btnThemeToggle.Location = new Point(panelHeader.ClientSize.Width - btnThemeToggle.Width - 14, 12);
+                btnThemeToggle.BringToFront();
+                panelHeader.Resize += (s, e) => PositionThemeToggle();
+                panelHeader.Layout += (s, e) => PositionThemeToggle();
+                PositionThemeToggle();
             }
             else
             {
@@ -374,10 +397,17 @@ namespace CinemaManagement
             {
                 AddNavGroup("DỊCH VỤ KHÁCH HÀNG");
 
-                btnThemeToggle.Width = 200;
-                btnThemeToggle.Height = 38;
-                btnThemeToggle.Margin = new Padding(0, 4, 0, 8);
-                flpNavContainer.Controls.Add(btnThemeToggle);
+                pnlThemeToggleHost = new Panel
+                {
+                    Height = ScaleForDpi(48),
+                    Margin = new Padding(0, ScaleForDpi(2), 0, ScaleForDpi(6)),
+                    BackColor = ColSidebarBg
+                };
+                pnlThemeToggleHost.Controls.Add(btnThemeToggle);
+                flpNavContainer.Controls.Add(pnlThemeToggleHost);
+                flpNavContainer.ClientSizeChanged += (s, e) => PositionCustomerThemeToggle();
+                flpNavContainer.Layout += (s, e) => PositionCustomerThemeToggle();
+                PositionCustomerThemeToggle();
 
                 _navCustomerHome = AddNavButton(
                     "Trang chủ Phim",
@@ -459,6 +489,54 @@ namespace CinemaManagement
             }
         }
 
+        private void PositionThemeToggle()
+        {
+            if (currentRole == UserRole.Customer ||
+                panelHeader == null ||
+                btnThemeToggle == null ||
+                panelHeader.IsDisposed)
+            {
+                return;
+            }
+
+            int rightPadding = ScaleForDpi(16);
+            int top = Math.Max(0, (panelHeader.ClientSize.Height - btnThemeToggle.Height) / 2);
+            int left = Math.Max(
+                ScaleForDpi(8),
+                panelHeader.ClientSize.Width - btnThemeToggle.Width - rightPadding);
+
+            btnThemeToggle.Location = new Point(left, top);
+        }
+
+        private void PositionCustomerThemeToggle()
+        {
+            if (currentRole != UserRole.Customer ||
+                flpNavContainer == null ||
+                flpNavContainer.IsDisposed ||
+                pnlThemeToggleHost == null ||
+                pnlThemeToggleHost.IsDisposed)
+            {
+                return;
+            }
+
+            int scrollbarWidth = flpNavContainer.VerticalScroll.Visible
+                ? SystemInformation.VerticalScrollBarWidth
+                : 0;
+            int hostWidth = Math.Max(
+                btnThemeToggle.Width,
+                flpNavContainer.ClientSize.Width -
+                flpNavContainer.Padding.Horizontal - scrollbarWidth);
+
+            if (pnlThemeToggleHost.Width != hostWidth)
+                pnlThemeToggleHost.Width = hostWidth;
+
+            int left = Math.Max(0, (pnlThemeToggleHost.ClientSize.Width - btnThemeToggle.Width) / 2);
+            int top = Math.Max(0, (pnlThemeToggleHost.ClientSize.Height - btnThemeToggle.Height) / 2);
+            var location = new Point(left, top);
+            if (btnThemeToggle.Location != location)
+                btnThemeToggle.Location = location;
+        }
+
         // =========================================================
         // 4. MODERN SIDEBAR BUILDER & VECTOR ICON RENDERER
         // =========================================================
@@ -533,19 +611,16 @@ namespace CinemaManagement
 
             panelSidebar.BackColor = ColSidebarBg;
             pnlBrand.BackColor = ColSidebarBg;
+            lblBrandTitle.ForeColor = ColItemText;
             flpNavContainer.BackColor = ColSidebarBg;
+            if (pnlThemeToggleHost != null)
+                pnlThemeToggleHost.BackColor = ColSidebarBg;
             panelHeader.BackColor = ColSidebarBg;
             panelContent.BackColor = isDark
                 ? Color.FromArgb(11, 16, 32)
                 : Color.FromArgb(241, 242, 246);
             lblHeaderTitle.ForeColor = ColItemText;
-            btnThemeToggle.Text = isDark ? "☀ Chế độ sáng" : "☾ Chế độ tối";
-            btnThemeToggle.BackColor = ColItemActiveBg;
-            btnThemeToggle.NeonColor = isDark
-                ? Color.FromArgb(0, 245, 212)
-                : Color.FromArgb(0, 112, 192);
-            btnThemeToggle.ForeColor = btnThemeToggle.NeonColor;
-            btnThemeToggle.Invalidate();
+            btnThemeToggle.IsDarkTheme = isDark;
             this.BackColor = panelContent.BackColor;
 
             foreach (Label label in _navGroupLabels)
@@ -563,6 +638,8 @@ namespace CinemaManagement
 
             if (_activeView != null && _activeView is not DashboardUC)
                 ThemeColorApplicator.Apply(_activeView, isDark);
+
+            ApplyActiveViewTheme(isDark);
         }
 
         private Panel AddNavButton(
@@ -725,41 +802,6 @@ namespace CinemaManagement
             path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
-        }
-
-        private static void DrawVerifiedBadge(Graphics graphics, Rectangle bounds)
-        {
-            PointF[] points = new PointF[24];
-            float centerX = bounds.X + bounds.Width / 2F;
-            float centerY = bounds.Y + bounds.Height / 2F;
-            float outerRadius = Math.Min(bounds.Width, bounds.Height) / 2F;
-
-            for (int i = 0; i < points.Length; i++)
-            {
-                float angle = (float)(-Math.PI / 2 + i * Math.PI * 2 / points.Length);
-                float radius = i % 2 == 0 ? outerRadius : outerRadius * 0.82F;
-                points[i] = new PointF(
-                    centerX + (float)Math.Cos(angle) * radius,
-                    centerY + (float)Math.Sin(angle) * radius);
-            }
-
-            using var badgeBrush = new SolidBrush(Color.FromArgb(24, 144, 255));
-            using var badgeBorder = new Pen(Color.FromArgb(112, 199, 255), 0.8F);
-            graphics.FillPolygon(badgeBrush, points);
-            graphics.DrawPolygon(badgeBorder, points);
-
-            using var checkPen = new Pen(Color.White, 1.8F)
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round,
-                LineJoin = LineJoin.Round
-            };
-            graphics.DrawLines(checkPen, new[]
-            {
-                new PointF(bounds.X + 3.5F, bounds.Y + 7.5F),
-                new PointF(bounds.X + 5.8F, bounds.Y + 9.8F),
-                new PointF(bounds.X + 10.5F, bounds.Y + 4.5F)
-            });
         }
 
         private static void DrawVectorIcon(Graphics g, NavIconType type, Rectangle r, Color color)
@@ -943,6 +985,16 @@ namespace CinemaManagement
 
             if (control is not DashboardUC)
                 ThemeColorApplicator.Apply(control, _isDarkTheme);
+
+            ApplyActiveViewTheme(_isDarkTheme);
+        }
+
+        private void ApplyActiveViewTheme(bool isDark)
+        {
+            if (_activeView is HomeUC home)
+                home.SetTheme(isDark);
+            else if (_activeView is TicketScannerUC scanner)
+                scanner.SetTheme(isDark);
         }
 
         // =========================================================
@@ -975,6 +1027,37 @@ namespace CinemaManagement
             }
 
             panelSidebar.Width = sidebarWidth;
+        }
+
+        private int ScaleForDpi(int value)
+        {
+            return (int)Math.Round(value * DeviceDpi / 96F);
+        }
+
+        private void UpdateBrandHeaderLayout()
+        {
+            if (pnlBrand == null || lblBrandTitle == null || pnlBrand.IsDisposed)
+                return;
+
+            int titleLeft = ScaleForDpi(62);
+            int rightPadding = ScaleForDpi(16);
+            int availableWidth = Math.Max(
+                0,
+                pnlBrand.ClientSize.Width - titleLeft - rightPadding);
+            int measuredWidth = TextRenderer.MeasureText(
+                lblBrandTitle.Text,
+                lblBrandTitle.Font,
+                Size.Empty,
+                TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width;
+            int titleWidth = Math.Min(measuredWidth, availableWidth);
+            var titleBounds = new Rectangle(
+                titleLeft,
+                ScaleForDpi(13),
+                titleWidth,
+                ScaleForDpi(25));
+
+            if (lblBrandTitle.Bounds != titleBounds)
+                lblBrandTitle.Bounds = titleBounds;
         }
 
 
@@ -1420,6 +1503,7 @@ namespace CinemaManagement
                     TicketScanStatus.Valid => "✔ Hợp lệ",
                     TicketScanStatus.AlreadyUsed => "⚠ Vé trùng",
                     TicketScanStatus.Expired => "✖ Hết hạn",
+                    TicketScanStatus.WrongShowtime => "✖ Sai suất chiếu",
                     _ => "✖ Không tồn tại"
                 };
 

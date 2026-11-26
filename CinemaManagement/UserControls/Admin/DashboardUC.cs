@@ -221,7 +221,6 @@ public partial class DashboardUC : UserControl
     private Panel pnlCustomDates = null!;
     private ComboBox cboCinemaFilter = null!;
     private Button btnRefresh = null!;
-    private NeonThemeButton btnTheme = null!;
     private Label lblLastUpdated = null!;
     private Label lblDemoBadge = null!;
     private Label lblMovieTitle = null!;
@@ -577,20 +576,6 @@ public partial class DashboardUC : UserControl
         btnRefresh.FlatAppearance.BorderSize = 0;
         btnRefresh.Click += (s, e) => LoadAndAnimateData();
 
-        btnTheme = new NeonThemeButton
-        {
-            Text = _isDarkTheme ? "☀ Chế độ sáng" : "☾ Chế độ tối",
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-            ForeColor = ColNeonCyan,
-            NeonColor = ColNeonCyan,
-            BackColor = ColCardElevated,
-            FlatStyle = FlatStyle.Flat,
-            Size = new Size(122, 28),
-            Margin = new Padding(8, 0, 0, 0),
-            Cursor = Cursors.Hand
-        };
-        btnTheme.FlatAppearance.BorderColor = ColCardBorder;
-        btnTheme.Click += (s, e) => ApplyTheme(!_isDarkTheme);
 
         lblLastUpdated = new Label
         {
@@ -606,7 +591,6 @@ public partial class DashboardUC : UserControl
         flpFilters.Controls.Add(pnlCustomDates);
         flpFilters.Controls.Add(cboCinemaFilter);
         flpFilters.Controls.Add(btnRefresh);
-        flpFilters.Controls.Add(btnTheme);
 
         pnlHeader.Controls.Add(lblTitle);
         pnlHeader.Controls.Add(lblDemoBadge);
@@ -672,14 +656,6 @@ public partial class DashboardUC : UserControl
         {
             btnRefresh.BackColor = ColNeonCyan;
             btnRefresh.ForeColor = isDark ? Color.FromArgb(8, 30, 30) : Color.White;
-        }
-        if (btnTheme != null)
-        {
-            btnTheme.Text = isDark ? "☀ Chế độ sáng" : "☾ Chế độ tối";
-            btnTheme.BackColor = ColCardElevated;
-            btnTheme.NeonColor = ColNeonCyan;
-            btnTheme.ForeColor = ColNeonCyan;
-            btnTheme.Invalidate();
         }
         if (lblDemoBadge != null)
         {
