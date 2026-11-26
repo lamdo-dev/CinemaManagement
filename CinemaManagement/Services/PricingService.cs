@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Globalization;
@@ -344,19 +343,23 @@ public class PricingService
             MatchesBase(r) && MatchesDay(r) &&
             string.Equals(r.TimeSlot?.Trim(), "Cả ngày", StringComparison.OrdinalIgnoreCase));
 
+        // Giá suất chiếu là phần giá vé phim; quy tắc giá là phần giá ghế
+        // (giá cơ bản của loại ghế + phụ thu theo định dạng/ngày/khung giờ).
+        decimal movieTicketPrice = Math.Max(0m, showtime.BasePrice);
+
         if (matchedRule != null && matchedRule.FinalPrice > 0)
         {
-            return matchedRule.FinalPrice;
+            return Math.Round(movieTicketPrice + matchedRule.FinalPrice, 0);
         }
 
-        decimal basePrice = showtime.BasePrice > 0
-            ? showtime.BasePrice
-            : DefaultBasePrice;
-
+        // Khi chưa có quy tắc phù hợp, dùng giá ghế mặc định theo hệ số
+        // loại ghế, sau đó cộng thêm giá vé phim/suất chiếu.
         decimal safeMultiplier = multiplier > 0
             ? Convert.ToDecimal(multiplier)
             : 1.0m;
 
-        return Math.Round(basePrice * safeMultiplier, 0);
+        decimal defaultSeatPrice = DefaultBasePrice * safeMultiplier;
+
+        return Math.Round(movieTicketPrice + defaultSeatPrice, 0);
     }
 }
