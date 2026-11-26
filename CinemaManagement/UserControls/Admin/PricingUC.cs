@@ -91,6 +91,7 @@ public partial class PricingUC : UserControl
         Dock = DockStyle.Fill;
         BackColor = _backgroundColor;
         AutoScaleMode = AutoScaleMode.Dpi;
+        TabStop = true;
 
         BuildInterface();
 
@@ -100,9 +101,20 @@ public partial class PricingUC : UserControl
         {
             BeginInvoke(new Action(() =>
             {
-                if (!IsDisposed)
-                    ApplyResponsiveLayout();
+                if (IsDisposed)
+                    return;
+
+                ApplyResponsiveLayout();
+                ClearInitialComboHighlight();
             }));
+        };
+
+        VisibleChanged += (s, e) =>
+        {
+            if (Visible && IsHandleCreated && !IsDisposed)
+            {
+                BeginInvoke(new Action(ClearInitialComboHighlight));
+            }
         };
 
         LoadPricingData();
@@ -110,7 +122,34 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 4. XÂY DỰNG GIAO DIỆN
+    // 4. BỎ TÔ XANH CÁC COMBO KHI VỪA MỞ TRANG
+    // =========================================
+
+    private void ClearInitialComboHighlight()
+    {
+        if (IsDisposed || !IsHandleCreated)
+            return;
+
+        // Bỏ trạng thái chọn chữ trong hai ComboBox.
+        if (_cboDayType != null && !_cboDayType.IsDisposed)
+        {
+            _cboDayType.SelectionLength = 0;
+            _cboDayType.SelectionStart = 0;
+        }
+
+        if (_cboTimeSlot != null && !_cboTimeSlot.IsDisposed)
+        {
+            _cboTimeSlot.SelectionLength = 0;
+            _cboTimeSlot.SelectionStart = 0;
+        }
+
+        // Chuyển focus về UserControl để ComboBox không còn highlight xanh.
+        Focus();
+        Select();
+    }
+
+    // =========================================
+    // 5. XÂY DỰNG GIAO DIỆN
     // =========================================
 
     private void BuildInterface()
@@ -263,6 +302,7 @@ public partial class PricingUC : UserControl
             Font = new Font("Segoe UI", 9),
             Margin = new Padding(0, 2, 15, 0)
         };
+        ApplyConsistentComboStyle(_cboFilterFormat);
 
         _cboFilterFormat.Items.AddRange(new object[]
         {
@@ -282,12 +322,19 @@ public partial class PricingUC : UserControl
             Font = new Font("Segoe UI", 9),
             Margin = new Padding(0, 2, 5, 0)
         };
+        ApplyConsistentComboStyle(_cboFilterDay);
 
         _cboFilterDay.Items.AddRange(new object[]
         {
             "Tất cả",
             "Ngày thường",
-            "Cuối tuần"
+            "Cuối tuần",
+            "Ngày lễ",
+            "Tết Nguyên Đán",
+            "Giỗ Tổ Hùng Vương",
+            "30/4 - 1/5",
+            "Quốc khánh 2/9",
+            "Ngày đặc biệt"
         });
 
         _cboFilterDay.SelectedIndex = 0;
@@ -417,14 +464,22 @@ public partial class PricingUC : UserControl
 
         _cboDayType = new ComboBox
         {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Font = new Font("Segoe UI", 9)
+            DropDownStyle = ComboBoxStyle.DropDown,
+            Font = new Font("Segoe UI", 9),
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems
         };
 
         _cboDayType.Items.AddRange(new object[]
         {
             "Ngày thường",
-            "Cuối tuần"
+            "Cuối tuần",
+            "Ngày lễ",
+            "Tết Nguyên Đán",
+            "Giỗ Tổ Hùng Vương",
+            "30/4 - 1/5",
+            "Quốc khánh 2/9",
+            "Ngày đặc biệt"
         });
 
         _cboDayType.SelectedIndex = 0;
@@ -438,18 +493,27 @@ public partial class PricingUC : UserControl
 
         _cboTimeSlot = new ComboBox
         {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Font = new Font("Segoe UI", 9)
+            DropDownStyle = ComboBoxStyle.DropDown,
+            Font = new Font("Segoe UI", 9),
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems
         };
 
         _cboTimeSlot.Items.AddRange(new object[]
         {
+            "Cả ngày",
             "Trước 12:00",
             "12:00 - 17:00",
-            "Sau 17:00"
+            "Sau 17:00",
+            "08:00 - 10:00",
+            "10:00 - 12:00",
+            "12:00 - 14:00",
+            "14:00 - 17:00",
+            "17:00 - 20:00",
+            "20:00 - 23:59"
         });
 
-        _cboTimeSlot.SelectedIndex = 1;
+        _cboTimeSlot.SelectedItem = "12:00 - 17:00";
 
         _fieldsPanel.Controls.Add(
             CreateEditorField("Khung giờ:", _cboTimeSlot),
@@ -1118,7 +1182,19 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 8. TẠO Ô NHẬP LIỆU
+    // 8. ĐỒNG BỘ STYLE COMBOBOX
+    // =========================================
+
+    private static void ApplyConsistentComboStyle(ComboBox combo)
+    {
+        // Chỉ đồng bộ màu sắc; giữ nguyên FlatStyle, font, DrawMode,
+        // kích thước, viền và cách hiển thị riêng của từng ComboBox.
+        combo.BackColor = Color.White;
+        combo.ForeColor = Color.FromArgb(15, 23, 42);
+    }
+
+    // =========================================
+    // 9. TẠO Ô NHẬP LIỆU
     // =========================================
 
     private Panel CreateEditorField(
@@ -1162,6 +1238,18 @@ public partial class PricingUC : UserControl
             AutoEllipsis = true,
             Margin = new Padding(0)
         };
+
+        // Đồng bộ màu sắc tất cả ô nhập trong phần thiết lập:
+        // nền trắng, chữ tối, viền phẳng giống ô Định dạng phim.
+        if (input is ComboBox combo)
+        {
+            ApplyConsistentComboStyle(combo);
+        }
+        else if (input is NumericUpDown numeric)
+        {
+            numeric.BackColor = Color.White;
+            numeric.ForeColor = Color.FromArgb(15, 23, 42);
+        }
 
         input.Dock = DockStyle.Fill;
         input.Margin = new Padding(0);
@@ -1475,11 +1563,9 @@ public partial class PricingUC : UserControl
                 SeatType = _cboSeatType.SelectedItem?.ToString()
                            ?? "Ghế thường",
 
-                DayType = _cboDayType.SelectedItem?.ToString()
-                          ?? "Ngày thường",
+                DayType = _cboDayType.Text.Trim(),
 
-                TimeSlot = _cboTimeSlot.SelectedItem?.ToString()
-                           ?? "12:00 - 17:00",
+                TimeSlot = _cboTimeSlot.Text.Trim(),
 
                 BasePrice = _numBasePrice.Value,
 
@@ -1572,8 +1658,8 @@ public partial class PricingUC : UserControl
 
             _cboFormat.SelectedItem = rule.Format;
             _cboSeatType.SelectedItem = rule.SeatType;
-            _cboDayType.SelectedItem = rule.DayType;
-            _cboTimeSlot.SelectedItem = rule.TimeSlot;
+            _cboDayType.Text = rule.DayType;
+            _cboTimeSlot.Text = rule.TimeSlot;
 
             _numBasePrice.Value = Math.Clamp(
                 rule.BasePrice,
@@ -1618,8 +1704,8 @@ public partial class PricingUC : UserControl
 
         _cboFormat.SelectedIndex = 0;
         _cboSeatType.SelectedIndex = 0;
-        _cboDayType.SelectedIndex = 0;
-        _cboTimeSlot.SelectedIndex = 1;
+        _cboDayType.Text = "Ngày thường";
+        _cboTimeSlot.Text = "12:00 - 17:00";
 
         _numBasePrice.Value = 75000;
         _numSurcharge.Value = 0;
