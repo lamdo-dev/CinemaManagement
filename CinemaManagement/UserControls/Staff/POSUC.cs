@@ -101,6 +101,26 @@ namespace CinemaManagement.UserControls.Staff
 
         private Button btnPay = null!;
 
+        private Panel pnlOrder = null!;
+
+        private Panel pnlOrderTotal = null!;
+
+        private Panel pnlShowtime = null!;
+
+        private Label lblStep1 = null!;
+
+        private Label lblCash = null!;
+
+        private Label lblCustomerName = null!;
+
+        private Label lblPaymentMethod = null!;
+
+        private Label lblOrderHint = null!;
+
+        private Button btnClear = null!;
+
+        private Button btnScanner = null!;
+
         // =====================================================
         // 5. EVENTS
         // =====================================================
@@ -194,18 +214,19 @@ namespace CinemaManagement.UserControls.Staff
         private void InitializeComponentManual()
         {
             Dock = DockStyle.Fill;
+            AutoScaleMode = AutoScaleMode.Dpi;
             BackColor = ColorBg;
 
             // -------------------------------------------------
             // RIGHT PANEL: ORDER
             // -------------------------------------------------
 
-            Panel pnlOrder = new Panel
+            pnlOrder = new Panel
             {
                 Dock = DockStyle.Right,
-                Width = 380,
+                Width = 340,
                 BackColor = Color.White,
-                Padding = new Padding(18)
+                Padding = new Padding(14)
             };
 
             Label lblOrderTab = new Label
@@ -238,28 +259,32 @@ namespace CinemaManagement.UserControls.Staff
             };
             flpOrderItems.SizeChanged += (s, e) => ResizeOrderRows();
 
-            Label lblHint = new Label
+            lblOrderHint = new Label
             {
                 Text = "Dùng nút − / + cạnh sản phẩm để chỉnh số lượng",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
                 ForeColor = ColorMuted,
                 Dock = DockStyle.Top,
-                Height = 22
+                Height = 22,
+                AutoSize = false,
+                AutoEllipsis = true
             };
 
-            Panel pnlTotal = new Panel
+            pnlOrderTotal = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 300
+                Height = 300,
+                AutoScroll = true
             };
 
-            Label lblCus = new Label
+            lblCustomerName = new Label
             {
                 Text = "Tên khách hàng (tùy chọn):",
                 Font = new Font("Segoe UI", 9),
                 ForeColor = ColorMuted,
                 Location = new Point(0, 6),
-                AutoSize = true
+                Size = new Size(342, 18),
+                AutoEllipsis = true
             };
 
             txtCustomer = new TextBox
@@ -270,13 +295,14 @@ namespace CinemaManagement.UserControls.Staff
                 PlaceholderText = "Khách lẻ"
             };
 
-            Label lblPay = new Label
+            lblPaymentMethod = new Label
             {
                 Text = "Phương thức:",
                 Font = new Font("Segoe UI", 9),
                 ForeColor = ColorMuted,
                 Location = new Point(0, 62),
-                AutoSize = true
+                Size = new Size(165, 18),
+                AutoEllipsis = true
             };
 
             cboPayment = new ComboBox
@@ -298,13 +324,14 @@ namespace CinemaManagement.UserControls.Staff
             cboPayment.SelectedIndexChanged += (s, e) =>
                 UpdateChange();
 
-            Label lblCash = new Label
+            lblCash = new Label
             {
                 Text = "Khách đưa:",
                 Font = new Font("Segoe UI", 9),
                 ForeColor = ColorMuted,
                 Location = new Point(177, 62),
-                AutoSize = true
+                Size = new Size(165, 18),
+                AutoEllipsis = true
             };
 
             txtCashReceived = new TextBox
@@ -352,7 +379,7 @@ namespace CinemaManagement.UserControls.Staff
                 Size = new Size(342, 32)
             };
 
-            Button btnClear = new Button
+            btnClear = new Button
             {
                 Text = "HỦY GIAO DỊCH",
                 Location = new Point(0, 236),
@@ -400,11 +427,11 @@ namespace CinemaManagement.UserControls.Staff
             btnPay.FlatAppearance.BorderSize = 0;
             btnPay.Click += BtnPay_Click;
 
-            pnlTotal.Controls.AddRange(new Control[]
+            pnlOrderTotal.Controls.AddRange(new Control[]
             {
-                lblCus,
+                lblCustomerName,
                 txtCustomer,
-                lblPay,
+                lblPaymentMethod,
                 cboPayment,
                 lblCash,
                 txtCashReceived,
@@ -417,16 +444,16 @@ namespace CinemaManagement.UserControls.Staff
             });
 
             pnlOrder.Controls.Add(flpOrderItems);
-            pnlOrder.Controls.Add(lblHint);
+            pnlOrder.Controls.Add(lblOrderHint);
             pnlOrder.Controls.Add(lblOrderMeta);
             pnlOrder.Controls.Add(lblOrderTab);
-            pnlOrder.Controls.Add(pnlTotal);
+            pnlOrder.Controls.Add(pnlOrderTotal);
 
             // -------------------------------------------------
             // LEFT PANEL: SHOWTIME
             // -------------------------------------------------
 
-            Panel pnlShowtime = new Panel
+            pnlShowtime = new Panel
             {
                 Dock = DockStyle.Top,
                 Width = 900,
@@ -435,7 +462,7 @@ namespace CinemaManagement.UserControls.Staff
                 Padding = new Padding(20, 12, 20, 12)
             };
 
-            Label lblStep1 = new Label
+            lblStep1 = new Label
             {
                 Text = "① CHỌN PHIM & SUẤT CHIẾU",
                 Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
@@ -444,7 +471,7 @@ namespace CinemaManagement.UserControls.Staff
                 AutoSize = true
             };
 
-            Button btnScanner = new Button
+            btnScanner = new Button
             {
                 Text = "SOÁT VÉ",
                 Location = new Point(770, 8),
@@ -578,6 +605,121 @@ namespace CinemaManagement.UserControls.Staff
             Controls.Add(lblStep3);
             Controls.Add(pnlShowtime);
             Controls.Add(pnlOrder);
+
+            SizeChanged += (s, e) => LayoutResponsive();
+            pnlOrder.SizeChanged += (s, e) => LayoutResponsive();
+            pnlOrderTotal.SizeChanged += (s, e) => LayoutResponsive();
+            pnlShowtime.SizeChanged += (s, e) => LayoutShowtimeControls();
+            LayoutResponsive();
+        }
+
+        private void LayoutResponsive()
+        {
+            if (pnlOrder == null || pnlOrder.IsDisposed ||
+                pnlOrderTotal == null || pnlOrderTotal.IsDisposed)
+                return;
+
+            int availableWidth = ClientSize.Width;
+            int orderWidth = availableWidth <= 0
+                ? pnlOrder.Width
+                : availableWidth < 500
+                    ? availableWidth
+                    : availableWidth < 760
+                        ? Math.Clamp((int)(availableWidth * 0.36), 230, 300)
+                        : Math.Clamp((int)(availableWidth * 0.34), 290, 380);
+
+            if (pnlOrder.Width != orderWidth)
+                pnlOrder.Width = orderWidth;
+
+            int totalWidth = Math.Max(0, pnlOrderTotal.ClientSize.Width);
+            bool compactPayment = totalWidth < 300;
+            bool compactActions = totalWidth < 245;
+            int halfWidth = Math.Max(0, (totalWidth - 10) / 2);
+
+            bool wrapOrderText = totalWidth < 260;
+            lblOrderHint.Height = wrapOrderText ? 36 : 22;
+            lblOrderHint.AutoEllipsis = !wrapOrderText;
+
+            lblCustomerName.Width = totalWidth;
+            txtCustomer.Width = totalWidth;
+            lblPaymentMethod.SetBounds(0, 62, compactPayment ? totalWidth : halfWidth, 18);
+            cboPayment.SetBounds(0, 82, compactPayment ? totalWidth : halfWidth, 28);
+            lblCash.SetBounds(compactPayment ? 0 : halfWidth + 10, compactPayment ? 116 : 62,
+                compactPayment ? totalWidth : Math.Max(0, totalWidth - halfWidth - 10), 18);
+            txtCashReceived.SetBounds(compactPayment ? 0 : halfWidth + 10, compactPayment ? 136 : 82,
+                compactPayment ? totalWidth : Math.Max(0, totalWidth - halfWidth - 10), 28);
+
+            int summaryTop = compactPayment ? 170 : 116;
+            lblChange.SetBounds(0, summaryTop, totalWidth, 22);
+            lblTicketSub.SetBounds(0, summaryTop + 26, totalWidth, 20);
+            lblFoodSub.SetBounds(0, summaryTop + 46, totalWidth, 20);
+            lblTotal.SetBounds(0, summaryTop + 70, totalWidth, 32);
+
+            int buttonTop = compactPayment ? 282 : 236;
+            int desiredTotalHeight = compactActions ? 390 : compactPayment ? 350 : 300;
+            if (pnlOrderTotal.Height != desiredTotalHeight)
+                pnlOrderTotal.Height = desiredTotalHeight;
+
+            if (compactActions)
+            {
+                btnClear.SetBounds(0, buttonTop, totalWidth, 42);
+                btnPay.SetBounds(0, buttonTop + 48, totalWidth, 48);
+            }
+            else
+            {
+                int buttonGap = 8;
+                int clearWidth = Math.Clamp((totalWidth - buttonGap) * 34 / 100, 92, 130);
+                btnClear.SetBounds(0, buttonTop, clearWidth, 50);
+                btnPay.SetBounds(
+                    clearWidth + buttonGap,
+                    buttonTop,
+                    Math.Max(0, totalWidth - clearWidth - buttonGap),
+                    50);
+            }
+
+            LayoutShowtimeControls();
+            ResizeOrderRows();
+        }
+
+        private void LayoutShowtimeControls()
+        {
+            if (pnlShowtime == null || pnlShowtime.IsDisposed ||
+                cboMovie == null || cboFormat == null || dtpShowDate == null)
+                return;
+
+            int contentWidth = Math.Max(260, pnlShowtime.ClientSize.Width - 40);
+            int right = 20 + contentWidth;
+            btnScanner.SetBounds(right - 110, 8, 110, 30);
+
+            if (contentWidth >= 700)
+            {
+                pnlShowtime.Height = 180;
+                int gap = 12;
+                int fieldsWidth = contentWidth - gap * 2;
+                int movieWidth = (int)(fieldsWidth * 0.38);
+                int formatWidth = (int)(fieldsWidth * 0.34);
+                int dateWidth = fieldsWidth - movieWidth - formatWidth;
+
+                cboMovie.SetBounds(20, 42, movieWidth, 30);
+                cboFormat.SetBounds(20 + movieWidth + gap, 42, formatWidth, 30);
+                dtpShowDate.SetBounds(20 + movieWidth + gap + formatWidth + gap, 42, dateWidth, 30);
+                flpTimes.SetBounds(20, 80, contentWidth, 42);
+                lblShowtimeInfo.SetBounds(20, 134, Math.Max(120, contentWidth - 210), 30);
+                btnPickSeats.SetBounds(right - 200, 128, 200, 38);
+            }
+            else
+            {
+                pnlShowtime.Height = 218;
+                int gap = 10;
+                int halfWidth = (contentWidth - gap) / 2;
+
+                cboMovie.SetBounds(20, 42, contentWidth, 30);
+                cboFormat.SetBounds(20, 80, halfWidth, 30);
+                dtpShowDate.SetBounds(20 + halfWidth + gap, 80, halfWidth, 30);
+                flpTimes.SetBounds(20, 116, contentWidth, 38);
+                lblShowtimeInfo.SetBounds(20, 164, Math.Max(100, contentWidth - 150), 42);
+                btnPickSeats.SetBounds(right - 140, 164, 140, 38);
+            }
         }
 
         // =====================================================
@@ -595,10 +737,24 @@ namespace CinemaManagement.UserControls.Staff
                 Cursor = Cursors.Hand
             };
 
+            TableLayoutPanel content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+                BackColor = Color.White
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 38F));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 26F));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 18F));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 18F));
+
             Panel productVisual = new Panel
             {
-                Dock = DockStyle.Top,
-                Height = 66,
+                Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(243, 240, 255),
                 Cursor = Cursors.Hand
             };
@@ -634,22 +790,36 @@ namespace CinemaManagement.UserControls.Staff
             {
                 Text = product.Name,
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-                Dock = DockStyle.Top,
-                Height = 48,
-                Padding = new Padding(10, 4, 8, 2),
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10, 3, 8, 2),
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoEllipsis = true,
                 Cursor = Cursors.Hand
             };
+
+            Button btnAdd = new Button
+            {
+                Text = "＋ THÊM",
+                Dock = DockStyle.Fill,
+                Margin = new Padding(12, 2, 12, 2),
+                BackColor = ColorPrimary,
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                AccessibleName = $"Thêm {product.Name} vào hóa đơn"
+            };
+            btnAdd.FlatAppearance.BorderSize = 0;
+            btnAdd.FlatAppearance.MouseOverBackColor = Color.FromArgb(109, 61, 245);
+            btnAdd.FlatAppearance.MouseDownBackColor = Color.FromArgb(84, 37, 208);
 
             Label lblPrice = new Label
             {
                 Text = $"{product.Price.ToString("N0", VN)} đ  ·  Còn {product.StockQuantity}",
                 ForeColor = Color.FromArgb(84, 37, 208),
                 Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-                Dock = DockStyle.Bottom,
-                Height = 36,
-                Padding = new Padding(10, 0, 0, 0),
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10, 0, 4, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Cursor = Cursors.Hand
             };
@@ -663,16 +833,13 @@ namespace CinemaManagement.UserControls.Staff
                 child.Click += addHandler;
             lblName.Click += addHandler;
             lblPrice.Click += addHandler;
+            btnAdd.Click += addHandler;
 
-            card.MouseEnter += (s, e) =>
-                card.BackColor = Color.FromArgb(245, 243, 255);
-
-            card.MouseLeave += (s, e) =>
-                card.BackColor = Color.White;
-
-            card.Controls.Add(lblPrice);
-            card.Controls.Add(lblName);
-            card.Controls.Add(productVisual);
+            content.Controls.Add(productVisual, 0, 0);
+            content.Controls.Add(lblName, 0, 1);
+            content.Controls.Add(btnAdd, 0, 2);
+            content.Controls.Add(lblPrice, 0, 3);
+            card.Controls.Add(content);
 
             return card;
         }
@@ -873,12 +1040,15 @@ namespace CinemaManagement.UserControls.Staff
                 _selectedShowtime == null)
                 return;
 
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
             using var dlg = new Form
             {
                 Text =
                     $"Chọn ghế - {_selectedMovie.Title} " +
                     $"({_selectedShowtime.StartTime:HH:mm})",
-                Size = new Size(840, 650),
+                Size = new Size(
+                    Math.Max(360, Math.Min(840, workingArea.Width - 40)),
+                    Math.Max(360, Math.Min(650, workingArea.Height - 80))),
                 StartPosition = FormStartPosition.CenterParent,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 MaximizeBox = false,
@@ -922,25 +1092,32 @@ namespace CinemaManagement.UserControls.Staff
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Location = new Point(15, 18),
-                Size = new Size(540, 25)
+                Size = new Size(Math.Max(120, dlg.ClientSize.Width - 235), 25),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             Button btnOk = new Button
             {
                 Text = "XÁC NHẬN GHẾ",
-                Location = new Point(620, 10),
-                Size = new Size(185, 40),
+                Location = new Point(Math.Max(160, dlg.ClientSize.Width - 205), 10),
+                Size = new Size(Math.Min(185, Math.Max(140, dlg.ClientSize.Width - 180)), 40),
                 BackColor = Color.FromArgb(195, 155, 80),
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                Cursor = Cursors.Hand,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
 
             btnOk.FlatAppearance.BorderSize = 0;
+            pnlBottom.SizeChanged += (s, e) =>
+            {
+                lblSel.Width = Math.Max(120, pnlBottom.ClientSize.Width - btnOk.Width - 35);
+                btnOk.Left = Math.Max(15, pnlBottom.ClientSize.Width - btnOk.Width - 15);
+            };
 
             matrix.OnSeatSelectionChanged += (s, seats) =>
             {
-                decimal sum = seats.Sum(SeatMatrixUC.GetSeatPriceByCode);
+                decimal sum = seats.Sum(matrix.GetSeatPrice);
 
                 lblSel.Text = seats.Count == 0
                     ? "Chưa chọn ghế"
@@ -974,7 +1151,7 @@ namespace CinemaManagement.UserControls.Staff
                 _selectedSeats =
                     new List<string>(matrix.SelectedSeatCodes);
 
-                _ticketAmount = _selectedSeats.Sum(SeatMatrixUC.GetSeatPriceByCode);
+                _ticketAmount = _selectedSeats.Sum(matrix.GetSeatPrice);
 
                 OnSeatsSelected?.Invoke(
                     this,
@@ -1201,10 +1378,13 @@ namespace CinemaManagement.UserControls.Staff
         {
             var row = new Panel
             {
-                Height = string.IsNullOrEmpty(detail) ? 30 : 46,
-                Width = Math.Max(180, flpOrderItems.ClientSize.Width - 8),
+                Height = string.IsNullOrEmpty(detail)
+                    ? 30
+                    : flpOrderItems.ClientSize.Width < 260 ? 72 : 46,
+                Width = Math.Max(0, flpOrderItems.ClientSize.Width - 8),
                 Margin = new Padding(0, 0, 0, 3),
-                BackColor = Color.White
+                BackColor = Color.White,
+                Tag = "OrderInfo"
             };
 
             var titleLabel = new Label
@@ -1227,10 +1407,11 @@ namespace CinemaManagement.UserControls.Staff
                 {
                     Text = detail,
                     Dock = DockStyle.Bottom,
-                    Height = 20,
+                    Height = flpOrderItems.ClientSize.Width < 260 ? 48 : 20,
+                    AutoSize = false,
                     Font = new Font("Segoe UI", 8.5F),
                     ForeColor = ColorMuted,
-                    AutoEllipsis = true,
+                    AutoEllipsis = flpOrderItems.ClientSize.Width >= 260,
                     TextAlign = ContentAlignment.MiddleLeft
                 };
                 row.Controls.Add(detailLabel);
@@ -1244,9 +1425,28 @@ namespace CinemaManagement.UserControls.Staff
             if (flpOrderItems == null || flpOrderItems.IsDisposed)
                 return;
 
-            int rowWidth = Math.Max(180, flpOrderItems.ClientSize.Width - 8);
+            int rowWidth = Math.Max(0, flpOrderItems.ClientSize.Width - 8);
+            bool wrapDetails = rowWidth < 252;
             foreach (Control row in flpOrderItems.Controls)
+            {
                 row.Width = rowWidth;
+                if (row.Tag is string tag && tag == "OrderInfo")
+                {
+                    bool hasDetails = row.Controls.Count > 1;
+                    row.Height = hasDetails && wrapDetails ? 72 : hasDetails ? 46 : 30;
+                    if (hasDetails)
+                    {
+                        Label? detailLabel = row.Controls
+                            .OfType<Label>()
+                            .FirstOrDefault(label => label.Dock == DockStyle.Bottom);
+                        if (detailLabel != null)
+                        {
+                            detailLabel.Height = wrapDetails ? 48 : 20;
+                            detailLabel.AutoEllipsis = !wrapDetails;
+                        }
+                    }
+                }
+            }
         }
 
         // =====================================================
