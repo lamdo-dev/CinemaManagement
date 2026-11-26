@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -12,42 +11,30 @@ public static class DatabaseInitializer
         using var connection = DatabaseConnection.GetConnection();
         connection.Open();
 
-        Console.WriteLine("DATABASE PATH:");
-        Console.WriteLine(Path.GetFullPath("cinema.db"));
-
-        // Bật kiểm tra khóa ngoại cho kết nối hiện tại.
+        // Bật khóa ngoại
         connection.Execute("PRAGMA foreign_keys = ON;");
 
+        // Các bảng hiện có
         CreateUsersTable(connection);
+        SeedAdminUser(connection);
         CreateMoviesTable(connection);
         CreateRoomsTable(connection);
         CreateSeatsTable(connection);
         CreateShowtimesTable(connection);
         CreateProductsTable(connection);
 
-        // Tạo bảng quản lý giá vé
+        // Các bảng đặt vé
+        CreateBookingsTable(connection);
+        CreateTicketsTable(connection);
+        CreateStaffTicketScanLogsTable(connection);
+        CreateBookingDetailProductsTable(connection);
+
+        // Quản lý giá vé và khuyến mãi
         CreatePricingRulesTable(connection);
-        // Tạo bảng quản lý khuyến mãi
         CreatePromotionsTable(connection);
 
+        // Tạo chỉ mục
         CreateIndexes(connection);
-
-        Console.WriteLine("Database initialized successfully!");
-
-        var tables = connection.Query<string>(@"
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name NOT LIKE 'sqlite_%'
-            ORDER BY name;
-        ");
-
-        Console.WriteLine("DANH SÁCH BẢNG DATABASE:");
-
-        foreach (var table in tables)
-        {
-            Console.WriteLine(table);
-        }
     }
 
     // =========================================
@@ -57,20 +44,33 @@ public static class DatabaseInitializer
     private static void CreatePromotionsTable(SqliteConnection connection)
     {
         connection.Execute(@"
-        CREATE TABLE IF NOT EXISTS Promotions
-        (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            Code TEXT NOT NULL COLLATE NOCASE UNIQUE,
-            Name TEXT NOT NULL,
-            DiscountType TEXT NOT NULL,
-            DiscountValue NUMERIC NOT NULL DEFAULT 0,
-            MaxDiscount NUMERIC NOT NULL DEFAULT 0,
-            MinimumOrder NUMERIC NOT NULL DEFAULT 0,
-            StartDate TEXT NOT NULL,
-            EndDate TEXT NOT NULL,
-            IsEnabled INTEGER NOT NULL DEFAULT 1
-        );
-    ");
+            CREATE TABLE IF NOT EXISTS Promotions (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                Name TEXT NOT NULL,
+                DiscountType TEXT NOT NULL,
+                DiscountValue NUMERIC NOT NULL DEFAULT 0,
+                MaxDiscount NUMERIC NOT NULL DEFAULT 0,
+                MinimumOrder NUMERIC NOT NULL DEFAULT 0,
+                UsageLimit INTEGER NOT NULL DEFAULT 100,
+                UsedCount INTEGER NOT NULL DEFAULT 0,
+                StartDate TEXT NOT NULL,
+                EndDate TEXT NOT NULL,
+                IsEnabled INTEGER NOT NULL DEFAULT 1
+            );
+        ");
+
+        AddColumnIfNotExists(
+            connection,
+            "Promotions",
+            "UsageLimit",
+            "INTEGER NOT NULL DEFAULT 100");
+
+        AddColumnIfNotExists(
+            connection,
+            "Promotions",
+            "UsedCount",
+            "INTEGER NOT NULL DEFAULT 0");
     }
 
     // =========================================
@@ -104,11 +104,150 @@ public static class DatabaseInitializer
 
         AddColumnIfNotExists(connection, "Users", "CreatedAt", "TEXT");
 
+        MigrateUsersSchemaIfNeeded(connection);
+
         connection.Execute(@"
             UPDATE Users
             SET CreatedAt = datetime('now', 'localtime')
             WHERE CreatedAt IS NULL OR CreatedAt = '';
         ");
+    }
+
+    /// <summary>
+    /// Chuyển đổi bảng Users cũ (dùng khóa chính UserId hoặc Role kiểu TEXT)
+    /// sang lược đồ chuẩn dùng khóa chính Id INTEGER PRIMARY KEY để khớp khóa ngoại với Bookings.
+    /// </summary>
+    private static void MigrateUsersSchemaIfNeeded(SqliteConnection connection)
+    {
+        bool hasIdColumn = false;
+        bool hasPrimaryKeyId = false;
+        bool hasLegacyUserId = false;
+        bool isRoleInteger = false;
+
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(\"Users\");";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                string colName = reader["name"]?.ToString() ?? "";
+                string colType = reader["type"]?.ToString() ?? "";
+                int pk = Convert.ToInt32(reader["pk"] ?? 0);
+
+                if (colName.Equals("Id", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasIdColumn = true;
+                    hasPrimaryKeyId = pk > 0;
+                }
+                else if (colName.Equals("UserId", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasLegacyUserId = true;
+                }
+                else if (colName.Equals("Role", StringComparison.OrdinalIgnoreCase))
+                {
+                    isRoleInteger = colType.Contains("INT", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+        }
+
+        if (hasPrimaryKeyId && !hasLegacyUserId && isRoleInteger)
+            return;
+
+        string idExpression = hasIdColumn
+            ? "Id"
+            : hasLegacyUserId
+                ? "UserId"
+                : "rowid";
+
+        connection.Execute("PRAGMA foreign_keys = OFF;");
+        try
+        {
+            using var tx = connection.BeginTransaction();
+
+            connection.Execute($@"
+                DROP TABLE IF EXISTS Users_new;
+
+                CREATE TABLE Users_new (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Username TEXT NOT NULL UNIQUE,
+                    PasswordHash TEXT NOT NULL DEFAULT '',
+                    FullName TEXT NOT NULL,
+                    Role INTEGER NOT NULL DEFAULT 0,
+                    Email TEXT DEFAULT '',
+                    Phone TEXT DEFAULT '',
+                    RewardPoints INTEGER NOT NULL DEFAULT 0,
+                    CreatedAt TEXT
+                );
+
+                INSERT INTO Users_new (
+                    Id, Username, PasswordHash, FullName, Role,
+                    Email, Phone, RewardPoints, CreatedAt
+                )
+                SELECT
+                    {idExpression},
+                    Username,
+                    COALESCE(PasswordHash, ''),
+                    COALESCE(FullName, Username),
+                    CASE
+                        WHEN UPPER(TRIM(CAST(Role AS TEXT))) IN ('0', 'ADMIN') THEN 0
+                        WHEN UPPER(TRIM(CAST(Role AS TEXT))) IN ('1', 'STAFF') THEN 1
+                        WHEN UPPER(TRIM(CAST(Role AS TEXT))) IN ('2', 'CUSTOMER') THEN 2
+                        ELSE 2
+                    END,
+                    COALESCE(Email, ''),
+                    COALESCE(Phone, ''),
+                    COALESCE(RewardPoints, 0),
+                    COALESCE(NULLIF(CreatedAt, ''), datetime('now', 'localtime'))
+                FROM Users;
+
+                DROP TABLE Users;
+                ALTER TABLE Users_new RENAME TO Users;
+            ", transaction: tx);
+
+            bool hasBookingsTable = connection.ExecuteScalar<bool>(@"
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name = 'Bookings'
+                );
+            ", transaction: tx);
+
+            if (hasBookingsTable)
+            {
+                connection.Execute(@"
+                    UPDATE Bookings
+                    SET UserId = NULL
+                    WHERE UserId IS NOT NULL
+                      AND UserId NOT IN (SELECT Id FROM Users);
+                ", transaction: tx);
+            }
+
+            tx.Commit();
+        }
+        finally
+        {
+            connection.Execute("PRAGMA foreign_keys = ON;");
+        }
+    }
+
+    private static void SeedAdminUser(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            INSERT INTO Users (Username, PasswordHash, FullName, Role, CreatedAt)
+            SELECT @Username, @PasswordHash, @FullName, @Role,
+                   datetime('now', 'localtime')
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM Users
+                WHERE Username COLLATE NOCASE = @Username
+            );
+        ", new
+        {
+            Username = "admin",
+            PasswordHash = "admin123",
+            FullName = "Administrator",
+            Role = (int)CinemaManagement.Models.Enums.UserRole.Admin
+        });
     }
 
     // =========================================
@@ -201,24 +340,23 @@ public static class DatabaseInitializer
     private static void CreateShowtimesTable(SqliteConnection connection)
     {
         connection.Execute(@"
-        CREATE TABLE IF NOT EXISTS Showtimes (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            MovieId INTEGER NOT NULL,
-            RoomId INTEGER NOT NULL,
-            StartTime TEXT NOT NULL,
-            EndTime TEXT NOT NULL,
-            BasePrice NUMERIC NOT NULL DEFAULT 0,
-            Format TEXT NOT NULL DEFAULT '2D',
+            CREATE TABLE IF NOT EXISTS Showtimes (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                MovieId INTEGER NOT NULL,
+                RoomId INTEGER NOT NULL,
+                StartTime TEXT NOT NULL,
+                EndTime TEXT NOT NULL,
+                BasePrice NUMERIC NOT NULL DEFAULT 0,
+                Format TEXT NOT NULL DEFAULT '2D',
 
-            FOREIGN KEY (MovieId)
-                REFERENCES Movies(Id),
+                FOREIGN KEY (MovieId)
+                    REFERENCES Movies(Id),
 
-            FOREIGN KEY (RoomId)
-                REFERENCES Rooms(Id)
-        );
-    ");
+                FOREIGN KEY (RoomId)
+                    REFERENCES Rooms(Id)
+            );
+        ");
 
-        // Bổ sung cột Format cho database cũ
         AddColumnIfNotExists(
             connection,
             "Showtimes",
@@ -242,6 +380,241 @@ public static class DatabaseInitializer
                 StockQuantity INTEGER NOT NULL DEFAULT 0,
                 ImageUrl TEXT DEFAULT '',
                 IsActive INTEGER NOT NULL DEFAULT 1
+            );
+        ");
+    }
+
+    // =========================================
+    // BOOKINGS - ĐƠN ĐẶT VÉ
+    // =========================================
+
+    private static void CreateBookingsTable(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS Bookings (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                UserId INTEGER NULL,
+                StaffUserId INTEGER NULL,
+                BookingCode TEXT NOT NULL UNIQUE,
+
+                BookingTime TEXT NOT NULL DEFAULT
+                    (datetime('now', 'localtime')),
+
+                TotalAmount NUMERIC NOT NULL DEFAULT 0,
+                DiscountAmount NUMERIC NOT NULL DEFAULT 0,
+                FinalAmount NUMERIC NOT NULL DEFAULT 0,
+
+                PaymentMethod TEXT DEFAULT '',
+                PaymentStatus TEXT NOT NULL DEFAULT 'PENDING',
+                BookingStatus TEXT NOT NULL DEFAULT 'CONFIRMED',
+
+                PromotionCode TEXT DEFAULT '',
+                Channel TEXT DEFAULT 'Online',
+                CustomerName TEXT DEFAULT '',
+
+                FOREIGN KEY (UserId)
+                    REFERENCES Users(Id)
+                    ON DELETE SET NULL,
+
+                FOREIGN KEY (StaffUserId)
+                    REFERENCES Users(Id)
+                    ON DELETE SET NULL
+            );
+        ");
+
+        AddColumnIfNotExists(
+            connection,
+            "Bookings",
+            "Channel",
+            "TEXT DEFAULT 'Online'");
+
+        AddColumnIfNotExists(
+            connection,
+            "Bookings",
+            "CustomerName",
+            "TEXT DEFAULT ''");
+
+        AddColumnIfNotExists(
+            connection,
+            "Bookings",
+            "StaffUserId",
+            "INTEGER NULL REFERENCES Users(Id) ON DELETE SET NULL");
+    }
+
+    // =========================================
+    // TICKETS - VÉ ĐIỆN TỬ
+    // =========================================
+
+    private static void CreateTicketsTable(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS Tickets (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                BookingId INTEGER NOT NULL,
+                ShowtimeId INTEGER NOT NULL,
+                SeatId INTEGER NOT NULL,
+
+                TicketCode TEXT NOT NULL UNIQUE,
+                SeatNumber TEXT NOT NULL,
+
+                Price NUMERIC NOT NULL DEFAULT 0,
+                Status TEXT NOT NULL DEFAULT 'BOOKED',
+                CheckedInByUserId INTEGER NULL,
+                CheckedInAt TEXT,
+
+                CreatedAt TEXT NOT NULL DEFAULT
+                    (datetime('now', 'localtime')),
+
+                FOREIGN KEY (BookingId)
+                    REFERENCES Bookings(Id)
+                    ON DELETE CASCADE,
+
+                FOREIGN KEY (ShowtimeId)
+                    REFERENCES Showtimes(Id),
+
+                FOREIGN KEY (SeatId)
+                    REFERENCES Seats(Id),
+
+                FOREIGN KEY (CheckedInByUserId)
+                    REFERENCES Users(Id)
+                    ON DELETE SET NULL
+            );
+        ");
+
+        MigrateTicketsUniqueConstraintIfNeeded(connection);
+        AddColumnIfNotExists(connection, "Tickets", "CheckedInAt", "TEXT");
+        AddColumnIfNotExists(
+            connection,
+            "Tickets",
+            "CheckedInByUserId",
+            "INTEGER NULL REFERENCES Users(Id) ON DELETE SET NULL");
+    }
+
+    private static void CreateStaffTicketScanLogsTable(SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS StaffTicketScanLogs (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                StaffUserId INTEGER NULL,
+                BookingId INTEGER NULL,
+                BookingCode TEXT NOT NULL DEFAULT '',
+                ScanStatus TEXT NOT NULL,
+                Message TEXT NOT NULL DEFAULT '',
+                ScannedAt TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (StaffUserId)
+                    REFERENCES Users(Id)
+                    ON DELETE SET NULL,
+                FOREIGN KEY (BookingId)
+                    REFERENCES Bookings(Id)
+                    ON DELETE SET NULL
+            );
+        ");
+    }
+
+    /// <summary>
+    /// Nếu bảng Tickets cũ dùng UNIQUE (ShowtimeId, SeatId) cứng trên toàn bảng,
+    /// chuyển sang bảng mới để kết hợp với partial unique index (bỏ qua vé CANCELLED).
+    /// </summary>
+    private static void MigrateTicketsUniqueConstraintIfNeeded(
+        SqliteConnection connection)
+    {
+        string? createSql = connection.ExecuteScalar<string?>(@"
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'Tickets';
+        ");
+
+        bool hasTableLevelSeatUnique =
+            !string.IsNullOrWhiteSpace(createSql) &&
+            (createSql.Contains("UNIQUE (ShowtimeId, SeatId)", StringComparison.OrdinalIgnoreCase) ||
+             createSql.Contains("UNIQUE(ShowtimeId, SeatId)", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasTableLevelSeatUnique)
+            return;
+
+        string checkedInAtExpression = ColumnExists(connection, "Tickets", "CheckedInAt")
+            ? "CheckedInAt"
+            : "NULL";
+        string checkedInByExpression = ColumnExists(connection, "Tickets", "CheckedInByUserId")
+            ? "CheckedInByUserId"
+            : "NULL";
+
+        connection.Execute("PRAGMA foreign_keys = OFF;");
+        try
+        {
+            using var tx = connection.BeginTransaction();
+
+            connection.Execute(@"
+                CREATE TABLE Tickets_new (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    BookingId INTEGER NOT NULL,
+                    ShowtimeId INTEGER NOT NULL,
+                    SeatId INTEGER NOT NULL,
+                    TicketCode TEXT NOT NULL UNIQUE,
+                    SeatNumber TEXT NOT NULL,
+                    Price NUMERIC NOT NULL DEFAULT 0,
+                    Status TEXT NOT NULL DEFAULT 'BOOKED',
+                    CheckedInByUserId INTEGER NULL,
+                    CheckedInAt TEXT,
+                    CreatedAt TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    FOREIGN KEY (BookingId) REFERENCES Bookings(Id) ON DELETE CASCADE,
+                    FOREIGN KEY (ShowtimeId) REFERENCES Showtimes(Id),
+                    FOREIGN KEY (SeatId) REFERENCES Seats(Id),
+                    FOREIGN KEY (CheckedInByUserId) REFERENCES Users(Id) ON DELETE SET NULL
+                );
+
+                INSERT INTO Tickets_new (
+                    Id, BookingId, ShowtimeId, SeatId,
+                    TicketCode, SeatNumber, Price, Status,
+                    CheckedInByUserId, CheckedInAt, CreatedAt
+                )
+                SELECT
+                    Id, BookingId, ShowtimeId, SeatId,
+                    TicketCode, SeatNumber, Price, Status,
+                    {checkedInByExpression}, {checkedInAtExpression}, CreatedAt
+                FROM Tickets;
+
+                DROP TABLE Tickets;
+                ALTER TABLE Tickets_new RENAME TO Tickets;
+            ", transaction: tx);
+
+            tx.Commit();
+        }
+        finally
+        {
+            connection.Execute("PRAGMA foreign_keys = ON;");
+        }
+    }
+
+    // =========================================
+    // BOOKING DETAIL PRODUCTS - BẮP NƯỚC
+    // =========================================
+
+    private static void CreateBookingDetailProductsTable(
+        SqliteConnection connection)
+    {
+        connection.Execute(@"
+            CREATE TABLE IF NOT EXISTS BookingDetailProducts (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                BookingId INTEGER NOT NULL,
+                ProductId INTEGER NULL,
+
+                ProductName TEXT NOT NULL,
+                Quantity INTEGER NOT NULL DEFAULT 1,
+
+                UnitPrice NUMERIC NOT NULL DEFAULT 0,
+                TotalPrice NUMERIC NOT NULL DEFAULT 0,
+
+                FOREIGN KEY (BookingId)
+                    REFERENCES Bookings(Id)
+                    ON DELETE CASCADE,
+
+                FOREIGN KEY (ProductId)
+                    REFERENCES Products(Id)
+                    ON DELETE SET NULL
             );
         ");
     }
@@ -295,6 +668,36 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS IX_Promotions_StartDate_EndDate
             ON Promotions(StartDate, EndDate);
 
+            CREATE INDEX IF NOT EXISTS IX_Bookings_UserId
+            ON Bookings(UserId);
+
+            CREATE INDEX IF NOT EXISTS IX_Bookings_UserId_PromotionCode
+            ON Bookings(UserId, PromotionCode);
+
+            CREATE INDEX IF NOT EXISTS IX_Bookings_StaffUserId
+            ON Bookings(StaffUserId);
+
+            CREATE INDEX IF NOT EXISTS IX_Bookings_BookingTime
+            ON Bookings(BookingTime);
+
+            CREATE INDEX IF NOT EXISTS IX_Tickets_BookingId
+            ON Tickets(BookingId);
+
+            CREATE INDEX IF NOT EXISTS IX_Tickets_ShowtimeId
+            ON Tickets(ShowtimeId);
+
+            CREATE INDEX IF NOT EXISTS IX_Tickets_CheckedInByUserId
+            ON Tickets(CheckedInByUserId);
+
+            CREATE INDEX IF NOT EXISTS IX_StaffTicketScanLogs_ScannedAt
+            ON StaffTicketScanLogs(ScannedAt);
+
+            CREATE UNIQUE INDEX IF NOT EXISTS UX_Tickets_ActiveShowtimeSeat
+            ON Tickets(ShowtimeId, SeatId)
+            WHERE UPPER(Status) <> 'CANCELLED';
+
+            CREATE INDEX IF NOT EXISTS IX_BookingDetailProducts_BookingId
+            ON BookingDetailProducts(BookingId);
         ");
     }
 
@@ -308,11 +711,22 @@ public static class DatabaseInitializer
         string column,
         string type)
     {
+        if (ColumnExists(connection, table, column))
+            return;
+
+        using var alterCommand = connection.CreateCommand();
+        alterCommand.CommandText =
+            $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {type};";
+        alterCommand.ExecuteNonQuery();
+    }
+
+    private static bool ColumnExists(
+        SqliteConnection connection,
+        string table,
+        string column)
+    {
         using var command = connection.CreateCommand();
-
         command.CommandText = $"PRAGMA table_info(\"{table}\");";
-
-        bool columnExists = false;
 
         using (var reader = command.ExecuteReader())
         {
@@ -325,20 +739,11 @@ public static class DatabaseInitializer
                     column,
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    columnExists = true;
-                    break;
+                    return true;
                 }
             }
         }
 
-        if (!columnExists)
-        {
-            using var alterCommand = connection.CreateCommand();
-
-            alterCommand.CommandText =
-                $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {type};";
-
-            alterCommand.ExecuteNonQuery();
-        }
+        return false;
     }
 }

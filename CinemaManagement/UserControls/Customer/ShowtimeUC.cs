@@ -1,27 +1,20 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Windows.Forms;
 using CinemaManagement.Models;
-using CinemaManagement.Repositories;
+using CinemaManagement.Models.Enums;
+using CinemaManagement.Services;
 
 namespace CinemaManagement.UserControls.Customer;
 
 public partial class ShowtimeUC : UserControl
 {
     // =========================================
-    // 1. REPOSITORY VÀ DỮ LIỆU
+    // 1. SERVICE VÀ DỮ LIỆU
     // =========================================
 
-    private readonly MovieRepository _movieRepository = new();
-    private readonly RoomRepository _roomRepository = new();
-    private readonly ShowtimeRepository _showtimeRepository = new();
-
-    private List<Movie> _movies = new();
-    private List<Room> _rooms = new();
-    private List<Showtime> _showtimes = new();
+    private readonly TicketService _ticketService = new();
 
     // Bảng màu Dark Cinema & Gold Accent
     private readonly Color ColorBg = Color.FromArgb(20, 20, 28);
@@ -30,7 +23,7 @@ public partial class ShowtimeUC : UserControl
     private readonly Color ColorTextMuted = Color.FromArgb(150, 150, 170);
 
     // Controls UI
-    private Panel pnlHeader = null!;
+    private TableLayoutPanel tlpHeader = null!;
     private Button btnBack = null!;
     private FlowLayoutPanel flpDateSelector = null!;
     private FlowLayoutPanel flpShowtimeList = null!;
@@ -49,99 +42,123 @@ public partial class ShowtimeUC : UserControl
     // 2. CONSTRUCTOR
     // =========================================
 
-    public ShowtimeUC()
+    public ShowtimeUC() : this(initialMovie: null, initFlag: true)
     {
-        InitializeComponents();
+    }
 
-        LoadDatabaseData();
+    public ShowtimeUC(Movie movie) : this(initialMovie: movie, initFlag: true)
+    {
+    }
+
+    private ShowtimeUC(Movie? initialMovie, bool initFlag)
+    {
+        AutoScaleMode = AutoScaleMode.Dpi;
+        MovieData = initialMovie;
+
+        InitializeComponents();
         LoadShowtimes();
     }
 
-    public ShowtimeUC(Movie movie) : this()
-    {
-        SetMovie(movie);
-    }
-
     // =========================================
-    // 3. KHỞI TẠO GIAO DIỆN
+    // 3. KHỞI TẠO GIAO DIỆN RESPONSIVE
     // =========================================
 
     private void InitializeComponents()
     {
         Dock = DockStyle.Fill;
         BackColor = ColorBg;
-        AutoScroll = true;
 
-        // HEADER
-        pnlHeader = new Panel
+        // HEADER TỰ GIÃN CHIỀU CAO THEO DPI
+        tlpHeader = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 110,
-            BackColor = Color.FromArgb(16, 16, 24)
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.FromArgb(16, 16, 24),
+            Padding = new Padding(20, 12, 20, 12),
+            Margin = new Padding(0)
         };
+        tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpHeader.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        tlpHeader.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        // Hàng 1: Nút Quay lại + Thanh tiến trình Stepper
+        var tlpTopRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        tlpTopRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        tlpTopRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpTopRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         btnBack = new Button
         {
             Text = "← Quay lại",
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = Color.White,
             BackColor = Color.FromArgb(35, 36, 50),
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(100, 32),
-            Location = new Point(20, 15),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(12, 6, 12, 6),
+            Margin = new Padding(0, 0, 16, 0),
             Cursor = Cursors.Hand
         };
-
         btnBack.FlatAppearance.BorderSize = 0;
-        btnBack.Click += (s, e) =>
-            OnBackClicked?.Invoke(this, EventArgs.Empty);
+        btnBack.MouseEnter += (s, e) => btnBack.BackColor = Color.FromArgb(52, 54, 74);
+        btnBack.MouseLeave += (s, e) => btnBack.BackColor = Color.FromArgb(35, 36, 50);
+        btnBack.Click += (s, e) => OnBackClicked?.Invoke(this, EventArgs.Empty);
 
-        // Thanh tiến trình
-        Panel pnlStepper = new Panel
+        // Thanh tiến trình dùng FlowLayoutPanel để các bước nối tiếp nhau, không bao giờ đè/cắt chữ
+        var flpStepper = new FlowLayoutPanel
         {
-            Size = new Size(600, 50),
-            Location = new Point(280, 15),
-            BackColor = Color.Transparent
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Anchor = AnchorStyles.None,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
 
-        Label lblStep1 = CreateStepLabel(
-            "①  CHỌN SUẤT CHIẾU", true, 0);
-
-        Label lblDivider1 = CreateDividerLabel(
-            "─────────", 185);
-
-        Label lblStep2 = CreateStepLabel(
-            "②  CHỌN GHẾ", false, 275);
-
-        Label lblDivider2 = CreateDividerLabel(
-            "─────────", 400);
-
-        Label lblStep3 = CreateStepLabel(
-            "③  THANH TOÁN", false, 480);
-
-        pnlStepper.Controls.AddRange(new Control[]
+        flpStepper.Controls.AddRange(new Control[]
         {
-            lblStep1,
-            lblDivider1,
-            lblStep2,
-            lblDivider2,
-            lblStep3
+            CreateStepLabel("①  CHỌN SUẤT CHIẾU", true),
+            CreateDividerLabel("────"),
+            CreateStepLabel("②  CHỌN GHẾ", false),
+            CreateDividerLabel("────"),
+            CreateStepLabel("③  BẮP NƯỚC", false),
+            CreateDividerLabel("────"),
+            CreateStepLabel("④  THANH TOÁN", false)
         });
 
-        // Chọn ngày chiếu
+        tlpTopRow.Controls.Add(btnBack, 0, 0);
+        tlpTopRow.Controls.Add(flpStepper, 1, 0);
+
+        // Hàng 2: Thanh chọn ngày chiếu tự giãn
         flpDateSelector = new FlowLayoutPanel
         {
-            Location = new Point(20, 60),
-            Size = new Size(1100, 45),
-            AutoScroll = false,
-            WrapContents = false
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
 
         GenerateDateButtons();
 
-        pnlHeader.Controls.Add(btnBack);
-        pnlHeader.Controls.Add(pnlStepper);
-        pnlHeader.Controls.Add(flpDateSelector);
+        tlpHeader.Controls.Add(tlpTopRow, 0, 0);
+        tlpHeader.Controls.Add(flpDateSelector, 0, 1);
 
         // Danh sách suất chiếu
         flpShowtimeList = new FlowLayoutPanel
@@ -149,45 +166,54 @@ public partial class ShowtimeUC : UserControl
             Dock = DockStyle.Fill,
             Padding = new Padding(20),
             AutoScroll = true,
-            WrapContents = true,
+            WrapContents = false,
             FlowDirection = FlowDirection.TopDown,
             BackColor = ColorBg
         };
 
+        flpShowtimeList.SizeChanged += (s, e) =>
+        {
+            int targetWidth = Math.Max(420, flpShowtimeList.ClientSize.Width - 44);
+            foreach (Control ctrl in flpShowtimeList.Controls)
+            {
+                if (ctrl is Panel card)
+                {
+                    card.MinimumSize = new Size(targetWidth, 0);
+                    card.MaximumSize = new Size(targetWidth, 0);
+                    card.Width = targetWidth;
+                }
+            }
+        };
+
         Controls.Add(flpShowtimeList);
-        Controls.Add(pnlHeader);
+        Controls.Add(tlpHeader);
     }
 
     // =========================================
-    // 4. TẠO LABEL
+    // 4. TẠO LABEL STEPPER
     // =========================================
 
-    private Label CreateStepLabel(
-        string text,
-        bool isActive,
-        int xLocation)
+    private Label CreateStepLabel(string text, bool isActive)
     {
         return new Label
         {
             Text = text,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = isActive ? ColorGold : ColorTextMuted,
-            Location = new Point(xLocation, 15),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
         };
     }
 
-    private Label CreateDividerLabel(
-        string text,
-        int xLocation)
+    private Label CreateDividerLabel(string text)
     {
         return new Label
         {
             Text = text,
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Color.FromArgb(60, 60, 80),
-            Location = new Point(xLocation, 15),
-            AutoSize = true
+            Font = new Font("Segoe UI", 9F),
+            ForeColor = Color.FromArgb(70, 72, 95),
+            AutoSize = true,
+            Margin = new Padding(4, 6, 4, 6)
         };
     }
 
@@ -197,14 +223,13 @@ public partial class ShowtimeUC : UserControl
 
     private void GenerateDateButtons()
     {
+        flpDateSelector.SuspendLayout();
         flpDateSelector.Controls.Clear();
 
         for (int i = 0; i < 7; i++)
         {
             DateTime date = DateTime.Today.AddDays(i);
-
-            bool isSelected =
-                date.Date == selectedDate.Date;
+            bool isSelected = date.Date == selectedDate.Date;
 
             Button btnDate = new Button
             {
@@ -212,19 +237,14 @@ public partial class ShowtimeUC : UserControl
                     ? "HÔM NAY"
                     : date.ToString("ddd dd/MM").ToUpper(),
 
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-
-                ForeColor = isSelected
-                    ? Color.Black
-                    : Color.White,
-
-                BackColor = isSelected
-                    ? ColorGold
-                    : Color.FromArgb(35, 36, 50),
-
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                ForeColor = isSelected ? Color.Black : Color.White,
+                BackColor = isSelected ? ColorGold : Color.FromArgb(35, 36, 50),
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(110, 36),
-                Margin = new Padding(0, 0, 10, 0),
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(14, 7, 14, 7),
+                Margin = new Padding(0, 0, 8, 6),
                 Cursor = Cursors.Hand,
                 Tag = date
             };
@@ -234,51 +254,22 @@ public partial class ShowtimeUC : UserControl
 
             flpDateSelector.Controls.Add(btnDate);
         }
+
+        flpDateSelector.ResumeLayout();
     }
 
     private void BtnDate_Click(object? sender, EventArgs e)
     {
-        if (sender is not Button btn ||
-            btn.Tag is not DateTime date)
+        if (sender is not Button btn || btn.Tag is not DateTime date)
             return;
 
         selectedDate = date;
-
         GenerateDateButtons();
-
-        // Tải lại lịch chiếu theo ngày được chọn
         LoadShowtimes();
     }
 
     // =========================================
-    // 6. TẢI DỮ LIỆU TỪ SQLITE
-    // =========================================
-
-    private void LoadDatabaseData()
-    {
-        try
-        {
-            _movies = _movieRepository.GetAll();
-            _rooms = _roomRepository.GetAll();
-            _showtimes = _showtimeRepository.GetAll();
-        }
-        catch (Exception ex)
-        {
-            _movies.Clear();
-            _rooms.Clear();
-            _showtimes.Clear();
-
-            MessageBox.Show(
-                "Không thể tải lịch chiếu từ SQLite.\n\n" +
-                ex.Message,
-                "Lỗi tải dữ liệu",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-    }
-
-    // =========================================
-    // 7. CHỌN PHIM
+    // 6. CHỌN PHIM VÀ LÀM MỚI LỊCH CHIẾU
     // =========================================
 
     public void SetMovie(Movie movie)
@@ -287,26 +278,17 @@ public partial class ShowtimeUC : UserControl
             return;
 
         MovieData = movie;
-
-        // Đọc lại dữ liệu mới nhất từ database
-        LoadDatabaseData();
-
         LoadShowtimes();
     }
 
-    // =========================================
-    // 8. LÀM MỚI LỊCH CHIẾU
-    // =========================================
-
     public void RefreshShowtimes()
     {
-        LoadDatabaseData();
         GenerateDateButtons();
         LoadShowtimes();
     }
 
     // =========================================
-    // 9. TẢI VÀ HIỂN THỊ SUẤT CHIẾU
+    // 7. TẢI VÀ HIỂN THỊ SUẤT CHIẾU (LỌC TRỰC TIẾP TẠI SQLITE)
     // =========================================
 
     private void LoadShowtimes()
@@ -317,78 +299,60 @@ public partial class ShowtimeUC : UserControl
         {
             flpShowtimeList.Controls.Clear();
 
-            // Lọc lịch chiếu theo ngày
-            IEnumerable<Showtime> query = _showtimes
-                .Where(s =>
-                    s.StartTime.Date == selectedDate.Date);
-
-            // Nếu đã chọn phim thì chỉ lấy lịch của phim đó
-            if (MovieData != null)
+            if (MovieData != null && MovieData.Status == MovieStatus.Ended)
             {
-                query = query.Where(s =>
-                    s.MovieId == MovieData.Id);
+                Label lblEnded = new Label
+                {
+                    Text = $"Phim {MovieData.Title} đã kết thúc đợt chiếu.",
+                    ForeColor = ColorTextMuted,
+                    Font = new Font("Segoe UI", 11.5F),
+                    AutoSize = true,
+                    Margin = new Padding(8, 16, 8, 16)
+                };
+
+                flpShowtimeList.Controls.Add(lblEnded);
+                return;
             }
 
-            List<Showtime> result = query
-                .OrderBy(s => s.StartTime)
-                .ToList();
+            var scheduleItems = _ticketService.GetAvailableShowtimes(
+                selectedDate,
+                MovieData?.Id);
 
-            if (result.Count == 0)
+            if (scheduleItems.Count == 0)
             {
+                string emptyMessage = selectedDate.Date == DateTime.Today
+                    ? (MovieData == null
+                        ? "Không còn suất chiếu sắp diễn ra trong ngày hôm nay."
+                        : $"Phim {MovieData.Title} không còn suất chiếu sắp diễn ra trong ngày hôm nay.")
+                    : (MovieData == null
+                        ? "Không có suất chiếu trong ngày này."
+                        : $"Phim {MovieData.Title} không có suất chiếu trong ngày này.");
+
                 Label lblEmpty = new Label
                 {
-                    Text = MovieData == null
-                        ? "Không có suất chiếu trong ngày này."
-                        : $"Phim {MovieData.Title} không có suất chiếu trong ngày này.",
-
+                    Text = emptyMessage,
                     ForeColor = ColorTextMuted,
-                    Font = new Font("Segoe UI", 12),
+                    Font = new Font("Segoe UI", 11.5F),
                     AutoSize = true,
-                    Margin = new Padding(20)
+                    Margin = new Padding(8, 16, 8, 16)
                 };
 
                 flpShowtimeList.Controls.Add(lblEmpty);
                 return;
             }
 
-            foreach (Showtime showtime in result)
+            int cardWidth = Math.Max(420, flpShowtimeList.ClientSize.Width - 44);
+
+            foreach (var (showtime, movie, room, standardPrice) in scheduleItems)
             {
-                Movie? movie = _movies.FirstOrDefault(
-                    m => m.Id == showtime.MovieId);
-
-                Room? room = _rooms.FirstOrDefault(
-                    r => r.Id == showtime.RoomId);
-
-                if (movie == null)
-                    continue;
-
-                Panel card = CreateShowtimeCard(
-                    showtime,
-                    movie,
-                    room);
-
+                Panel card = CreateShowtimeCard(showtime, movie, room, standardPrice, cardWidth);
                 flpShowtimeList.Controls.Add(card);
-            }
-
-            if (flpShowtimeList.Controls.Count == 0)
-            {
-                Label lblEmpty = new Label
-                {
-                    Text = "Không tìm thấy thông tin phim cho các suất chiếu.",
-                    ForeColor = ColorTextMuted,
-                    Font = new Font("Segoe UI", 11),
-                    AutoSize = true,
-                    Margin = new Padding(20)
-                };
-
-                flpShowtimeList.Controls.Add(lblEmpty);
             }
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                "Không thể hiển thị lịch chiếu.\n\n" +
-                ex.Message,
+                "Không thể hiển thị lịch chiếu.\n\n" + ex.Message,
                 "Lỗi",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -400,28 +364,49 @@ public partial class ShowtimeUC : UserControl
     }
 
     // =========================================
-    // 10. TẠO THẺ SUẤT CHIẾU
+    // 8. TẠO THẺ SUẤT CHIẾU RESPONSIVE
     // =========================================
 
     private Panel CreateShowtimeCard(
         Showtime showtime,
         Movie movie,
-        Room? room)
+        Room? room,
+        decimal displayPrice,
+        int cardWidth)
     {
         Panel card = new Panel
         {
-            Size = new Size(1000, 150),
+            Width = cardWidth,
+            MinimumSize = new Size(cardWidth, 0),
+            MaximumSize = new Size(cardWidth, 0),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = ColorCard,
-            Margin = new Padding(0, 0, 0, 15)
+            Padding = new Padding(16),
+            Margin = new Padding(0, 0, 0, 14)
         };
 
-        // Poster phim
+        var tlpCard = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        tlpCard.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        tlpCard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tlpCard.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        // Cột 1: Poster phim
         PictureBox picPoster = new PictureBox
         {
-            Location = new Point(15, 15),
-            Size = new Size(80, 120),
-            SizeMode = PictureBoxSizeMode.StretchImage,
-            BackColor = Color.FromArgb(45, 45, 60)
+            Size = new Size(84, 124),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.FromArgb(45, 45, 60),
+            Margin = new Padding(0, 0, 18, 0)
         };
 
         picPoster.Paint += (s, e) =>
@@ -429,92 +414,97 @@ public partial class ShowtimeUC : UserControl
             if (picPoster.Image != null)
                 return;
 
-            using var font =
-                new Font("Segoe UI Emoji", 20f);
-
-            using var brush =
-                new SolidBrush(Color.FromArgb(140, 140, 165));
-
-            var sf = new StringFormat
+            using var font = new Font("Segoe UI Emoji", 20F);
+            using var brush = new SolidBrush(Color.FromArgb(140, 140, 165));
+            using var sf = new StringFormat
             {
                 Alignment = StringAlignment.Center,
                 LineAlignment = StringAlignment.Center
             };
 
-            e.Graphics.DrawString(
-                "🎬",
-                font,
-                brush,
-                picPoster.ClientRectangle,
-                sf);
+            e.Graphics.DrawString("🎬", font, brush, picPoster.ClientRectangle, sf);
         };
 
-        // Hiển thị poster nếu đường dẫn tồn tại
         if (!string.IsNullOrWhiteSpace(movie.PosterUrl) &&
             System.IO.File.Exists(movie.PosterUrl))
         {
             try
             {
-                using var image = Image.FromFile(movie.PosterUrl);
+                using var stream = new System.IO.FileStream(
+                    movie.PosterUrl,
+                    System.IO.FileMode.Open,
+                    System.IO.FileAccess.Read,
+                    System.IO.FileShare.ReadWrite);
+                using var image = Image.FromStream(stream);
                 picPoster.Image = new Bitmap(image);
             }
             catch
             {
-                // Không có ảnh thì giữ biểu tượng mặc định
+                // Giữ biểu tượng mặc định nếu ảnh lỗi
             }
         }
 
-        // Tên phim
+        // Cột 2: Thông tin phim & nút chọn suất xếp dọc tự giãn
+        var tlpDetails = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 4,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+        tlpDetails.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        for (int i = 0; i < 4; i++)
+        {
+            tlpDetails.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        }
+
         Label lblTitle = new Label
         {
             Text = movie.Title,
-            Font = new Font("Segoe UI", 13, FontStyle.Bold),
+            Font = new Font("Segoe UI", 13F, FontStyle.Bold),
             ForeColor = Color.White,
-            Location = new Point(115, 15),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4)
         };
 
-        // Phòng chiếu và giá vé
         Label lblInfo = new Label
         {
             Text =
                 $"{room?.Name ?? $"Phòng {showtime.RoomId}"}" +
                 $"   •   {showtime.Format}" +
-                $"   •   Giá vé: {showtime.BasePrice:N0} đ",
-
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                $"   •   Giá vé từ: {displayPrice:N0} đ",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
             ForeColor = ColorGold,
-            Location = new Point(115, 45),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 4)
         };
 
-        // Thời gian bắt đầu và kết thúc
         Label lblTime = new Label
         {
-            Text =
-                $"{showtime.StartTime:HH:mm} - " +
-                $"{showtime.EndTime:HH:mm}",
-
-            Font = new Font("Segoe UI", 9),
+            Text = $"{showtime.StartTime:HH:mm} - {showtime.EndTime:HH:mm}",
+            Font = new Font("Segoe UI", 9F),
             ForeColor = ColorTextMuted,
-            Location = new Point(115, 72),
-            AutoSize = true
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 10)
         };
 
-        // Nút chọn suất chiếu
         Button btnTime = new Button
         {
             Text = showtime.StartTime.ToString("HH:mm"),
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
             ForeColor = Color.White,
             BackColor = Color.FromArgb(42, 43, 58),
             FlatStyle = FlatStyle.Flat,
-            Size = new Size(95, 38),
-            Location = new Point(115, 100),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(18, 7, 18, 7),
+            Margin = new Padding(0),
             Cursor = Cursors.Hand,
             Tag = showtime
         };
-
         btnTime.FlatAppearance.BorderSize = 0;
 
         btnTime.MouseEnter += (s, e) =>
@@ -529,22 +519,33 @@ public partial class ShowtimeUC : UserControl
             btnTime.ForeColor = Color.White;
         };
 
-        // Chọn suất chiếu thật từ SQLite
         btnTime.Click += (s, e) =>
         {
-            MovieData = movie;
+            if (showtime.StartTime <= DateTime.Now)
+            {
+                MessageBox.Show(
+                    "Suất chiếu này vừa bắt đầu hoặc đã qua giờ chiếu. Vui lòng chọn suất chiếu khác.",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
 
-            OnShowtimeSelected?.Invoke(
-                this,
-                showtime);
+                RefreshShowtimes();
+                return;
+            }
+
+            MovieData = movie;
+            OnShowtimeSelected?.Invoke(this, showtime);
         };
 
-        card.Controls.Add(picPoster);
-        card.Controls.Add(lblTitle);
-        card.Controls.Add(lblInfo);
-        card.Controls.Add(lblTime);
-        card.Controls.Add(btnTime);
+        tlpDetails.Controls.Add(lblTitle, 0, 0);
+        tlpDetails.Controls.Add(lblInfo, 0, 1);
+        tlpDetails.Controls.Add(lblTime, 0, 2);
+        tlpDetails.Controls.Add(btnTime, 0, 3);
 
+        tlpCard.Controls.Add(picPoster, 0, 0);
+        tlpCard.Controls.Add(tlpDetails, 1, 0);
+
+        card.Controls.Add(tlpCard);
         return card;
     }
 }

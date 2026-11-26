@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using CinemaManagement.Data;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 using CinemaManagement.Utils;
@@ -13,8 +14,6 @@ namespace CinemaManagement.UserControls.Admin
 {
     public partial class UserManagementUC : UserControl
     {
-        private const string ConnectionString = "Data Source=cinema.db";
-
         private readonly Color ColorPrimary = Color.FromArgb(124, 58, 237);
         private readonly Color ColorDark = Color.FromArgb(30, 41, 59);
         private readonly Color ColorBg = Color.FromArgb(245, 246, 250);
@@ -463,7 +462,7 @@ namespace CinemaManagement.UserControls.Admin
         {
             try
             {
-                using var connection = new SqliteConnection(ConnectionString);
+                using var connection = DatabaseConnection.GetConnection();
                 connection.Open();
 
                 EnsureUsersColumns(connection);
@@ -667,7 +666,7 @@ namespace CinemaManagement.UserControls.Admin
 
             try
             {
-                using var connection = new SqliteConnection(ConnectionString);
+                using var connection = DatabaseConnection.GetConnection();
                 connection.Open();
 
                 int exists = connection.ExecuteScalar<int>(
@@ -758,7 +757,7 @@ namespace CinemaManagement.UserControls.Admin
 
             try
             {
-                using var connection = new SqliteConnection(ConnectionString);
+                using var connection = DatabaseConnection.GetConnection();
                 connection.Open();
 
                 if (!string.IsNullOrWhiteSpace(newPassword))
@@ -852,7 +851,7 @@ namespace CinemaManagement.UserControls.Admin
 
             try
             {
-                using var connection = new SqliteConnection(ConnectionString);
+                using var connection = DatabaseConnection.GetConnection();
                 connection.Open();
 
                 connection.Execute(

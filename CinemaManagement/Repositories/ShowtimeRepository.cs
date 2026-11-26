@@ -104,6 +104,41 @@ public class ShowtimeRepository
         ).AsList();
     }
 
+    // Lấy các suất chiếu sắp diễn ra trong ngày (lọc trực tiếp tại SQLite)
+    public List<Showtime> GetUpcomingByDate(
+        DateTime date,
+        DateTime afterTime,
+        int? movieId = null)
+    {
+        using var connection = DatabaseConnection.GetConnection();
+
+        const string sql = @"
+            SELECT
+                Id,
+                MovieId,
+                RoomId,
+                StartTime,
+                EndTime,
+                BasePrice,
+                Format
+            FROM Showtimes
+            WHERE date(StartTime) = date(@Date)
+              AND StartTime > @AfterTime
+              AND (@MovieId IS NULL OR MovieId = @MovieId)
+            ORDER BY StartTime ASC;
+        ";
+
+        return connection.Query<Showtime>(
+            sql,
+            new
+            {
+                Date = date.ToString("yyyy-MM-dd"),
+                AfterTime = afterTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                MovieId = movieId
+            }
+        ).AsList();
+    }
+
     // Thêm suất chiếu
     public int Add(Showtime showtime)
     {

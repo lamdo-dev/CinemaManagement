@@ -5,6 +5,8 @@ namespace CinemaManagement.Services;
 
 public class PromotionService
 {
+    public const decimal MaxPercentDiscount = 70m;
+
     private readonly PromotionRepository _repository = new();
 
     public List<Promotion> GetAll()
@@ -43,12 +45,30 @@ public class PromotionService
         if (promotion.DiscountValue <= 0)
             throw new ArgumentException("Giá trị giảm phải lớn hơn 0.");
 
-        if (promotion.DiscountType == "Phần trăm" &&
-            promotion.DiscountValue > 100)
+        if (promotion.DiscountType == "Phần trăm")
         {
-            throw new ArgumentException(
-                "Mức giảm phần trăm không được vượt quá 100%."
-            );
+            if (promotion.DiscountValue > MaxPercentDiscount)
+            {
+                throw new ArgumentException(
+                    $"Mức giảm phần trăm tối đa là {MaxPercentDiscount:0}% (không được nhập 100%)."
+                );
+            }
+
+            if (promotion.MaxDiscount <= 0)
+            {
+                throw new ArgumentException(
+                    "Loại giảm Phần trăm bắt buộc phải nhập Mức giảm tối đa lớn hơn 0 đ."
+                );
+            }
+        }
+        else if (promotion.DiscountType == "Số tiền")
+        {
+            if (promotion.MinimumOrder <= promotion.DiscountValue)
+            {
+                throw new ArgumentException(
+                    "Với loại giảm Số tiền, Đơn hàng tối thiểu bắt buộc phải lớn hơn Giá trị giảm để tránh âm ngân sách."
+                );
+            }
         }
 
         if (promotion.MaxDiscount < 0)
@@ -56,6 +76,9 @@ public class PromotionService
 
         if (promotion.MinimumOrder < 0)
             throw new ArgumentException("Đơn hàng tối thiểu không hợp lệ.");
+
+        if (promotion.UsageLimit <= 0)
+            throw new ArgumentException("Số lượt sử dụng tối đa (UsageLimit) phải lớn hơn 0.");
 
         if (promotion.EndDate.Date < promotion.StartDate.Date)
         {
@@ -86,10 +109,18 @@ public class PromotionService
         if (promotion.Id <= 0)
             throw new ArgumentException("Mã khuyến mãi không hợp lệ.");
 
-        if (_repository.GetById(promotion.Id) == null)
+        Promotion? existing = _repository.GetById(promotion.Id);
+        if (existing == null)
         {
             throw new InvalidOperationException(
                 "Không tìm thấy chương trình cần cập nhật."
+            );
+        }
+
+        if (promotion.UsageLimit < existing.UsedCount)
+        {
+            throw new InvalidOperationException(
+                $"Giới hạn lượt sử dụng ({promotion.UsageLimit}) không được nhỏ hơn số lượt đã dùng ({existing.UsedCount})."
             );
         }
 
@@ -127,6 +158,7 @@ public class PromotionService
     {
         return GetAll().Count(p =>
             p.IsEnabled &&
+            (p.UsageLimit <= 0 || p.UsedCount < p.UsageLimit) &&
             p.StartDate.Date <= DateTime.Today &&
             p.EndDate.Date >= DateTime.Today
         );
@@ -138,5 +170,120 @@ public class PromotionService
             p.IsEnabled &&
             p.StartDate.Date > DateTime.Today
         );
+    }
+
+    /// <summary>
+    /// Kiểm tra điều kiện áp dụng mã voucher, lượt dùng còn lại,
+    /// giới hạn 1 lần/tài khoản và tính số tiền được giảm.
+    /// </summary>
+    public (Promotion Promotion, decimal DiscountAmount) ValidateAndCalculateDiscount(
+        string code,
+        decimal orderAmount,
+        int? userId = null,
+        IReadOnlyCollection<Promotion>? cachedPromotions = null)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException("Vui lòng nhập mã voucher.");
+
+        if (orderAmount <= 0)
+            throw new InvalidOperationException("Tổng giá trị đơn hàng phải lớn hơn 0 đ.");
+
+        string normalizedCode = code.Trim().ToUpperInvariant();
+        IReadOnlyCollection<Promotion> promotions = cachedPromotions ?? GetAll();
+
+        Promotion? promotion = promotions.FirstOrDefault(p =>
+            string.Equals(
+                p.Code?.Trim(),
+                normalizedCode,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (promotion == null)
+            throw new InvalidOperationException("Mã voucher không tồn tại.");
+
+        var result = CalculateDiscountForPromotion(promotion, orderAmount);
+
+        if (userId.HasValue &&
+            userId.Value > 0 &&
+            _repository.HasUserUsedPromotion(userId.Value, promotion.Code))
+        {
+            throw new InvalidOperationException(
+                "Tài khoản của bạn đã sử dụng mã voucher này trước đó (mỗi tài khoản chỉ được dùng 1 lần).");
+        }
+
+        return result;
+    }
+
+    public static (Promotion Promotion, decimal DiscountAmount) CalculateDiscountForPromotion(
+        Promotion promotion,
+        decimal orderAmount)
+    {
+        if (promotion == null)
+            throw new InvalidOperationException("Mã voucher không tồn tại.");
+
+        if (!promotion.IsEnabled)
+            throw new InvalidOperationException("Voucher hiện đã bị vô hiệu hóa.");
+
+        DateTime today = DateTime.Today;
+        if (today < promotion.StartDate.Date || today > promotion.EndDate.Date)
+        {
+            throw new InvalidOperationException(
+                "Voucher chưa đến thời gian áp dụng hoặc đã hết hạn.");
+        }
+
+        if (promotion.UsageLimit > 0 && promotion.UsedCount >= promotion.UsageLimit)
+        {
+            throw new InvalidOperationException("Voucher đã hết lượt sử dụng.");
+        }
+
+        if (orderAmount < promotion.MinimumOrder)
+        {
+            throw new InvalidOperationException(
+                $"Đơn hàng cần đạt tối thiểu {promotion.MinimumOrder:N0} đ.");
+        }
+
+        decimal calculatedDiscount;
+        if (promotion.DiscountType == "Phần trăm")
+        {
+            decimal safePercent = Math.Min(promotion.DiscountValue, MaxPercentDiscount);
+            calculatedDiscount = Math.Round(
+                orderAmount * safePercent / 100m,
+                0);
+
+            if (promotion.MaxDiscount > 0 &&
+                calculatedDiscount > promotion.MaxDiscount)
+            {
+                calculatedDiscount = promotion.MaxDiscount;
+            }
+        }
+        else if (promotion.DiscountType == "Số tiền")
+        {
+            if (orderAmount <= promotion.DiscountValue)
+            {
+                throw new InvalidOperationException(
+                    $"Đơn hàng phải lớn hơn mức giảm {promotion.DiscountValue:N0} đ để áp dụng voucher này.");
+            }
+
+            calculatedDiscount = promotion.DiscountValue;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Loại giảm giá của voucher không hợp lệ.");
+        }
+
+        // Chốt chặn cuối: không bao giờ cho phép giảm hết 100% giá trị đơn hàng
+        if (calculatedDiscount >= orderAmount)
+        {
+            throw new InvalidOperationException(
+                "Giá trị giảm của voucher vượt mức cho phép đối với đơn hàng này.");
+        }
+
+        if (calculatedDiscount <= 0)
+        {
+            throw new InvalidOperationException(
+                "Voucher không tạo ra giá trị giảm hợp lệ.");
+        }
+
+        return (promotion, calculatedDiscount);
     }
 }

@@ -1,15 +1,14 @@
 ﻿
 using System;
+using CinemaManagement.Data;
 using CinemaManagement.Models;
 using CinemaManagement.Models.Enums;
 using Dapper;
-using Microsoft.Data.Sqlite;
 
 namespace CinemaManagement.Services;
 
 public class AuthService
 {
-    private const string ConnectionString = "Data Source=cinema.db";
 
     /// <summary>
     /// Xử lý đăng nhập
@@ -24,7 +23,7 @@ public class AuthService
 
         try
         {
-            using var connection = new SqliteConnection(ConnectionString);
+            using var connection = DatabaseConnection.GetConnection();
             connection.Open();
 
             var user = connection.QueryFirstOrDefault<User>(
@@ -62,7 +61,7 @@ public class AuthService
 
         try
         {
-            using var connection = new SqliteConnection(ConnectionString);
+            using var connection = DatabaseConnection.GetConnection();
             connection.Open();
 
             var existing = connection.QueryFirstOrDefault<User>(

@@ -24,11 +24,7 @@ namespace CinemaManagement.Models
         public decimal TicketAmount { get; private set; }
 
         // Giỏ hàng bắp nước
-        public Dictionary<int, (
-            string Name,
-            decimal Price,
-            int Qty,
-            string ImgPath)> FoodCart { get; private set; } = new();
+        public Dictionary<int, CartItem> FoodCart { get; private set; } = new();
 
         // Tổng tiền bắp nước
         public decimal FoodAmount { get; private set; }
@@ -126,18 +122,9 @@ namespace CinemaManagement.Models
         }
 
         // Cập nhật giỏ hàng
-        public void SetFoodCart(
-            Dictionary<int, (
-                string Name,
-                decimal Price,
-                int Qty,
-                string ImgPath)>? cart)
+        public void SetFoodCart(Dictionary<int, CartItem>? cart)
         {
-            var newCart = new Dictionary<int, (
-                string Name,
-                decimal Price,
-                int Qty,
-                string ImgPath)>();
+            var newCart = new Dictionary<int, CartItem>();
 
             if (cart != null)
             {
@@ -162,8 +149,7 @@ namespace CinemaManagement.Models
         // Tính tiền bắp nước
         public void RecalculateFoodAmount()
         {
-            FoodAmount = FoodCart.Values.Sum(
-                item => item.Price * item.Qty);
+            FoodAmount = FoodCart.Values.Sum(item => item.TotalPrice);
         }
 
         // Xóa dữ liệu phụ thuộc khi đổi phim

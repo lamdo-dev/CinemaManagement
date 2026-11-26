@@ -19,6 +19,8 @@ public class PromotionRepository
                 DiscountValue,
                 MaxDiscount,
                 MinimumOrder,
+                COALESCE(UsageLimit, 100) AS UsageLimit,
+                COALESCE(UsedCount, 0) AS UsedCount,
                 StartDate,
                 EndDate,
                 IsEnabled
@@ -41,6 +43,8 @@ public class PromotionRepository
                 DiscountValue,
                 MaxDiscount,
                 MinimumOrder,
+                COALESCE(UsageLimit, 100) AS UsageLimit,
+                COALESCE(UsedCount, 0) AS UsedCount,
                 StartDate,
                 EndDate,
                 IsEnabled
@@ -86,6 +90,8 @@ public class PromotionRepository
                 DiscountValue,
                 MaxDiscount,
                 MinimumOrder,
+                UsageLimit,
+                UsedCount,
                 StartDate,
                 EndDate,
                 IsEnabled
@@ -98,6 +104,8 @@ public class PromotionRepository
                 @DiscountValue,
                 @MaxDiscount,
                 @MinimumOrder,
+                @UsageLimit,
+                0,
                 @StartDate,
                 @EndDate,
                 @IsEnabled
@@ -113,6 +121,7 @@ public class PromotionRepository
             promotion.DiscountValue,
             promotion.MaxDiscount,
             promotion.MinimumOrder,
+            promotion.UsageLimit,
             StartDate = promotion.StartDate.ToString("yyyy-MM-dd"),
             EndDate = promotion.EndDate.ToString("yyyy-MM-dd"),
             promotion.IsEnabled
@@ -132,6 +141,7 @@ public class PromotionRepository
                 DiscountValue = @DiscountValue,
                 MaxDiscount = @MaxDiscount,
                 MinimumOrder = @MinimumOrder,
+                UsageLimit = @UsageLimit,
                 StartDate = @StartDate,
                 EndDate = @EndDate,
                 IsEnabled = @IsEnabled
@@ -146,10 +156,34 @@ public class PromotionRepository
             promotion.DiscountValue,
             promotion.MaxDiscount,
             promotion.MinimumOrder,
+            promotion.UsageLimit,
             StartDate = promotion.StartDate.ToString("yyyy-MM-dd"),
             EndDate = promotion.EndDate.ToString("yyyy-MM-dd"),
             promotion.IsEnabled
         }) > 0;
+    }
+
+    public bool HasUserUsedPromotion(int userId, string code)
+    {
+        if (userId <= 0 || string.IsNullOrWhiteSpace(code))
+            return false;
+
+        using var connection = DatabaseConnection.GetConnection();
+
+        const string sql = @"
+            SELECT COUNT(1)
+            FROM Bookings
+            WHERE UserId = @UserId
+              AND UPPER(PromotionCode) = UPPER(@Code)
+              AND UPPER(BookingStatus) <> 'CANCELLED';";
+
+        return connection.ExecuteScalar<int>(
+            sql,
+            new
+            {
+                UserId = userId,
+                Code = code.Trim()
+            }) > 0;
     }
 
     public bool Delete(int id)

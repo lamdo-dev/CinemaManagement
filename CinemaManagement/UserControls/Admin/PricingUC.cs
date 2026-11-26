@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -12,20 +11,20 @@ namespace CinemaManagement.UserControls.Admin;
 public partial class PricingUC : UserControl
 {
     // =========================================
-    // 1. DỮ LIỆU GIÁ VÉ
+    // 1. DỮ LIỆU VÀ REPOSITORY
     // =========================================
 
     private readonly PricingService _pricingService = new();
     private readonly List<PricingRule> _rules = new();
 
     private int? _editingId;
+    private bool _isApplyingResponsiveLayout;
 
     // =========================================
-    // 2. KHAI BÁO GIAO DIỆN
+    // 2. CÁC THÀNH PHẦN GIAO DIỆN
     // =========================================
 
     private DataGridView _dgvPricing = null!;
-
     private TextBox _txtSearch = null!;
 
     private ComboBox _cboFilterFormat = null!;
@@ -50,6 +49,25 @@ public partial class PricingUC : UserControl
     private Button _btnDelete = null!;
     private Button _btnCancel = null!;
 
+    private Panel _rootScrollPanel = null!;
+
+    private TableLayoutPanel _mainLayout = null!;
+    private TableLayoutPanel _statisticPanel = null!;
+    private TableLayoutPanel _editorLayout = null!;
+    private TableLayoutPanel _fieldsPanel = null!;
+
+    private Control[] _editorFields = Array.Empty<Control>();
+
+    private FlowLayoutPanel _filterPanel = null!;
+    private FlowLayoutPanel _actionPanel = null!;
+
+    private Panel _cardTotal = null!;
+    private Panel _cardMin = null!;
+    private Panel _cardMax = null!;
+
+    private Label _lblHeaderTitle = null!;
+    private Label _lblHeaderDescription = null!;
+
     private readonly Color _backgroundColor =
         Color.FromArgb(15, 23, 42);
 
@@ -72,11 +90,22 @@ public partial class PricingUC : UserControl
 
         Dock = DockStyle.Fill;
         BackColor = _backgroundColor;
+        AutoScaleMode = AutoScaleMode.Dpi;
 
         BuildInterface();
 
-        LoadPricingData();
+        SizeChanged += PricingUC_SizeChanged;
 
+        HandleCreated += (s, e) =>
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (!IsDisposed)
+                    ApplyResponsiveLayout();
+            }));
+        };
+
+        LoadPricingData();
         UpdatePricePreview();
     }
 
@@ -86,127 +115,134 @@ public partial class PricingUC : UserControl
 
     private void BuildInterface()
     {
-        TableLayoutPanel mainLayout = new TableLayoutPanel
+        _mainLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 6,
             BackColor = _backgroundColor,
-            Padding = new Padding(0)
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
 
-        mainLayout.ColumnStyles.Add(
+        _mainLayout.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 85));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 115));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 65));
 
-        mainLayout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 230));
+        _mainLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 260));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        mainLayout.RowStyles.Add(
+        _mainLayout.RowStyles.Add(
             new RowStyle(SizeType.Absolute, 32));
 
         // =====================================
         // 4.1 HEADER
         // =====================================
 
-        Panel headerPanel = new Panel
+        Panel headerPanel = new()
         {
             Dock = DockStyle.Fill,
-            BackColor = _backgroundColor
+            BackColor = _backgroundColor,
+            Padding = new Padding(12, 5, 8, 5)
         };
 
-        Label lblTitle = new Label
+        _lblHeaderTitle = new Label
         {
             Text = "QUẢN LÝ GIÁ VÉ",
             Font = new Font("Segoe UI", 21, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
-            Location = new Point(5, 10)
+            Location = new Point(5, 8)
         };
 
-        Label lblDescription = new Label
+        _lblHeaderDescription = new Label
         {
             Text = "Thiết lập bảng giá vé theo định dạng, loại ghế và thời gian",
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(148, 163, 184),
             AutoSize = true,
-            Location = new Point(7, 53)
+            Location = new Point(7, 51)
         };
 
-        headerPanel.Controls.Add(lblTitle);
-        headerPanel.Controls.Add(lblDescription);
+        headerPanel.Controls.Add(_lblHeaderTitle);
+        headerPanel.Controls.Add(_lblHeaderDescription);
 
         // =====================================
         // 4.2 THỐNG KÊ
         // =====================================
 
-        TableLayoutPanel statisticPanel = new TableLayoutPanel
+        _statisticPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
             RowCount = 1,
-            BackColor = _backgroundColor
+            BackColor = _backgroundColor,
+            Padding = new Padding(0),
+            Margin = new Padding(0)
         };
 
         for (int i = 0; i < 3; i++)
         {
-            statisticPanel.ColumnStyles.Add(
+            _statisticPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 33.33f));
         }
 
-        statisticPanel.RowStyles.Add(
+        _statisticPanel.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        Panel cardTotal = CreateStatisticCard(
+        _cardTotal = CreateStatisticCard(
             "TỔNG QUY TẮC GIÁ",
             "Các mức giá đang thiết lập",
             Color.FromArgb(37, 99, 235),
             out _lblTotalRules
         );
 
-        Panel cardMin = CreateStatisticCard(
+        _cardMin = CreateStatisticCard(
             "GIÁ THẤP NHẤT",
             "Mức giá vé thấp nhất",
             Color.FromArgb(16, 185, 129),
             out _lblMinPrice
         );
 
-        Panel cardMax = CreateStatisticCard(
+        _cardMax = CreateStatisticCard(
             "GIÁ CAO NHẤT",
             "Mức giá vé cao nhất",
             Color.FromArgb(139, 92, 246),
             out _lblMaxPrice
         );
 
-        cardTotal.Margin = new Padding(0, 5, 10, 5);
-        cardMin.Margin = new Padding(5, 5, 5, 5);
-        cardMax.Margin = new Padding(10, 5, 0, 5);
+        _cardTotal.Margin = new Padding(0, 5, 10, 5);
+        _cardMin.Margin = new Padding(5);
+        _cardMax.Margin = new Padding(10, 5, 0, 5);
 
-        statisticPanel.Controls.Add(cardTotal, 0, 0);
-        statisticPanel.Controls.Add(cardMin, 1, 0);
-        statisticPanel.Controls.Add(cardMax, 2, 0);
+        _statisticPanel.Controls.Add(_cardTotal, 0, 0);
+        _statisticPanel.Controls.Add(_cardMin, 1, 0);
+        _statisticPanel.Controls.Add(_cardMax, 2, 0);
 
         // =====================================
         // 4.3 TÌM KIẾM VÀ LỌC
         // =====================================
 
-        FlowLayoutPanel filterPanel = new FlowLayoutPanel
+        _filterPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = _panelColor,
-            Padding = new Padding(12, 12, 5, 0),
-            WrapContents = false
+            Padding = new Padding(12, 10, 8, 5),
+            WrapContents = true,
+            AutoScroll = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = new Padding(0)
         };
 
         Label lblSearch = CreateLabel("Tìm kiếm:", 8);
@@ -256,79 +292,86 @@ public partial class PricingUC : UserControl
 
         _cboFilterDay.SelectedIndex = 0;
 
-        filterPanel.Controls.Add(lblSearch);
-        filterPanel.Controls.Add(_txtSearch);
-        filterPanel.Controls.Add(lblFormatFilter);
-        filterPanel.Controls.Add(_cboFilterFormat);
-        filterPanel.Controls.Add(lblDayFilter);
-        filterPanel.Controls.Add(_cboFilterDay);
+        _filterPanel.Controls.Add(lblSearch);
+        _filterPanel.Controls.Add(_txtSearch);
+        _filterPanel.Controls.Add(lblFormatFilter);
+        _filterPanel.Controls.Add(_cboFilterFormat);
+        _filterPanel.Controls.Add(lblDayFilter);
+        _filterPanel.Controls.Add(_cboFilterDay);
 
         // =====================================
         // 4.4 FORM THIẾT LẬP GIÁ
         // =====================================
 
-        Panel editorPanel = new Panel
+        Panel editorPanel = new()
         {
             Dock = DockStyle.Fill,
             BackColor = _panelColor,
-            Padding = new Padding(12)
+            Padding = new Padding(12),
+            AutoScroll = true,
+            Margin = new Padding(0)
         };
 
-        TableLayoutPanel editorLayout = new TableLayoutPanel
+        _editorLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            BackColor = _panelColor
+            BackColor = _panelColor,
+            Margin = new Padding(0),
+            Padding = new Padding(0)
         };
 
-        editorLayout.ColumnStyles.Add(
+        _editorLayout.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-        editorLayout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 28));
+        _editorLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 35));
 
-        editorLayout.RowStyles.Add(
+        _editorLayout.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
-        editorLayout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 40));
+        _editorLayout.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 45));
 
-        Label lblEditorTitle = new Label
+        Label lblEditorTitle = new()
         {
             Text = "THIẾT LẬP QUY TẮC GIÁ VÉ",
             Font = new Font("Segoe UI", 11, FontStyle.Bold),
             ForeColor = Color.White,
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
 
         // =====================================
         // CÁC TRƯỜNG NHẬP LIỆU
         // =====================================
 
-        TableLayoutPanel fieldsPanel = new TableLayoutPanel
+        _fieldsPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 2,
             BackColor = _panelColor,
-            Padding = new Padding(2)
+            Padding = new Padding(2),
+            Margin = new Padding(0)
         };
 
         for (int i = 0; i < 4; i++)
         {
-            fieldsPanel.ColumnStyles.Add(
+            _fieldsPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 25));
         }
 
-        fieldsPanel.RowStyles.Add(
-            new RowStyle(SizeType.Percent, 50));
+        for (int i = 0; i < 2; i++)
+        {
+            _fieldsPanel.RowStyles.Add(
+                new RowStyle(SizeType.Percent, 50));
+        }
 
-        fieldsPanel.RowStyles.Add(
-            new RowStyle(SizeType.Percent, 50));
+        // ĐỊNH DẠNG PHIM
 
-        // Định dạng phim
         _cboFormat = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -343,12 +386,13 @@ public partial class PricingUC : UserControl
 
         _cboFormat.SelectedIndex = 0;
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Định dạng phim:", _cboFormat),
             0, 0
         );
 
-        // Loại ghế
+        // LOẠI GHẾ
+
         _cboSeatType = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -364,12 +408,13 @@ public partial class PricingUC : UserControl
 
         _cboSeatType.SelectedIndex = 0;
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Loại ghế:", _cboSeatType),
             1, 0
         );
 
-        // Ngày áp dụng
+        // NGÀY ÁP DỤNG
+
         _cboDayType = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -384,12 +429,13 @@ public partial class PricingUC : UserControl
 
         _cboDayType.SelectedIndex = 0;
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Ngày áp dụng:", _cboDayType),
             2, 0
         );
 
-        // Khung giờ
+        // KHUNG GIỜ
+
         _cboTimeSlot = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -405,12 +451,13 @@ public partial class PricingUC : UserControl
 
         _cboTimeSlot.SelectedIndex = 1;
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Khung giờ:", _cboTimeSlot),
             3, 0
         );
 
-        // Giá cơ bản
+        // GIÁ CƠ BẢN
+
         _numBasePrice = new NumericUpDown
         {
             Minimum = 10000,
@@ -421,43 +468,49 @@ public partial class PricingUC : UserControl
             Font = new Font("Segoe UI", 9)
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Giá cơ bản (VNĐ):", _numBasePrice),
             0, 1
         );
 
-        // Phụ thu
+        // PHỤ THU
+
         _numSurcharge = new NumericUpDown
         {
             Minimum = -100000,
             Maximum = 500000,
             Increment = 5000,
-            ThousandsSeparator = true,
             Value = 0,
+            ThousandsSeparator = true,
             Font = new Font("Segoe UI", 9)
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Phụ thu (VNĐ):", _numSurcharge),
             1, 1
         );
 
-        // Giá cuối cùng
+        // GIÁ CUỐI CÙNG
+
         _lblPricePreview = new Label
         {
-            Text = "75.000 VNĐ",
+            Text = "75.000 đ",
             ForeColor = Color.FromArgb(52, 211, 153),
             Font = new Font("Segoe UI", 13, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.MiddleLeft,
+            Dock = DockStyle.Fill
         };
 
-        fieldsPanel.Controls.Add(
-            CreateEditorField("Giá vé sau điều chỉnh:", _lblPricePreview),
+        _fieldsPanel.Controls.Add(
+            CreateEditorField(
+                "Giá vé sau điều chỉnh:",
+                _lblPricePreview),
             2, 1
         );
 
-        // Cách tính
-        Label lblNote = new Label
+        // CÁCH TÍNH
+
+        Label lblNote = new()
         {
             Text = "Giá cuối = Giá cơ bản + Phụ thu",
             ForeColor = Color.FromArgb(148, 163, 184),
@@ -466,22 +519,28 @@ public partial class PricingUC : UserControl
             Dock = DockStyle.Fill
         };
 
-        fieldsPanel.Controls.Add(
+        _fieldsPanel.Controls.Add(
             CreateEditorField("Cách tính:", lblNote),
             3, 1
         );
+
+        _editorFields = _fieldsPanel.Controls
+            .Cast<Control>()
+            .ToArray();
 
         // =====================================
         // CÁC NÚT CHỨC NĂNG
         // =====================================
 
-        FlowLayoutPanel actionPanel = new FlowLayoutPanel
+        _actionPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
+            WrapContents = true,
+            AutoScroll = true,
             BackColor = _panelColor,
-            Padding = new Padding(0, 3, 0, 0)
+            Padding = new Padding(0, 4, 0, 0),
+            Margin = new Padding(0)
         };
 
         _btnDelete = CreateButton(
@@ -506,16 +565,16 @@ public partial class PricingUC : UserControl
 
         _btnCancel.Visible = false;
 
-        actionPanel.Controls.Add(_btnDelete);
-        actionPanel.Controls.Add(_btnCancel);
-        actionPanel.Controls.Add(_btnEdit);
-        actionPanel.Controls.Add(_btnSave);
+        _actionPanel.Controls.Add(_btnDelete);
+        _actionPanel.Controls.Add(_btnCancel);
+        _actionPanel.Controls.Add(_btnEdit);
+        _actionPanel.Controls.Add(_btnSave);
 
-        editorLayout.Controls.Add(lblEditorTitle, 0, 0);
-        editorLayout.Controls.Add(fieldsPanel, 0, 1);
-        editorLayout.Controls.Add(actionPanel, 0, 2);
+        _editorLayout.Controls.Add(lblEditorTitle, 0, 0);
+        _editorLayout.Controls.Add(_fieldsPanel, 0, 1);
+        _editorLayout.Controls.Add(_actionPanel, 0, 2);
 
-        editorPanel.Controls.Add(editorLayout);
+        editorPanel.Controls.Add(_editorLayout);
 
         // =====================================
         // 4.5 BẢNG GIÁ VÉ
@@ -532,6 +591,7 @@ public partial class PricingUC : UserControl
 
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
 
             ReadOnly = true,
             MultiSelect = false,
@@ -540,7 +600,11 @@ public partial class PricingUC : UserControl
                 DataGridViewSelectionMode.FullRowSelect,
 
             RowHeadersVisible = false,
-            EnableHeadersVisualStyles = false
+            EnableHeadersVisualStyles = false,
+            ScrollBars = ScrollBars.Both,
+
+            ColumnHeadersHeightSizeMode =
+                DataGridViewColumnHeadersHeightSizeMode.DisableResizing
         };
 
         _dgvPricing.ColumnHeadersDefaultCellStyle.BackColor =
@@ -569,7 +633,7 @@ public partial class PricingUC : UserControl
         _dgvPricing.DefaultCellStyle.Font =
             new Font("Segoe UI", 9);
 
-        _dgvPricing.RowTemplate.Height = 38;
+        _dgvPricing.RowTemplate.Height = 40;
 
         _dgvPricing.Columns.Add("Id", "Mã giá");
         _dgvPricing.Columns.Add("Format", "Định dạng");
@@ -579,6 +643,15 @@ public partial class PricingUC : UserControl
         _dgvPricing.Columns.Add("BasePrice", "Giá cơ bản");
         _dgvPricing.Columns.Add("Surcharge", "Phụ thu");
         _dgvPricing.Columns.Add("FinalPrice", "Giá cuối cùng");
+        _dgvPricing.Columns.Insert(0, new DataGridViewTextBoxColumn
+        {
+            Name = "STT",
+            HeaderText = "STT",
+            ReadOnly = true,
+            Width = 55,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
+        _dgvPricing.Columns["Id"]!.Visible = false;
 
         // =====================================
         // 4.6 CHÂN TRANG
@@ -590,24 +663,51 @@ public partial class PricingUC : UserControl
             Dock = DockStyle.Fill,
             ForeColor = _textColor,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(5, 0, 0, 0)
         };
 
         // =====================================
         // 4.7 GHÉP GIAO DIỆN
         // =====================================
 
-        mainLayout.Controls.Add(headerPanel, 0, 0);
-        mainLayout.Controls.Add(statisticPanel, 0, 1);
-        mainLayout.Controls.Add(filterPanel, 0, 2);
-        mainLayout.Controls.Add(editorPanel, 0, 3);
-        mainLayout.Controls.Add(_dgvPricing, 0, 4);
-        mainLayout.Controls.Add(_lblResult, 0, 5);
-
-        Controls.Add(mainLayout);
+        _mainLayout.Controls.Add(headerPanel, 0, 0);
+        _mainLayout.Controls.Add(_statisticPanel, 0, 1);
+        _mainLayout.Controls.Add(_filterPanel, 0, 2);
+        _mainLayout.Controls.Add(editorPanel, 0, 3);
+        _mainLayout.Controls.Add(_dgvPricing, 0, 4);
+        _mainLayout.Controls.Add(_lblResult, 0, 5);
 
         // =====================================
-        // 4.8 SỰ KIỆN
+        // PANEL CUỘN TOÀN BỘ GIAO DIỆN
+        // =====================================
+
+        _rootScrollPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = _backgroundColor,
+            Padding = new Padding(0),
+            Margin = new Padding(0)
+        };
+
+        _mainLayout.Dock = DockStyle.Top;
+        _mainLayout.Anchor =
+            AnchorStyles.Top | AnchorStyles.Left;
+
+        _mainLayout.Width = Math.Max(320, ClientSize.Width);
+        _mainLayout.Height = Math.Max(1200, ClientSize.Height);
+
+        _rootScrollPanel.Controls.Add(_mainLayout);
+        Controls.Add(_rootScrollPanel);
+
+        _rootScrollPanel.SizeChanged += (s, e) =>
+        {
+            UpdateScrollLayout();
+        };
+
+        // =====================================
+        // 4.8 GẮN SỰ KIỆN
         // =====================================
 
         _txtSearch.TextChanged += (s, e) =>
@@ -632,7 +732,377 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 5. TẠO LABEL
+    // 5. CẬP NHẬT KÍCH THƯỚC VÙNG CUỘN
+    // =========================================
+
+    private void UpdateScrollLayout()
+    {
+        if (_rootScrollPanel == null || _mainLayout == null)
+            return;
+
+        int width = _rootScrollPanel.ClientSize.Width;
+        int height = _rootScrollPanel.ClientSize.Height;
+
+        if (width <= 0 || height <= 0)
+            return;
+
+        bool mobile = width < 650;
+        bool tablet = width >= 650 && width < 1050;
+
+        int headerHeight = mobile ? 78 : 85;
+        int statisticHeight = mobile ? 225 : 115;
+        int filterHeight = mobile ? 150 : tablet ? 95 : 65;
+        int editorHeight = mobile ? 650 : tablet ? 410 : 260;
+        int tableMinHeight = 350;
+        int footerHeight = 32;
+
+        int requiredHeight =
+            headerHeight +
+            statisticHeight +
+            filterHeight +
+            editorHeight +
+            tableMinHeight +
+            footerHeight;
+
+        int contentHeight = Math.Max(height, requiredHeight);
+
+        _mainLayout.SuspendLayout();
+
+        try
+        {
+            _mainLayout.Dock = DockStyle.Top;
+            _mainLayout.Width = width;
+            _mainLayout.Height = contentHeight;
+        }
+        finally
+        {
+            _mainLayout.ResumeLayout(true);
+        }
+    }
+
+    // =========================================
+    // 6. RESPONSIVE LAYOUT
+    // =========================================
+
+    private void PricingUC_SizeChanged(object? sender, EventArgs e)
+    {
+        ApplyResponsiveLayout();
+    }
+
+    private void ApplyResponsiveLayout()
+    {
+        if (_mainLayout == null ||
+            _statisticPanel == null ||
+            _editorLayout == null ||
+            _fieldsPanel == null ||
+            _filterPanel == null ||
+            _actionPanel == null ||
+            _dgvPricing == null ||
+            _isApplyingResponsiveLayout ||
+            _editorFields.Length != 8)
+        {
+            return;
+        }
+
+        if (_rootScrollPanel == null ||
+            _rootScrollPanel.ClientSize.Width <= 0)
+        {
+            return;
+        }
+
+        _isApplyingResponsiveLayout = true;
+
+        try
+        {
+            int width = _rootScrollPanel.ClientSize.Width;
+
+            bool mobile = width < 650;
+            bool tablet = width >= 650 && width < 1050;
+
+            _mainLayout.SuspendLayout();
+            _statisticPanel.SuspendLayout();
+            _fieldsPanel.SuspendLayout();
+            _filterPanel.SuspendLayout();
+            _actionPanel.SuspendLayout();
+            _editorLayout.SuspendLayout();
+
+            // =================================
+            // 6.1 CHIỀU CAO CÁC KHU VỰC
+            // =================================
+
+            _mainLayout.RowStyles[0].Height =
+                mobile ? 78 : 85;
+
+            _mainLayout.RowStyles[1].Height =
+                mobile ? 225 : 115;
+
+            _mainLayout.RowStyles[2].Height =
+                mobile ? 150 : (tablet ? 95 : 65);
+
+            _mainLayout.RowStyles[3].Height =
+                mobile ? 650 : (tablet ? 410 : 260);
+
+            _mainLayout.RowStyles[4].SizeType =
+                SizeType.Percent;
+
+            _mainLayout.RowStyles[4].Height = 100;
+            _mainLayout.RowStyles[5].Height = 32;
+
+            _editorLayout.RowStyles[0].Height =
+                mobile ? 38 : 35;
+
+            _editorLayout.RowStyles[2].Height =
+                mobile ? 82 : 45;
+
+            // =================================
+            // 6.2 HEADER VÀ FONT
+            // =================================
+
+            _lblHeaderTitle.Font = new Font(
+                "Segoe UI",
+                mobile ? 16 : tablet ? 18 : 21,
+                FontStyle.Bold);
+
+            _lblHeaderDescription.Font = new Font(
+                "Segoe UI",
+                mobile ? 8 : 9);
+
+            // =================================
+            // 6.3 THẺ THỐNG KÊ
+            // =================================
+
+            _statisticPanel.Controls.Clear();
+            _statisticPanel.ColumnStyles.Clear();
+            _statisticPanel.RowStyles.Clear();
+
+            if (mobile)
+            {
+                _statisticPanel.ColumnCount = 1;
+                _statisticPanel.RowCount = 3;
+
+                _statisticPanel.ColumnStyles.Add(
+                    new ColumnStyle(SizeType.Percent, 100));
+
+                for (int i = 0; i < 3; i++)
+                {
+                    _statisticPanel.RowStyles.Add(
+                        new RowStyle(SizeType.Percent, 33.33f));
+                }
+
+                _cardTotal.Margin = new Padding(3);
+                _cardMin.Margin = new Padding(3);
+                _cardMax.Margin = new Padding(3);
+
+                _statisticPanel.Controls.Add(_cardTotal, 0, 0);
+                _statisticPanel.Controls.Add(_cardMin, 0, 1);
+                _statisticPanel.Controls.Add(_cardMax, 0, 2);
+            }
+            else
+            {
+                _statisticPanel.ColumnCount = 3;
+                _statisticPanel.RowCount = 1;
+
+                for (int i = 0; i < 3; i++)
+                {
+                    _statisticPanel.ColumnStyles.Add(
+                        new ColumnStyle(SizeType.Percent, 33.33f));
+                }
+
+                _statisticPanel.RowStyles.Add(
+                    new RowStyle(SizeType.Percent, 100));
+
+                _cardTotal.Margin = new Padding(0, 5, 10, 5);
+                _cardMin.Margin = new Padding(5);
+                _cardMax.Margin = new Padding(10, 5, 0, 5);
+
+                _statisticPanel.Controls.Add(_cardTotal, 0, 0);
+                _statisticPanel.Controls.Add(_cardMin, 1, 0);
+                _statisticPanel.Controls.Add(_cardMax, 2, 0);
+            }
+
+            // =================================
+            // 6.4 FORM: 4 CỘT / 2 CỘT / 1 CỘT
+            // =================================
+
+            int columns = mobile ? 1 : tablet ? 2 : 4;
+            int rows = 8 / columns;
+
+            _fieldsPanel.Controls.Clear();
+            _fieldsPanel.ColumnStyles.Clear();
+            _fieldsPanel.RowStyles.Clear();
+
+            _fieldsPanel.ColumnCount = columns;
+            _fieldsPanel.RowCount = rows;
+
+            for (int i = 0; i < columns; i++)
+            {
+                _fieldsPanel.ColumnStyles.Add(
+                    new ColumnStyle(SizeType.Percent, 100f / columns));
+            }
+
+            for (int i = 0; i < rows; i++)
+            {
+                _fieldsPanel.RowStyles.Add(
+                    new RowStyle(SizeType.Percent, 100f / rows));
+            }
+
+            for (int i = 0; i < _editorFields.Length; i++)
+            {
+                _fieldsPanel.Controls.Add(
+                    _editorFields[i],
+                    i % columns,
+                    i / columns);
+            }
+
+            Font inputFont = new("Segoe UI", 9);
+
+            Font fieldLabelFont = new(
+                "Segoe UI",
+                mobile ? 8 : 9,
+                FontStyle.Bold);
+
+            _cboFormat.Font = inputFont;
+            _cboSeatType.Font = inputFont;
+            _cboDayType.Font = inputFont;
+            _cboTimeSlot.Font = inputFont;
+
+            _numBasePrice.Font = inputFont;
+            _numSurcharge.Font = inputFont;
+
+            foreach (Control field in _editorFields)
+            {
+                if (field.Controls.Count > 0 &&
+                    field.Controls[0] is TableLayoutPanel fieldLayout &&
+                    fieldLayout.Controls.Count > 0 &&
+                    fieldLayout.Controls[0] is Label fieldLabel)
+                {
+                    fieldLabel.Font = fieldLabelFont;
+                }
+            }
+
+            _lblPricePreview.Font = new Font(
+                "Segoe UI",
+                mobile ? 11 : 13,
+                FontStyle.Bold);
+
+            // =================================
+            // 6.5 TÌM KIẾM VÀ LỌC
+            // =================================
+
+            _filterPanel.WrapContents = true;
+            _filterPanel.AutoScroll = true;
+            _filterPanel.FlowDirection =
+                FlowDirection.LeftToRight;
+
+            _filterPanel.Padding = mobile
+                ? new Padding(8, 8, 8, 8)
+                : new Padding(12, 8, 8, 6);
+
+            _txtSearch.Width = mobile
+                ? Math.Max(180, width - 65)
+                : Math.Max(180, Math.Min(350, width - 220));
+
+            _cboFilterFormat.Width = mobile ? 150 : 120;
+            _cboFilterDay.Width = mobile ? 180 : 155;
+
+            _txtSearch.Font = new Font(
+                "Segoe UI",
+                mobile ? 9 : 10);
+
+            _cboFilterFormat.Font = new Font("Segoe UI", 9);
+            _cboFilterDay.Font = new Font("Segoe UI", 9);
+
+            // =================================
+            // 6.6 CÁC NÚT CHỨC NĂNG
+            // =================================
+
+            _actionPanel.WrapContents = true;
+            _actionPanel.AutoScroll = true;
+            _actionPanel.FlowDirection =
+                FlowDirection.RightToLeft;
+
+            foreach (Control control in _actionPanel.Controls)
+            {
+                control.Margin = new Padding(4, 3, 4, 3);
+                control.Width = mobile ? 115 : 135;
+                control.Height = 36;
+
+                control.Font = new Font(
+                    "Segoe UI",
+                    mobile ? 8 : 9,
+                    FontStyle.Bold);
+            }
+
+            // =================================
+            // 6.7 BẢNG DỮ LIỆU
+            // =================================
+
+            _dgvPricing.ScrollBars = ScrollBars.Both;
+
+            _dgvPricing.AutoSizeColumnsMode =
+                mobile || tablet
+                    ? DataGridViewAutoSizeColumnsMode.None
+                    : DataGridViewAutoSizeColumnsMode.Fill;
+
+            int[] columnWidths =
+            {
+                70, 85, 120, 125, 125, 115, 100, 125
+            };
+
+            for (int i = 0;
+                 i < _dgvPricing.Columns.Count &&
+                 i < columnWidths.Length;
+                 i++)
+            {
+                _dgvPricing.Columns[i].Width = mobile
+                    ? Math.Max(65, columnWidths[i] - 10)
+                    : columnWidths[i];
+            }
+
+            _dgvPricing.DefaultCellStyle.Font = new Font(
+                "Segoe UI",
+                mobile ? 8 : 9);
+
+            _dgvPricing.ColumnHeadersDefaultCellStyle.Font =
+                new Font(
+                    "Segoe UI",
+                    mobile ? 8 : 9,
+                    FontStyle.Bold);
+
+            _dgvPricing.RowTemplate.Height =
+                mobile ? 38 : 40;
+
+            _dgvPricing.ColumnHeadersHeight =
+                mobile ? 40 : 44;
+
+            _lblResult.Font = new Font(
+                "Segoe UI",
+                mobile ? 8 : 9,
+                FontStyle.Bold);
+
+            // =================================
+            // 6.8 HOÀN TẤT
+            // =================================
+
+            _fieldsPanel.ResumeLayout(true);
+            _statisticPanel.ResumeLayout(true);
+            _filterPanel.ResumeLayout(true);
+            _actionPanel.ResumeLayout(true);
+            _editorLayout.ResumeLayout(true);
+            _mainLayout.ResumeLayout(true);
+
+            UpdateScrollLayout();
+
+            PerformLayout();
+        }
+        finally
+        {
+            _isApplyingResponsiveLayout = false;
+        }
+    }
+
+    // =========================================
+    // 7. TẠO LABEL
     // =========================================
 
     private Label CreateLabel(string text, int marginRight)
@@ -648,21 +1118,22 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 6. TẠO Ô NHẬP LIỆU
+    // 8. TẠO Ô NHẬP LIỆU
     // =========================================
 
     private Panel CreateEditorField(
         string title,
         Control input)
     {
-        Panel field = new Panel
+        Panel field = new()
         {
             Dock = DockStyle.Fill,
             BackColor = _panelColor,
-            Margin = new Padding(6, 3, 6, 3)
+            Margin = new Padding(6, 5, 6, 5),
+            Padding = new Padding(2)
         };
 
-        TableLayoutPanel fieldLayout = new TableLayoutPanel
+        TableLayoutPanel fieldLayout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -673,21 +1144,22 @@ public partial class PricingUC : UserControl
         };
 
         fieldLayout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 25));
+            new RowStyle(SizeType.Absolute, 28));
 
         fieldLayout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 32));
+            new RowStyle(SizeType.Percent, 100));
 
         fieldLayout.ColumnStyles.Add(
             new ColumnStyle(SizeType.Percent, 100));
 
-        Label label = new Label
+        Label label = new()
         {
             Text = title,
             ForeColor = _textColor,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
             Margin = new Padding(0)
         };
 
@@ -703,21 +1175,23 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 7. TẠO BUTTON
+    // 9. TẠO BUTTON
     // =========================================
 
     private Button CreateButton(string text, Color color)
     {
-        Button button = new Button
+        Button button = new()
         {
             Text = text,
-            Size = new Size(135, 35),
+            Size = new Size(135, 36),
+            MinimumSize = new Size(100, 34),
             BackColor = color,
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand,
-            Margin = new Padding(5, 0, 0, 0)
+            Margin = new Padding(5, 0, 0, 0),
+            UseVisualStyleBackColor = false
         };
 
         button.FlatAppearance.BorderSize = 0;
@@ -726,7 +1200,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 8. TẠO THẺ THỐNG KÊ
+    // 10. TẠO THẺ THỐNG KÊ
     // =========================================
 
     private Panel CreateStatisticCard(
@@ -735,49 +1209,90 @@ public partial class PricingUC : UserControl
         Color accentColor,
         out Label valueLabel)
     {
-        Panel card = new Panel
+        Panel card = new()
         {
             Dock = DockStyle.Fill,
             BackColor = _panelColor,
             Margin = new Padding(0)
         };
 
-        Panel accent = new Panel
+        Panel accent = new()
         {
             Dock = DockStyle.Left,
             Width = 5,
             BackColor = accentColor
         };
 
-        Label lblTitle = new Label
+        Label lblTitle = new()
         {
             Text = title,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
             ForeColor = Color.FromArgb(148, 163, 184),
             AutoSize = true,
-            Location = new Point(20, 10)
+            Location = new Point(20, 8)
         };
 
-        valueLabel = new Label
+        Label currentValueLabel = new()
         {
             Text = "0",
             Font = new Font("Segoe UI", 21, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
-            Location = new Point(20, 34)
+            Location = new Point(20, 30)
         };
 
-        Label lblDescription = new Label
+        valueLabel = currentValueLabel;
+
+        Label lblDescription = new()
         {
             Text = description,
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = Color.FromArgb(203, 213, 225),
-            AutoSize = true,
-            Location = new Point(22, 76)
+            AutoSize = false,
+            Location = new Point(22, 76),
+            Size = new Size(250, 20),
+            Anchor = AnchorStyles.Top |
+                     AnchorStyles.Left |
+                     AnchorStyles.Right
+        };
+
+        card.Resize += (s, e) =>
+        {
+            lblDescription.Width =
+                Math.Max(80, card.ClientSize.Width - 35);
+
+            bool compactCard = card.ClientSize.Height < 90;
+            bool narrowCard = card.ClientSize.Width < 260;
+
+            lblTitle.Location = compactCard
+                ? new Point(20, 4)
+                : new Point(20, 8);
+
+            currentValueLabel.Location = compactCard
+                ? new Point(20, 23)
+                : new Point(20, 30);
+
+            lblDescription.Location = compactCard
+                ? new Point(22, 49)
+                : new Point(22, 76);
+
+            lblTitle.Font = new Font(
+                "Segoe UI",
+                narrowCard ? 8 : 9,
+                FontStyle.Bold);
+
+            currentValueLabel.Font = new Font(
+                "Segoe UI",
+                narrowCard ? 15 : 21,
+                FontStyle.Bold);
+
+            lblDescription.Font = new Font(
+                "Segoe UI",
+                narrowCard ? 7.5f : 8.5f);
         };
 
         card.Controls.Add(lblTitle);
-        card.Controls.Add(valueLabel);
+        card.Controls.Add(currentValueLabel);
         card.Controls.Add(lblDescription);
         card.Controls.Add(accent);
 
@@ -785,7 +1300,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 9. TẢI DỮ LIỆU TỪ SQLITE
+    // 11. TẢI DỮ LIỆU TỪ SQLITE
     // =========================================
 
     private void LoadPricingData()
@@ -813,7 +1328,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 10. ĐỊNH DẠNG TIỀN
+    // 12. ĐỊNH DẠNG TIỀN
     // =========================================
 
     private string FormatMoney(decimal amount)
@@ -822,7 +1337,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 11. CẬP NHẬT GIÁ DỰ KIẾN
+    // 13. CẬP NHẬT GIÁ DỰ KIẾN
     // =========================================
 
     private void UpdatePricePreview()
@@ -834,13 +1349,13 @@ public partial class PricingUC : UserControl
             FormatMoney(finalPrice);
 
         _lblPricePreview.ForeColor =
-            finalPrice < 0
+            finalPrice <= 0
                 ? Color.FromArgb(248, 113, 113)
                 : Color.FromArgb(52, 211, 153);
     }
 
     // =========================================
-    // 12. HIỂN THỊ BẢNG GIÁ
+    // 14. HIỂN THỊ BẢNG GIÁ
     // =========================================
 
     private void RefreshPricingTable()
@@ -874,16 +1389,18 @@ public partial class PricingUC : UserControl
                 rule.DayType == selectedDay;
 
             return matchSearch && matchFormat && matchDay;
+        })
+        .OrderBy(r => r.Format)
+        .ThenBy(r => r.SeatType)
+        .ThenBy(r => r.DayType)
+        .ThenBy(r => r.TimeSlot)
+        .ToList();
 
-        }).OrderBy(r => r.Format)
-          .ThenBy(r => r.SeatType)
-          .ThenBy(r => r.DayType)
-          .ThenBy(r => r.TimeSlot)
-          .ToList();
-
-        foreach (PricingRule rule in result)
+        for (int index = 0; index < result.Count; index++)
         {
+            PricingRule rule = result[index];
             _dgvPricing.Rows.Add(
+                index + 1,
                 rule.Id,
                 rule.Format,
                 rule.SeatType,
@@ -902,7 +1419,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 13. CẬP NHẬT THỐNG KÊ
+    // 15. CẬP NHẬT THỐNG KÊ
     // =========================================
 
     private void UpdateStatistics()
@@ -926,7 +1443,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 14. THÊM HOẶC CẬP NHẬT QUY TẮC GIÁ
+    // 16. THÊM HOẶC CẬP NHẬT QUY TẮC GIÁ
     // =========================================
 
     private void BtnSave_Click(object? sender, EventArgs e)
@@ -948,11 +1465,12 @@ public partial class PricingUC : UserControl
                 return;
             }
 
-            PricingRule newRule = new PricingRule
+            PricingRule newRule = new()
             {
                 Id = _editingId ?? 0,
 
-                Format = _cboFormat.SelectedItem?.ToString() ?? "2D",
+                Format = _cboFormat.SelectedItem?.ToString()
+                         ?? "2D",
 
                 SeatType = _cboSeatType.SelectedItem?.ToString()
                            ?? "Ghế thường",
@@ -1019,7 +1537,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 15. CHỌN QUY TẮC GIÁ ĐỂ SỬA
+    // 17. CHỌN QUY TẮC GIÁ ĐỂ SỬA
     // =========================================
 
     private void BtnEdit_Click(object? sender, EventArgs e)
@@ -1057,8 +1575,17 @@ public partial class PricingUC : UserControl
             _cboDayType.SelectedItem = rule.DayType;
             _cboTimeSlot.SelectedItem = rule.TimeSlot;
 
-            _numBasePrice.Value = rule.BasePrice;
-            _numSurcharge.Value = rule.Surcharge;
+            _numBasePrice.Value = Math.Clamp(
+                rule.BasePrice,
+                _numBasePrice.Minimum,
+                _numBasePrice.Maximum
+            );
+
+            _numSurcharge.Value = Math.Clamp(
+                rule.Surcharge,
+                _numSurcharge.Minimum,
+                _numSurcharge.Maximum
+            );
 
             _btnSave.Text = "Cập nhật giá";
             _btnCancel.Visible = true;
@@ -1077,7 +1604,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 16. HỦY CHỈNH SỬA
+    // 18. HỦY CHỈNH SỬA
     // =========================================
 
     private void BtnCancel_Click(object? sender, EventArgs e)
@@ -1104,7 +1631,7 @@ public partial class PricingUC : UserControl
     }
 
     // =========================================
-    // 17. XÓA QUY TẮC GIÁ
+    // 19. XÓA QUY TẮC GIÁ
     // =========================================
 
     private void BtnDelete_Click(object? sender, EventArgs e)

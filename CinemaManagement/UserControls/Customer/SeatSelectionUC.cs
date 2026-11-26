@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -7,9 +6,9 @@ using System.Linq;
 using System.Windows.Forms;
 
 using CinemaManagement.Models;
-using CinemaManagement.Repositories;
+using CinemaManagement.Models.Enums;
+using CinemaManagement.Services;
 using CinemaManagement.UserControls.Common;
-using CinemaManagement.Utils;
 
 namespace CinemaManagement.UserControls.Customer
 {
@@ -32,19 +31,23 @@ namespace CinemaManagement.UserControls.Customer
             Color.FromArgb(150, 150, 170);
 
         // ==========================================
-        // 2. REPOSITORY
+        // 2. SERVICES
         // ==========================================
 
-        private readonly RoomRepository _roomRepository = new();
+        private readonly TicketService _ticketService = new();
+        private readonly PricingService _pricingService = new();
 
         // ==========================================
         // 3. CÁC CONTROL GIAO DIỆN
         // ==========================================
 
-        private Panel pnlHeader = null!;
+        private TableLayoutPanel tlpHeader = null!;
         private Button btnBack = null!;
         private Panel pnlLeftLegend = null!;
-        private Panel pnlBottomBar = null!;
+        private Label lblLegendStandardPrice = null!;
+        private Label lblLegendVipPrice = null!;
+        private Label lblLegendCouplePrice = null!;
+        private TableLayoutPanel tlpBottomBar = null!;
         private Label lblContextInfo = null!;
 
         private SeatMatrixUC seatMatrix = null!;
@@ -66,6 +69,9 @@ namespace CinemaManagement.UserControls.Customer
 
         private BookingContext? _bookingContext;
 
+        // Cờ chặn đồng bộ ngược vào BookingContext trong lúc đang dựng sơ đồ ghế
+        private bool _isLoadingSeats;
+
         // ==========================================
         // 5. EVENTS
         // ==========================================
@@ -81,15 +87,8 @@ namespace CinemaManagement.UserControls.Customer
 
         public SeatSelectionUC()
         {
+            AutoScaleMode = AutoScaleMode.Dpi;
             InitializeComponents();
-        }
-
-        // Constructor tương thích code cũ
-        public SeatSelectionUC(
-            Movie? movie,
-            Showtime? showtime) : this()
-        {
-            SetBookingContext(movie, showtime);
         }
 
         // Constructor sử dụng BookingContext
@@ -103,19 +102,6 @@ namespace CinemaManagement.UserControls.Customer
             SetBookingContext(
                 bookingContext.Movie,
                 bookingContext.Showtime);
-        }
-
-        // Constructor đầy đủ
-        public SeatSelectionUC(
-            Movie? movie,
-            Showtime? showtime,
-            BookingContext bookingContext) : this()
-        {
-            _bookingContext = bookingContext
-                ?? throw new ArgumentNullException(
-                    nameof(bookingContext));
-
-            SetBookingContext(movie, showtime);
         }
 
         // ==========================================
@@ -135,14 +121,13 @@ namespace CinemaManagement.UserControls.Customer
                 seatMatrix.GenerateSeatMatrix(10, 14);
 
                 lblContextInfo.Text =
-                    "Vui lòng chọn phim và suất chiếu.";
+                    "🎬 Vui lòng chọn phim và suất chiếu.";
 
                 UpdateSeatInformation();
 
                 return;
             }
 
-            // Kiểm tra người dùng có đổi phim hoặc suất chiếu
             bool isDifferentShowtime;
 
             if (_bookingContext != null)
@@ -162,13 +147,11 @@ namespace CinemaManagement.UserControls.Customer
                     ShowtimeData.Id != showtime.Id;
             }
 
-            // Đồng bộ BookingContext
             if (_bookingContext != null)
             {
                 _bookingContext.SetMovie(movie);
                 _bookingContext.SetShowtime(showtime);
 
-                // Đổi suất chiếu thì xóa ghế và đồ ăn cũ
                 if (isDifferentShowtime)
                 {
                     _bookingContext.ClearAfterShowtimeChange();
@@ -180,7 +163,7 @@ namespace CinemaManagement.UserControls.Customer
 
             lblContextInfo.Text =
                 $"🎬 {MovieData.Title}\n" +
-                $"⏰ Suất: {ShowtimeData.StartTime:HH:mm - dd/MM/yyyy}";
+                $"⏰ Suất: {ShowtimeData.StartTime:HH:mm} - {ShowtimeData.StartTime:dd/MM/yyyy}";
 
             LoadSeatData(isDifferentShowtime);
         }
@@ -196,9 +179,8 @@ namespace CinemaManagement.UserControls.Customer
 
             try
             {
-                // 1. Lấy phòng chiếu theo RoomId
-                Room? room = _roomRepository.GetById(
-                    Convert.ToInt64(ShowtimeData.RoomId));
+                var (room, roomSeats, occupiedSeats, seatPriceMap, pricingRules) =
+                    _ticketService.GetSeatSelectionData(ShowtimeData);
 
                 if (room == null)
                 {
@@ -217,11 +199,6 @@ namespace CinemaManagement.UserControls.Customer
                     return;
                 }
 
-                // 2. Lấy danh sách ghế thực tế trong phòng
-                var roomSeats = _roomRepository
-                    .GetSeatsByRoomId(Convert.ToInt32(room.Id))
-                    .ToList();
-
                 if (roomSeats.Count == 0)
                 {
                     ShowSeatDataError(
@@ -230,35 +207,39 @@ namespace CinemaManagement.UserControls.Customer
                     return;
                 }
 
-                // 3. Lấy danh sách ghế đã đặt
-                HashSet<string> occupiedSeats =
-                    UserSession.GetBookedSeats(
-                        MovieData,
-                        ShowtimeData);
-
-                // 4. Lấy giá cơ bản của suất chiếu
                 decimal ticketBasePrice =
-                    ShowtimeData.BasePrice;
+                    ShowtimeData.BasePrice > 0
+                        ? ShowtimeData.BasePrice
+                        : PricingService.DefaultBasePrice;
 
-                if (ticketBasePrice <= 0)
+                UpdateLegendPrices(ShowtimeData, roomSeats, pricingRules);
+
+                // Lưu lại danh sách ghế đang chọn trước khi GenerateSeatMatrix
+                // phát sự kiện rỗng làm xóa mất dữ liệu trong BookingContext.
+                List<string> seatsToRestore =
+                    _bookingContext != null && !isDifferentShowtime
+                        ? _bookingContext.Seats.ToList()
+                        : new List<string>();
+
+                _isLoadingSeats = true;
+                try
                 {
-                    ticketBasePrice = 90000m;
+                    seatMatrix.GenerateSeatMatrix(
+                        room.TotalRows,
+                        room.TotalColumns,
+                        roomSeats,
+                        occupiedSeats,
+                        ticketBasePrice,
+                        seatPriceMap);
+
+                    if (seatsToRestore.Count > 0)
+                    {
+                        seatMatrix.RestoreSelectedSeats(seatsToRestore);
+                    }
                 }
-
-                // 5. Tạo sơ đồ ghế theo dữ liệu phòng
-                seatMatrix.GenerateSeatMatrix(
-                    room.TotalRows,
-                    room.TotalColumns,
-                    roomSeats,
-                    occupiedSeats,
-                    ticketBasePrice);
-
-                // 6. Khôi phục ghế đã chọn nếu vẫn cùng suất chiếu
-                if (_bookingContext != null &&
-                    !isDifferentShowtime)
+                finally
                 {
-                    seatMatrix.RestoreSelectedSeats(
-                        _bookingContext.Seats);
+                    _isLoadingSeats = false;
                 }
 
                 UpdateSeatInformation();
@@ -296,7 +277,7 @@ namespace CinemaManagement.UserControls.Customer
         }
 
         // ==========================================
-        // 10. KHỞI TẠO GIAO DIỆN
+        // 10. KHỞI TẠO GIAO DIỆN RESPONSIVE
         // ==========================================
 
         private void InitializeComponents()
@@ -304,272 +285,220 @@ namespace CinemaManagement.UserControls.Customer
             Dock = DockStyle.Fill;
             BackColor = ColorBg;
 
-            // ==========================================
-            // HEADER
-            // ==========================================
-
-            pnlHeader = new Panel
+            // HEADER RESPONSIVE
+            tlpHeader = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 65,
-                BackColor = Color.FromArgb(18, 19, 28)
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.FromArgb(18, 19, 28),
+                Padding = new Padding(20, 12, 20, 12),
+                Margin = new Padding(0)
             };
+            tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            tlpHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tlpHeader.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             btnBack = new Button
             {
                 Text = "← Quay lại",
-                Font = new Font(
-                    "Segoe UI",
-                    9.5f,
-                    FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(35, 36, 50),
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(100, 32),
-                Location = new Point(20, 15),
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(12, 6, 12, 6),
+                Margin = new Padding(0, 0, 16, 0),
                 Cursor = Cursors.Hand
             };
-
             btnBack.FlatAppearance.BorderSize = 0;
-
+            btnBack.MouseEnter += (s, e) =>
+                btnBack.BackColor = Color.FromArgb(52, 54, 74);
+            btnBack.MouseLeave += (s, e) =>
+                btnBack.BackColor = Color.FromArgb(35, 36, 50);
             btnBack.Click += (s, e) =>
-                OnBackClicked?.Invoke(
-                    this,
-                    EventArgs.Empty);
+                OnBackClicked?.Invoke(this, EventArgs.Empty);
 
-            // ==========================================
-            // STEPPER
-            // ==========================================
-
-            Panel pnlStepper = new Panel
+            var flpStepper = new FlowLayoutPanel
             {
-                Size = new Size(500, 40),
-                Location = new Point(320, 12)
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Anchor = AnchorStyles.None,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
             };
 
-            Label lblStep1 = new Label
+            flpStepper.Controls.AddRange(new Control[]
             {
-                Text = "① CHỌN SUẤT CHIẾU",
-                Font = new Font("Segoe UI", 9),
-                ForeColor = ColorTextMuted,
-                Location = new Point(0, 10),
-                AutoSize = true
-            };
-
-            Label lblDiv1 = new Label
-            {
-                Text = "───────",
-                ForeColor = ColorTextMuted,
-                Location = new Point(155, 10),
-                AutoSize = true
-            };
-
-            Label lblStep2 = new Label
-            {
-                Text = "② CHỌN GHẾ",
-                Font = new Font(
-                    "Segoe UI",
-                    9,
-                    FontStyle.Bold),
-                ForeColor = ColorGold,
-                Location = new Point(230, 10),
-                AutoSize = true
-            };
-
-            Label lblDiv2 = new Label
-            {
-                Text = "───────",
-                ForeColor = ColorTextMuted,
-                Location = new Point(335, 10),
-                AutoSize = true
-            };
-
-            Label lblStep3 = new Label
-            {
-                Text = "③ THANH TOÁN",
-                Font = new Font("Segoe UI", 9),
-                ForeColor = ColorTextMuted,
-                Location = new Point(410, 10),
-                AutoSize = true
-            };
-
-            pnlStepper.Controls.AddRange(new Control[]
-            {
-                lblStep1,
-                lblDiv1,
-                lblStep2,
-                lblDiv2,
-                lblStep3
+                CreateStepLabel("①  CHỌN SUẤT CHIẾU", false),
+                CreateDividerLabel("────"),
+                CreateStepLabel("②  CHỌN GHẾ", true),
+                CreateDividerLabel("────"),
+                CreateStepLabel("③  BẮP NƯỚC", false),
+                CreateDividerLabel("────"),
+                CreateStepLabel("④  THANH TOÁN", false)
             });
 
-            pnlHeader.Controls.Add(btnBack);
-            pnlHeader.Controls.Add(pnlStepper);
+            tlpHeader.Controls.Add(btnBack, 0, 0);
+            tlpHeader.Controls.Add(flpStepper, 1, 0);
 
-            // ==========================================
-            // BẢNG CHÚ THÍCH GHẾ
-            // ==========================================
-
+            // BẢNG CHÚ THÍCH GHẾ BÊN TRÁI
             pnlLeftLegend = new Panel
             {
                 Dock = DockStyle.Left,
-                Width = 260,
+                Width = 285,
                 BackColor = ColorCard,
-                Padding = new Padding(15)
+                Padding = new Padding(16, 16, 16, 16),
+                AutoScroll = true
             };
+
+            var tlpLegend = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 7,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+            tlpLegend.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
+            for (int i = 0; i < 7; i++)
+            {
+                tlpLegend.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            }
 
             Label lblLegendTitle = new Label
             {
                 Text = "BẢNG GIÁ VÉ",
-                Font = new Font(
-                    "Segoe UI",
-                    12,
-                    FontStyle.Bold),
+                Font = new Font("Segoe UI", 12F, FontStyle.Bold),
                 ForeColor = Color.White,
-                Dock = DockStyle.Top,
-                Height = 35
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 14)
             };
 
-            pnlLeftLegend.Controls.Add(lblLegendTitle);
-
-            AddLegendItem(
-                pnlLeftLegend,
-                "Ghế Thường (Standard)",
-                "Hệ số giá: x1.0",
-                SeatMatrixUC.ColorStandard,
-                50);
-
-            AddLegendItem(
-                pnlLeftLegend,
-                "Ghế VIP",
-                "Hệ số giá: x1.2",
-                SeatMatrixUC.ColorVIP,
-                120);
-
-            AddLegendItem(
-                pnlLeftLegend,
-                "Ghế Đôi (Couple)",
-                "Hệ số giá: x2.0",
-                SeatMatrixUC.ColorPlus,
-                190);
-
-            AddLegendItem(
-                pnlLeftLegend,
-                "Ghế Đang chọn",
-                "Đã chọn",
-                SeatMatrixUC.ColorSelected,
-                260);
-
-            AddLegendItem(
-                pnlLeftLegend,
-                "Ghế Đã bán",
-                "Không trống",
-                SeatMatrixUC.ColorOccupied,
-                330);
+            tlpLegend.Controls.Add(lblLegendTitle, 0, 0);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Thường (Standard)", "Theo suất chiếu",
+                    SeatMatrixUC.ColorStandard, out lblLegendStandardPrice), 0, 1);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế VIP", "Theo suất chiếu",
+                    SeatMatrixUC.ColorVIP, out lblLegendVipPrice), 0, 2);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Đôi (Couple)", "Theo suất chiếu",
+                    SeatMatrixUC.ColorPlus, out lblLegendCouplePrice), 0, 3);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Đang chọn", "Đã chọn",
+                    SeatMatrixUC.ColorSelected, out _), 0, 4);
+            tlpLegend.Controls.Add(
+                CreateLegendItem("Ghế Đã bán", "Không trống",
+                    SeatMatrixUC.ColorOccupied, out _), 0, 5);
 
             lblContextInfo = new Label
             {
                 Text = "🎬 Vui lòng chọn suất chiếu",
-                Font = new Font(
-                    "Segoe UI",
-                    9.5f,
-                    FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 ForeColor = ColorGold,
-                Location = new Point(15, 405),
-                Size = new Size(230, 65)
+                AutoSize = true,
+                MaximumSize = new Size(245, 0),
+                Margin = new Padding(0, 14, 0, 0)
             };
 
-            pnlLeftLegend.Controls.Add(lblContextInfo);
+            tlpLegend.Controls.Add(lblContextInfo, 0, 6);
+            pnlLeftLegend.Controls.Add(tlpLegend);
 
-            // ==========================================
-            // THANH TỔNG TIỀN
-            // ==========================================
-
-            pnlBottomBar = new Panel
+            // THANH TỔNG TIỀN VÀ NÚT TIẾP TỤC
+            tlpBottomBar = new TableLayoutPanel
             {
                 Dock = DockStyle.Bottom,
-                Height = 75,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = 1,
                 BackColor = Color.FromArgb(20, 21, 32),
-                Padding = new Padding(20, 10, 20, 10)
+                Padding = new Padding(20, 12, 20, 14),
+                Margin = new Padding(0)
             };
+            tlpBottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tlpBottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            tlpBottomBar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var tlpSummaryLeft = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 16, 0)
+            };
+            tlpSummaryLeft.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tlpSummaryLeft.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpSummaryLeft.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             lblSelectedSeats = new Label
             {
                 Text = "Ghế đã chọn: Chưa chọn",
-                Font = new Font(
-                    "Segoe UI",
-                    11,
-                    FontStyle.Bold),
+                Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
                 ForeColor = Color.White,
-                Location = new Point(20, 15),
-                AutoSize = true
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 4)
             };
 
             lblTotalPrice = new Label
             {
                 Text = "Tổng tiền: 0 đ",
-                Font = new Font(
-                    "Segoe UI",
-                    14,
-                    FontStyle.Bold),
+                Font = new Font("Segoe UI", 13.5F, FontStyle.Bold),
                 ForeColor = ColorGold,
-                Location = new Point(20, 40),
-                AutoSize = true
+                AutoSize = true,
+                Margin = new Padding(0)
             };
 
-            // ==========================================
-            // NÚT TIẾP TỤC
-            // ==========================================
+            tlpSummaryLeft.Controls.Add(lblSelectedSeats, 0, 0);
+            tlpSummaryLeft.Controls.Add(lblTotalPrice, 0, 1);
 
             btnContinue = new Button
             {
                 Text = "TIẾP TỤC - CHỌN BẮP NƯỚC →",
-                Font = new Font(
-                    "Segoe UI",
-                    10,
-                    FontStyle.Bold),
+                Font = new Font("Segoe UI", 10F, FontStyle.Bold),
                 ForeColor = Color.Black,
                 BackColor = ColorGold,
                 FlatStyle = FlatStyle.Flat,
-                Size = new Size(270, 45),
-                Anchor =
-                    AnchorStyles.Top |
-                    AnchorStyles.Right,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(18, 10, 18, 10),
+                Margin = new Padding(0),
+                Anchor = AnchorStyles.Right,
                 Cursor = Cursors.Hand
             };
-
             btnContinue.FlatAppearance.BorderSize = 0;
-
             btnContinue.FlatAppearance.MouseOverBackColor =
                 Color.FromArgb(220, 180, 105);
-
             btnContinue.Click += BtnContinue_Click;
 
-            // Căn nút bên phải
-            Action positionContinueButton = () =>
+            tlpBottomBar.Controls.Add(tlpSummaryLeft, 0, 0);
+            tlpBottomBar.Controls.Add(btnContinue, 1, 0);
+
+            tlpBottomBar.SizeChanged += (s, e) =>
             {
-                btnContinue.Location = new Point(
-                    Math.Max(
-                        20,
-                        pnlBottomBar.ClientSize.Width -
-                        btnContinue.Width - 20),
-                    15);
+                int availableWidth =
+                    tlpBottomBar.ClientSize.Width - btnContinue.Width - 60;
+
+                if (availableWidth > 180)
+                {
+                    lblSelectedSeats.MaximumSize =
+                        new Size(availableWidth, 0);
+                }
             };
 
-            positionContinueButton();
-
-            pnlBottomBar.Resize += (s, e) =>
-            {
-                positionContinueButton();
-            };
-
-            pnlBottomBar.Controls.Add(lblSelectedSeats);
-            pnlBottomBar.Controls.Add(lblTotalPrice);
-            pnlBottomBar.Controls.Add(btnContinue);
-
-            // ==========================================
             // SƠ ĐỒ GHẾ
-            // ==========================================
-
             seatMatrix = new SeatMatrixUC
             {
                 Dock = DockStyle.Fill
@@ -581,54 +510,125 @@ namespace CinemaManagement.UserControls.Customer
             // Thứ tự thêm control quan trọng đối với Dock
             Controls.Add(seatMatrix);
             Controls.Add(pnlLeftLegend);
-            Controls.Add(pnlHeader);
-            Controls.Add(pnlBottomBar);
+            Controls.Add(tlpHeader);
+            Controls.Add(tlpBottomBar);
 
             UpdateSeatInformation();
         }
 
         // ==========================================
-        // 11. TẠO CHÚ THÍCH BẢNG GIÁ
+        // 11. TẠO LABEL STEPPER VÀ CHÚ THÍCH
         // ==========================================
 
-        private void AddLegendItem(
-            Panel container,
+        private Label CreateStepLabel(string text, bool isActive)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                ForeColor = isActive ? ColorGold : ColorTextMuted,
+                AutoSize = true,
+                Margin = new Padding(4, 6, 4, 6)
+            };
+        }
+
+        private Label CreateDividerLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = Color.FromArgb(70, 72, 95),
+                AutoSize = true,
+                Margin = new Padding(4, 6, 4, 6)
+            };
+        }
+
+        private Control CreateLegendItem(
             string title,
             string price,
             Color color,
-            int yPos)
+            out Label priceLabel)
         {
+            var tlpItem = new TableLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, 12)
+            };
+            tlpItem.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            tlpItem.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            tlpItem.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpItem.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
             Panel box = new Panel
             {
                 Size = new Size(20, 20),
-                Location = new Point(15, yPos),
-                BackColor = color
+                BackColor = color,
+                Margin = new Padding(0, 2, 10, 0)
             };
 
             Label lblT = new Label
             {
                 Text = title,
-                Font = new Font(
-                    "Segoe UI",
-                    9.5f,
-                    FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 ForeColor = Color.White,
-                Location = new Point(45, yPos),
-                AutoSize = true
+                AutoSize = true,
+                MaximumSize = new Size(210, 0),
+                Margin = new Padding(0, 0, 0, 2)
             };
 
             Label lblP = new Label
             {
                 Text = price,
-                Font = new Font("Segoe UI", 8.5f),
+                Font = new Font("Segoe UI", 8.5F),
                 ForeColor = ColorTextMuted,
-                Location = new Point(45, yPos + 20),
-                AutoSize = true
+                AutoSize = true,
+                Margin = new Padding(0)
             };
 
-            container.Controls.Add(box);
-            container.Controls.Add(lblT);
-            container.Controls.Add(lblP);
+            priceLabel = lblP;
+
+            tlpItem.Controls.Add(box, 0, 0);
+            tlpItem.SetRowSpan(box, 2);
+            tlpItem.Controls.Add(lblT, 1, 0);
+            tlpItem.Controls.Add(lblP, 1, 1);
+
+            return tlpItem;
+        }
+
+        private void UpdateLegendPrices(
+            Showtime showtime,
+            List<Seat> roomSeats,
+            IReadOnlyCollection<PricingRule> pricingRules)
+        {
+            var vi = new CultureInfo("vi-VN");
+
+            Seat? sampleStandard = roomSeats.FirstOrDefault(
+                s => PricingService.GetSeatTypeName(s.Type, s.PriceMultiplier) == "Ghế thường");
+            Seat? sampleVip = roomSeats.FirstOrDefault(
+                s => PricingService.GetSeatTypeName(s.Type, s.PriceMultiplier) == "Ghế VIP");
+            Seat? sampleCouple = roomSeats.FirstOrDefault(
+                s => PricingService.GetSeatTypeName(s.Type, s.PriceMultiplier) == "Ghế đôi");
+
+            decimal stdPrice = sampleStandard != null
+                ? _pricingService.CalculateSeatPrice(showtime, sampleStandard, pricingRules)
+                : _pricingService.CalculatePriceBySeatType(showtime, SeatType.Standard, 1.0, pricingRules);
+
+            decimal vipPrice = sampleVip != null
+                ? _pricingService.CalculateSeatPrice(showtime, sampleVip, pricingRules)
+                : _pricingService.CalculatePriceBySeatType(showtime, SeatType.VIP, 1.2, pricingRules);
+
+            decimal couplePrice = sampleCouple != null
+                ? _pricingService.CalculateSeatPrice(showtime, sampleCouple, pricingRules)
+                : _pricingService.CalculatePriceBySeatType(showtime, SeatType.Couple, 2.0, pricingRules);
+
+            lblLegendStandardPrice.Text = $"{stdPrice.ToString("N0", vi)} đ";
+            lblLegendVipPrice.Text = $"{vipPrice.ToString("N0", vi)} đ";
+            lblLegendCouplePrice.Text = $"{couplePrice.ToString("N0", vi)} đ";
         }
 
         // ==========================================
@@ -639,10 +639,8 @@ namespace CinemaManagement.UserControls.Customer
             object? sender,
             List<string> selectedSeats)
         {
-            currentTotal = selectedSeats.Sum(
-                seat => seatMatrix.GetSeatPrice(seat));
-
-            SyncBookingContext(selectedSeats);
+            if (_isLoadingSeats)
+                return;
 
             UpdateSeatInformation();
         }
@@ -658,7 +656,6 @@ namespace CinemaManagement.UserControls.Customer
                 return;
 
             _bookingContext.SetSeats(seats);
-
             _bookingContext.SetTicketAmount(currentTotal);
         }
 
@@ -685,7 +682,7 @@ namespace CinemaManagement.UserControls.Customer
                     $"Ghế đã chọn: {string.Join(", ", seats)}";
 
                 currentTotal = seats.Sum(
-                    seat => seatMatrix.GetSeatPrice(seat));
+                    seat => seatMatrix!.GetSeatPrice(seat));
             }
 
             lblTotalPrice.Text =
@@ -693,8 +690,6 @@ namespace CinemaManagement.UserControls.Customer
                     "N0",
                     new CultureInfo("vi-VN"))} đ";
 
-            // Chỉ cho tiếp tục khi đã chọn phim,
-            // suất chiếu và ít nhất một ghế.
             btnContinue.Enabled =
                 MovieData != null &&
                 ShowtimeData != null &&
@@ -722,6 +717,18 @@ namespace CinemaManagement.UserControls.Customer
                 return;
             }
 
+            if (ShowtimeData.StartTime <= DateTime.Now)
+            {
+                MessageBox.Show(
+                    "Suất chiếu đã bắt đầu hoặc đã qua giờ chiếu. Vui lòng chọn suất chiếu khác!",
+                    "Thông báo",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                OnBackClicked?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
             List<string> selectedSeats =
                 seatMatrix.GetSelectedSeats();
 
@@ -736,14 +743,11 @@ namespace CinemaManagement.UserControls.Customer
                 return;
             }
 
-            // Tính tiền theo cấu hình ghế
             currentTotal = selectedSeats.Sum(
                 seat => seatMatrix.GetSeatPrice(seat));
 
-            // Đồng bộ BookingContext
             SyncBookingContext(selectedSeats);
 
-            // Chuyển dữ liệu sang MainForm
             OnContinueToFood?.Invoke(
                 this,
                 (
