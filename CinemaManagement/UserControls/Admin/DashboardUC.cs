@@ -464,7 +464,7 @@ public partial class DashboardUC : UserControl
 
         var lblSub = new Label
         {
-            Text = "Tổng quan hiệu suất kinh doanh, doanh thu & tỷ lệ lấp đầy rạp chiếu phim",
+            Text = "Ngày: đơn theo ngày đặt, suất theo giờ chiếu, khách mới theo ngày tạo; tổng khách đến cuối kỳ. Phòng lọc theo suất.",
             Font = new Font("Segoe UI", 9F),
             ForeColor = ColTextMuted,
             Location = new Point(30, 46),
@@ -476,8 +476,9 @@ public partial class DashboardUC : UserControl
         {
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoSize = true,
+            WrapContents = true,
+            AutoSize = false,
+            Size = new Size(650, 56),
             BackColor = Color.Transparent,
             Location = new Point(pnlHeader.Width - 650, 16)
         };
@@ -490,6 +491,8 @@ public partial class DashboardUC : UserControl
             ForeColor = ColTextPrimary,
             FlatStyle = FlatStyle.Flat,
             Width = 135,
+            AccessibleName = "Khoảng thời gian thống kê",
+            AccessibleDescription = "Lọc đơn theo ngày đặt, suất chiếu theo giờ chiếu và khách mới theo ngày tạo; tổng khách được tính đến ngày kết thúc kỳ.",
             Margin = new Padding(0, 2, 8, 0)
         };
         cboTimeRange.Items.AddRange(new object[]
@@ -501,7 +504,7 @@ public partial class DashboardUC : UserControl
             "Năm nay",
             "Tùy chỉnh ngày"
         });
-        cboTimeRange.SelectedIndex = 2;
+        cboTimeRange.SelectedIndex = 0;
         cboTimeRange.SelectedIndexChanged += (s, e) =>
         {
             pnlCustomDates.Visible = cboTimeRange.SelectedItem?.ToString() == "Tùy chỉnh ngày";
@@ -521,14 +524,16 @@ public partial class DashboardUC : UserControl
             Format = DateTimePickerFormat.Short,
             Width = 102,
             Location = new Point(0, 1),
-            Value = DateTime.Today.AddDays(-14)
+            Value = DateTime.Today.AddDays(-14),
+            AccessibleName = "Ngày bắt đầu thống kê"
         };
         dtpTo = new DateTimePicker
         {
             Format = DateTimePickerFormat.Short,
             Width = 102,
             Location = new Point(110, 1),
-            Value = DateTime.Today
+            Value = DateTime.Today,
+            AccessibleName = "Ngày kết thúc thống kê"
         };
         dtpFrom.ValueChanged += (s, e) => LoadAndAnimateData();
         dtpTo.ValueChanged += (s, e) => LoadAndAnimateData();
@@ -543,6 +548,8 @@ public partial class DashboardUC : UserControl
             ForeColor = ColTextPrimary,
             FlatStyle = FlatStyle.Flat,
             Width = 165,
+            AccessibleName = "Lọc theo phòng chiếu",
+            AccessibleDescription = "Lọc doanh thu, vé và hoạt động theo phòng; không lọc tổng số tài khoản khách hàng.",
             Margin = new Padding(0, 2, 8, 0)
         };
         cboCinemaFilter.Items.Add(new RoomFilterItem { Name = "Tất cả phòng" });
@@ -606,8 +613,20 @@ public partial class DashboardUC : UserControl
 
     private void RepositionFilters(Panel header, FlowLayoutPanel flp)
     {
-        flp.Location = new Point(Math.Max(380, header.ClientSize.Width - flp.Width - 18), 16);
-        lblLastUpdated.Location = new Point(Math.Max(380, header.ClientSize.Width - lblLastUpdated.Width - 20), 52);
+        if (header.ClientSize.Width >= 1040)
+        {
+            header.Height = 84;
+            flp.SetBounds(header.ClientSize.Width - 668, 14, 650, 56);
+            lblLastUpdated.Location = new Point(
+                Math.Max(380, header.ClientSize.Width - lblLastUpdated.Width - 20),
+                52);
+            return;
+        }
+
+        int filterWidth = Math.Max(240, header.ClientSize.Width - 28);
+        flp.SetBounds(14, 64, filterWidth, 56);
+        lblLastUpdated.Location = new Point(14, 122);
+        header.Height = 144;
     }
 
     private void ApplyTheme(bool isDark)
@@ -1865,7 +1884,10 @@ public partial class DashboardUC : UserControl
               AND datetime(s.StartTime) <= datetime(@ToDate)
               AND (@RoomId IS NULL OR s.RoomId = @RoomId);", currentParameters);
         snapshot.TotalCustomers = connection.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM Users WHERE Role = 2;");
+            @"SELECT COUNT(*) FROM Users
+              WHERE Role = 2
+                AND datetime(CreatedAt) <= datetime(@ToDate);",
+            currentParameters);
         snapshot.NewCustomers = connection.ExecuteScalar<int>(@"
             SELECT COUNT(*) FROM Users
             WHERE Role = 2
