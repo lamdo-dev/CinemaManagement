@@ -34,6 +34,9 @@ public static class DatabaseInitializer
 
         // Tạo chỉ mục
         CreateIndexes(connection);
+
+        // Tự động nạp dữ liệu mẫu nếu database mới tạo chưa có dữ liệu nghiệp vụ
+        DatabaseSeeder.SeedIfEmpty(connection);
     }
 
     // =========================================
