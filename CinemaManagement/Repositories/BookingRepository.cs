@@ -734,7 +734,10 @@ namespace CinemaManagement.Repositories
             ", new { Limit = Math.Clamp(limit, 1, 1000) }).ToList();
         }
 
-        public int GetRejectedTicketScanCount(int? showtimeId = null)
+        public int GetRejectedTicketScanCount(
+            int? showtimeId = null,
+            int? movieId = null,
+            DateTime? showDate = null)
         {
             using var connection = DatabaseConnection.GetConnection();
             connection.Open();
@@ -743,19 +746,33 @@ namespace CinemaManagement.Repositories
                 SELECT COUNT(1)
                 FROM StaffTicketScanLogs l
                 WHERE UPPER(l.ScanStatus) <> 'VALID'
-                  AND (@ShowtimeId IS NULL OR EXISTS (
+                  AND (
+                      (@ShowtimeId IS NULL AND @MovieId IS NULL AND @ShowDate IS NULL)
+                      OR EXISTS (
                       SELECT 1
                       FROM Tickets t
+                      INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
                       WHERE t.BookingId = l.BookingId
-                        AND t.ShowtimeId = @ShowtimeId
-                  ));
-            ", new { ShowtimeId = showtimeId });
+                        AND (@ShowtimeId IS NULL OR t.ShowtimeId = @ShowtimeId)
+                        AND (@MovieId IS NULL OR s.MovieId = @MovieId)
+                        AND (@ShowDate IS NULL OR date(s.StartTime) = date(@ShowDate))
+                      )
+                  );
+            ", new
+            {
+                ShowtimeId = showtimeId,
+                MovieId = movieId,
+                ShowDate = showDate?.ToString("yyyy-MM-dd")
+            });
         }
 
         /// <summary>
         /// Lấy tổng số vé hợp lệ và số vé đã check-in trực tiếp từ SQLite.
         /// </summary>
-        public (int Total, int CheckedIn) GetTicketCheckInCounts(int? showtimeId = null)
+        public (int Total, int CheckedIn) GetTicketCheckInCounts(
+            int? showtimeId = null,
+            int? movieId = null,
+            DateTime? showDate = null)
         {
             using var connection = DatabaseConnection.GetConnection();
             connection.Open();
@@ -766,10 +783,18 @@ namespace CinemaManagement.Repositories
                     COUNT(CASE WHEN UPPER(Status) = 'USED' THEN 1 END) AS CheckedIn
                 FROM Tickets t
                 INNER JOIN Bookings b ON b.Id = t.BookingId
+                INNER JOIN Showtimes s ON s.Id = t.ShowtimeId
                 WHERE UPPER(COALESCE(b.PaymentStatus, '')) = 'PAID'
                   AND UPPER(COALESCE(b.BookingStatus, '')) <> 'CANCELLED'
-                  AND (@ShowtimeId IS NULL OR t.ShowtimeId = @ShowtimeId);
-            ", new { ShowtimeId = showtimeId });
+                  AND (@ShowtimeId IS NULL OR t.ShowtimeId = @ShowtimeId)
+                  AND (@MovieId IS NULL OR s.MovieId = @MovieId)
+                  AND (@ShowDate IS NULL OR date(s.StartTime) = date(@ShowDate));
+            ", new
+            {
+                ShowtimeId = showtimeId,
+                MovieId = movieId,
+                ShowDate = showDate?.ToString("yyyy-MM-dd")
+            });
             return (row.Total, row.CheckedIn);
         }
 

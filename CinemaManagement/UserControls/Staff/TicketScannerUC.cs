@@ -46,9 +46,15 @@ namespace CinemaManagement.UserControls.Staff
         private readonly System.Windows.Forms.Timer _refreshTimer = new();
         private TextBox txtSearch = null!;
         private ComboBox cboFilter = null!;
-        private ComboBox cboShowtimeFilter = null!;
-        private readonly List<int?> _showtimeFilterIds = new();
-        private bool _updatingShowtimeFilters;
+        private ComboBox cboMovieFilter = null!;
+        private readonly List<int?> _movieFilterIds = new();
+        private FlowLayoutPanel flpDateFilters = null!;
+        private Label lblDateFilter = null!;
+        private DateTimePicker dtpDateFilter = null!;
+        private Button btnAllDates = null!;
+        private DateTime? _selectedDate;
+        private bool _updatingMovieFilters;
+        private bool _isDarkTheme;
         private Label[] _kpiValues = Array.Empty<Label>();
         private Label lblDatabaseStatus = null!;
         private Label lblCheckInRate = null!;
@@ -177,6 +183,7 @@ namespace CinemaManagement.UserControls.Staff
             if (pnlDashboardHeader == null || pnlDashboardHeader.IsDisposed)
                 return;
 
+            _isDarkTheme = isDark;
             pnlDashboardHeader.BackColor = isDark
                 ? Color.FromArgb(11, 16, 32)
                 : Color.FromArgb(245, 247, 251);
@@ -186,6 +193,37 @@ namespace CinemaManagement.UserControls.Staff
             lblDashboardSubtitle.ForeColor = isDark
                 ? Color.FromArgb(203, 213, 225)
                 : Color.FromArgb(71, 85, 105);
+            if (flpDateFilters != null && !flpDateFilters.IsDisposed)
+            {
+                flpDateFilters.BackColor = isDark
+                    ? Color.FromArgb(15, 23, 42)
+                    : Color.White;
+            }
+            if (dtpDateFilter != null && !dtpDateFilter.IsDisposed)
+            {
+                dtpDateFilter.BackColor = isDark
+                    ? Color.FromArgb(30, 41, 59)
+                    : Color.White;
+                dtpDateFilter.ForeColor = isDark
+                    ? Color.FromArgb(226, 232, 240)
+                    : Color.FromArgb(71, 85, 105);
+            }
+            if (lblDateFilter != null && !lblDateFilter.IsDisposed)
+            {
+                lblDateFilter.ForeColor = isDark
+                    ? Color.FromArgb(203, 213, 225)
+                    : Color.FromArgb(71, 85, 105);
+            }
+            if (lblCheckInRate != null && !lblCheckInRate.IsDisposed)
+            {
+                lblCheckInRate.BackColor = isDark
+                    ? Color.FromArgb(20, 83, 45)
+                    : Color.FromArgb(220, 252, 231);
+                lblCheckInRate.ForeColor = isDark
+                    ? Color.FromArgb(220, 252, 231)
+                    : Color.FromArgb(22, 101, 52);
+            }
+            UpdateDateFilterButtonStyles();
         }
 
         private Panel CreateScannerPanel()
@@ -293,14 +331,15 @@ namespace CinemaManagement.UserControls.Staff
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 5,
+                RowCount = 6,
                 BackColor = Color.White,
                 Padding = new Padding(15, 14, 15, 12)
             };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             lblHeader = CreateSectionTitle("CHECK-IN LIVE");
@@ -348,11 +387,13 @@ namespace CinemaManagement.UserControls.Staff
             lblCheckInRate = new Label
             {
                 Dock = DockStyle.Right,
-                Width = 58,
+                Width = 72,
                 Text = "0%",
-                ForeColor = Color.FromArgb(71, 85, 105),
-                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight
+                BackColor = Color.FromArgb(220, 252, 231),
+                ForeColor = Color.FromArgb(22, 101, 52),
+                Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = new Padding(6, 0, 0, 0)
             };
             progressPanel.Controls.Add(pnlProgressTrack);
             progressPanel.Controls.Add(lblCheckInRate);
@@ -365,9 +406,9 @@ namespace CinemaManagement.UserControls.Staff
                 RowCount = 1,
                 Margin = new Padding(0, 4, 0, 5)
             };
-            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
             txtSearch = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -376,18 +417,21 @@ namespace CinemaManagement.UserControls.Staff
                 Margin = new Padding(0, 0, 8, 0)
             };
             txtSearch.TextChanged += (s, e) => RenderDoorList();
-            cboShowtimeFilter = new ComboBox
+            cboMovieFilter = new ComboBox
             {
                 Dock = DockStyle.Fill,
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 8.5F),
                 Margin = new Padding(0, 0, 6, 0)
             };
-            cboShowtimeFilter.SelectedIndexChanged += (s, e) =>
+            cboMovieFilter.SelectedIndexChanged += (s, e) =>
             {
-                if (!_updatingShowtimeFilters)
+                if (!_updatingMovieFilters)
+                {
                     RefreshLogs();
+                }
             };
+            cboMovieFilter.AccessibleName = "Lọc vé theo phim";
             cboFilter = new ComboBox
             {
                 Dock = DockStyle.Fill,
@@ -399,9 +443,69 @@ namespace CinemaManagement.UserControls.Staff
             cboFilter.SelectedIndex = 0;
             cboFilter.SelectedIndexChanged += (s, e) => RenderDoorList();
             filters.Controls.Add(txtSearch, 0, 0);
-            filters.Controls.Add(cboShowtimeFilter, 1, 0);
+            filters.Controls.Add(cboMovieFilter, 1, 0);
             filters.Controls.Add(cboFilter, 2, 0);
             layout.Controls.Add(filters, 0, 3);
+
+            flpDateFilters = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = false,
+                WrapContents = false,
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(0, 0, 0, 3),
+                Padding = new Padding(0, 1, 0, 1),
+                BackColor = Color.White
+            };
+            lblDateFilter = new Label
+            {
+                Text = "NGÀY CHIẾU:",
+                AutoSize = true,
+                Height = 28,
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.FromArgb(71, 85, 105),
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                Margin = new Padding(0, 0, 8, 0)
+            };
+            flpDateFilters.Controls.Add(lblDateFilter);
+            dtpDateFilter = new DateTimePicker
+            {
+                Format = DateTimePickerFormat.Custom,
+                CustomFormat = "dd/MM/yyyy",
+                Value = DateTime.Today,
+                Width = 126,
+                Height = 28,
+                Font = new Font("Segoe UI", 8.5F),
+                AccessibleName = "Chọn ngày chiếu bất kỳ",
+                Margin = new Padding(0, 0, 8, 0)
+            };
+            dtpDateFilter.ValueChanged += (s, e) =>
+            {
+                _selectedDate = dtpDateFilter.Value.Date;
+                UpdateDateFilterButtonStyles();
+                RefreshLogs();
+            };
+            btnAllDates = new Button
+            {
+                Text = "Tất cả ngày",
+                Width = 94,
+                Height = 28,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                AccessibleName = "Bỏ lọc ngày, hiển thị tất cả ngày",
+                Margin = Padding.Empty
+            };
+            btnAllDates.FlatAppearance.BorderSize = 1;
+            btnAllDates.Click += (s, e) =>
+            {
+                _selectedDate = null;
+                UpdateDateFilterButtonStyles();
+                RefreshLogs();
+            };
+            flpDateFilters.Controls.Add(dtpDateFilter);
+            flpDateFilters.Controls.Add(btnAllDates);
+            layout.Controls.Add(flpDateFilters, 0, 4);
 
             dgvLogs = new DataGridView
             {
@@ -449,7 +553,7 @@ namespace CinemaManagement.UserControls.Staff
             dgvLogs.Columns[5].FillWeight = 16;
             dgvLogs.CellClick += DoorList_CellClick;
             dgvLogs.CellDoubleClick += DoorList_CellClick;
-            layout.Controls.Add(dgvLogs, 0, 4);
+            layout.Controls.Add(dgvLogs, 0, 5);
 
             card.Controls.Add(layout);
             return card;
@@ -1185,15 +1289,19 @@ namespace CinemaManagement.UserControls.Staff
                 _doorBookings.AddRange(bookings);
                 _scanLogs.Clear();
                 _scanLogs.AddRange(scanLogs);
-                UpdateShowtimeFilterOptions(bookings);
+                UpdateMovieFilterOptions(bookings);
                 _checkedInCodes.Clear();
                 _checkedInCodes.UnionWith(checkedInCodes);
                 _checkInTimes.Clear();
                 foreach (var checkInTime in checkInTimes)
                     _checkInTimes[checkInTime.Key] = checkInTime.Value;
-                int? showtimeId = SelectedShowtimeId;
-                var counts = _bookingRepository.GetTicketCheckInCounts(showtimeId);
-                _rejectedCount = _bookingRepository.GetRejectedTicketScanCount(showtimeId);
+                int? movieId = SelectedMovieId;
+                var counts = _bookingRepository.GetTicketCheckInCounts(
+                    movieId: movieId,
+                    showDate: _selectedDate);
+                _rejectedCount = _bookingRepository.GetRejectedTicketScanCount(
+                    movieId: movieId,
+                    showDate: _selectedDate);
 
                 _kpiValues[0].Text = counts.Total.ToString("N0", VN);
                 _kpiValues[1].Text = counts.CheckedIn.ToString("N0", VN);
@@ -1237,55 +1345,91 @@ namespace CinemaManagement.UserControls.Staff
                 pnlProgressTrack.ClientSize.Width * _checkInPercent / 100.0);
         }
 
-        private int? SelectedShowtimeId =>
-            cboShowtimeFilter != null &&
-            cboShowtimeFilter.SelectedIndex > 0 &&
-            cboShowtimeFilter.SelectedIndex < _showtimeFilterIds.Count
-                ? _showtimeFilterIds[cboShowtimeFilter.SelectedIndex]
+        private int? SelectedMovieId =>
+            cboMovieFilter != null &&
+            cboMovieFilter.SelectedIndex > 0 &&
+            cboMovieFilter.SelectedIndex < _movieFilterIds.Count
+                ? _movieFilterIds[cboMovieFilter.SelectedIndex]
                 : null;
 
-        private void UpdateShowtimeFilterOptions(List<BookingResultEventArgs> bookings)
+        private void UpdateMovieFilterOptions(List<BookingResultEventArgs> bookings)
         {
-            if (cboShowtimeFilter == null)
+            if (cboMovieFilter == null)
                 return;
 
-            int? previousShowtimeId = SelectedShowtimeId;
-            _updatingShowtimeFilters = true;
+            int? previousMovieId = SelectedMovieId;
+            _updatingMovieFilters = true;
             try
             {
-                cboShowtimeFilter.BeginUpdate();
-                cboShowtimeFilter.Items.Clear();
-                _showtimeFilterIds.Clear();
+                cboMovieFilter.BeginUpdate();
+                cboMovieFilter.Items.Clear();
+                _movieFilterIds.Clear();
 
-                cboShowtimeFilter.Items.Add("Tất cả suất");
-                _showtimeFilterIds.Add(null);
+                cboMovieFilter.Items.Add("Tất cả phim");
+                _movieFilterIds.Add(null);
 
-                var showtimes = bookings
+                var movies = bookings
                     .Where(booking => booking.Showtime != null)
-                    .GroupBy(booking => booking.Showtime!.Id)
+                    .GroupBy(booking => booking.Movie?.Id > 0
+                        ? booking.Movie.Id
+                        : booking.Showtime!.MovieId)
                     .Select(group => group.First())
-                    .OrderBy(booking => booking.Showtime!.StartTime)
+                    .OrderBy(booking => booking.Movie?.Title ?? "Phim", StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
 
-                foreach (BookingResultEventArgs booking in showtimes)
+                foreach (BookingResultEventArgs booking in movies)
                 {
-                    Showtime showtime = booking.Showtime!;
-                    string movieTitle = booking.Movie?.Title ?? "Phim";
-                    cboShowtimeFilter.Items.Add(
-                        $"{movieTitle} · {showtime.StartTime:dd/MM HH:mm} · P{showtime.RoomId}");
-                    _showtimeFilterIds.Add(showtime.Id);
+                    int movieId = booking.Movie?.Id > 0
+                        ? booking.Movie.Id
+                        : booking.Showtime!.MovieId;
+                    cboMovieFilter.Items.Add(booking.Movie?.Title ?? "Phim chưa xác định");
+                    _movieFilterIds.Add(movieId);
                 }
 
-                int restoreIndex = previousShowtimeId.HasValue
-                    ? _showtimeFilterIds.FindIndex(id => id == previousShowtimeId.Value)
+                int restoreIndex = previousMovieId.HasValue
+                    ? _movieFilterIds.FindIndex(id => id == previousMovieId.Value)
                     : 0;
-                cboShowtimeFilter.SelectedIndex = restoreIndex >= 0 ? restoreIndex : 0;
+                cboMovieFilter.SelectedIndex = restoreIndex >= 0 ? restoreIndex : 0;
             }
             finally
             {
-                cboShowtimeFilter.EndUpdate();
-                _updatingShowtimeFilters = false;
+                cboMovieFilter.EndUpdate();
+                _updatingMovieFilters = false;
             }
+        }
+
+        private void UpdateDateFilterButtonStyles()
+        {
+            if (btnAllDates == null || btnAllDates.IsDisposed)
+                return;
+
+            bool allDatesSelected = !_selectedDate.HasValue;
+            btnAllDates.BackColor = allDatesSelected
+                ? Color.FromArgb(109, 61, 245)
+                : _isDarkTheme
+                    ? Color.FromArgb(30, 41, 59)
+                    : Color.FromArgb(241, 245, 249);
+            btnAllDates.ForeColor = allDatesSelected
+                ? Color.White
+                : _isDarkTheme
+                    ? Color.FromArgb(226, 232, 240)
+                    : Color.FromArgb(71, 85, 105);
+            btnAllDates.FlatAppearance.BorderColor = allDatesSelected
+                ? Color.FromArgb(109, 61, 245)
+                : _isDarkTheme
+                    ? Color.FromArgb(71, 85, 105)
+                    : Color.FromArgb(226, 232, 240);
+        }
+
+        private bool MatchesSelectedMovieAndDate(Showtime? showtime)
+        {
+            if (showtime == null)
+                return !SelectedMovieId.HasValue && !_selectedDate.HasValue;
+
+            if (SelectedMovieId.HasValue && showtime.MovieId != SelectedMovieId.Value)
+                return false;
+
+            return !_selectedDate.HasValue || showtime.StartTime.Date == _selectedDate.Value.Date;
         }
 
         private void RenderDoorList()
@@ -1295,14 +1439,13 @@ namespace CinemaManagement.UserControls.Staff
 
             string filter = cboFilter.SelectedItem?.ToString() ?? "Tất cả";
             string query = txtSearch.Text.Trim();
-            int? showtimeId = SelectedShowtimeId;
             dgvLogs.Rows.Clear();
 
             if (filter != "Bị từ chối")
             {
                 foreach (BookingResultEventArgs booking in _doorBookings)
                 {
-                    if (showtimeId.HasValue && booking.Showtime?.Id != showtimeId.Value)
+                    if (!MatchesSelectedMovieAndDate(booking.Showtime))
                         continue;
                     bool checkedIn = _checkedInCodes.Contains(booking.BookingCode);
                     string status = checkedIn ? "ĐÃ VÀO" : "CHƯA VÀO";
@@ -1351,7 +1494,11 @@ namespace CinemaManagement.UserControls.Staff
                                  nameof(TicketScanStatus.Valid),
                                  StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (showtimeId.HasValue && log.ShowtimeId != showtimeId.Value)
+                    BookingResultEventArgs? relatedBooking = log.ShowtimeId.HasValue
+                        ? _doorBookings.FirstOrDefault(booking =>
+                            booking.Showtime?.Id == log.ShowtimeId.Value)
+                        : null;
+                    if (!MatchesSelectedMovieAndDate(relatedBooking?.Showtime))
                         continue;
                     string movie = log.MovieTitle;
                     string seats = log.SeatNumbers;
@@ -1375,6 +1522,8 @@ namespace CinemaManagement.UserControls.Staff
                     dgvLogs.Rows[rowIndex].Cells["colStatus"].Style.ForeColor = ColorError;
                 }
             }
+
+            lblHeader.Text = $"DANH SÁCH VÉ · {dgvLogs.Rows.Count:N0} mục";
         }
 
         private static bool MatchesSearch(string query, params string[] values)
